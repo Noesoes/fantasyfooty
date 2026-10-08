@@ -187,16 +187,11 @@ export default function Home() {
 
 function Logo() {
   return (
-    <div className="flex items-center gap-2.5">
-      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-mint-400 to-pos-wr shadow-lg shadow-mint-400/20">
-        <svg viewBox="0 0 24 24" className="h-5 w-5 text-ink-950" fill="currentColor" aria-hidden>
-          <path d="M20.6 3.4c-1.7-.4-5.6-.8-9.4 1.4-2.8 1.6-4.7 4-5.7 6.6-.9 2.4-1 4.9-.8 6.3l.1.6.6.1c.5.1 1.1.1 1.8.1 1.4 0 3.1-.2 4.8-.9 2.6-1 5-2.9 6.6-5.7 2.2-3.8 1.8-7.7 1.4-9.4l-.1-.6-.6-.1Zm-8.5 11.3-1.4-1.4-1.1 1.1-1-1 1.1-1.1-1.4-1.4 1-1 1.4 1.4 1.1-1.1-1.4-1.4 1-1 1.4 1.4 1.1-1.1 1 1-1.1 1.1 1.4 1.4-1 1-1.4-1.4-1.1 1.1 1.4 1.4-1 1Z" />
-        </svg>
-      </div>
-      <div className="leading-tight">
-        <div className="text-[15px] font-bold tracking-tight">Lineup Advisor</div>
-        <div className="hidden text-[11px] text-ink-400 sm:block">for Sleeper fantasy football</div>
-      </div>
+    <div className="display flex items-baseline gap-3 leading-none">
+      <span className="text-[34px] font-black italic tracking-tight">
+        Prime<span className="text-mint-400">time</span>
+      </span>
+      <span className="hidden text-sm font-semibold tracking-[0.22em] text-ink-400 sm:inline">Lineup advisor</span>
     </div>
   );
 }
@@ -223,14 +218,21 @@ function ThemeToggle() {
       onClick={toggle}
       aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
       title={theme === "light" ? "Dark mode" : "Light mode"}
-      className="flex h-9 w-9 items-center justify-center rounded-full border border-ink-700 bg-ink-900 text-ink-300 transition hover:border-mint-400/50 hover:text-ink-100"
+      className="flex h-9 w-10 -skew-x-12 items-center justify-center bg-ink-800 text-ink-300 transition hover:bg-ink-700 hover:text-mint-400"
     >
       {theme === "light" ? (
-        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
+        <svg viewBox="0 0 24 24" className="h-4 w-4 skew-x-12" fill="currentColor" aria-hidden>
           <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
         </svg>
       ) : (
-        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+        <svg
+          viewBox="0 0 24 24"
+          className="h-4 w-4 skew-x-12"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          aria-hidden
+        >
           <circle cx="12" cy="12" r="4" />
           <path
             d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"
@@ -249,20 +251,20 @@ function TopBar({ user, onSignOut }: { user: SleeperUser | null; onSignOut: () =
       <div className="flex items-center gap-2">
         <ThemeToggle />
         {user && (
-          <div className="flex items-center gap-2 rounded-full border border-ink-700 bg-ink-900 py-1 pr-1 pl-1">
+          <div className="display flex h-9 -skew-x-12 items-center gap-2 bg-ink-800 pr-1 pl-1.5 font-semibold">
             {user.avatar ? (
-              <img src={avatarUrl(user.avatar)} alt="" className="h-7 w-7 rounded-full" />
+              <img src={avatarUrl(user.avatar)} alt="" className="h-7 w-7 skew-x-12 rounded-full" />
             ) : (
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-ink-700 text-xs font-bold">
+              <span className="flex h-7 w-7 skew-x-12 items-center justify-center rounded-full bg-ink-700 text-xs font-bold">
                 {user.display_name.charAt(0).toUpperCase()}
               </span>
             )}
-            <span className="max-w-[120px] truncate text-sm font-medium">{user.display_name}</span>
+            <span className="max-w-[120px] skew-x-12 truncate text-sm">{user.display_name}</span>
             <button
               onClick={onSignOut}
-              className="rounded-full px-2.5 py-1 text-xs font-medium text-ink-400 hover:bg-ink-800 hover:text-ink-100"
+              className="px-2.5 py-1 text-xs text-ink-400 hover:bg-ink-700 hover:text-ink-100"
             >
-              Switch
+              <span className="block skew-x-12">Switch</span>
             </button>
           </div>
         )}
@@ -286,12 +288,14 @@ function Landing({
 }) {
   return (
     <div className="flex flex-col items-center pt-10 text-center sm:pt-16">
-      <span className="mb-5 rounded-full border border-mint-400/30 bg-mint-400/10 px-3 py-1 text-xs font-semibold text-mint-300">
-        Free · No login · Works with any Sleeper league
+      <span className="display mb-6 -skew-x-12 bg-hot px-4 py-1 text-sm font-extrabold text-white">
+        <span className="block skew-x-12">Free · No login · Any Sleeper league</span>
       </span>
-      <h1 className="max-w-2xl text-4xl font-extrabold tracking-tight text-balance sm:text-6xl">
-        Set the right lineup.{" "}
-        <span className="bg-gradient-to-r from-mint-400 to-pos-wr bg-clip-text text-transparent">Win your week.</span>
+      <h1 className="display max-w-3xl text-6xl leading-[0.9] font-black text-balance sm:text-8xl">
+        Set the lineup.{" "}
+        <span className="bg-gradient-to-r from-mint-400 via-violet to-hot bg-clip-text text-transparent">
+          Win the week.
+        </span>
       </h1>
       <p className="mt-4 max-w-xl text-base text-ink-300 sm:text-lg">
         Start/sit calls, waiver pickups and drop candidates for your Sleeper team, built from this week&apos;s
@@ -306,14 +310,14 @@ function Landing({
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
-          className="h-12 flex-1 rounded-xl border border-ink-700 bg-ink-900 px-4 text-base outline-none placeholder:text-ink-400 focus:border-mint-400 focus:ring-4 focus:ring-mint-400/15"
+          className="h-12 flex-1 border border-ink-700 bg-ink-900 px-4 text-base outline-none placeholder:text-ink-400 focus:border-mint-400 focus:shadow-[0_0_0_4px_rgb(25_227_255/0.15)]"
         />
         <button
           type="submit"
           disabled={loading || !username.trim()}
-          className="h-12 rounded-xl bg-mint-400 px-6 font-semibold text-ink-950 transition hover:bg-mint-300 disabled:opacity-40"
+          className="prime-gradient display h-12 -skew-x-12 px-7 text-lg font-extrabold text-ink-950 shadow-[0_0_28px_rgb(25_227_255/0.35)] transition hover:brightness-110 disabled:opacity-40 disabled:shadow-none"
         >
-          {loading ? "Loading…" : "Analyze my team"}
+          <span className="block skew-x-12">{loading ? "Loading…" : "Analyze my team"}</span>
         </button>
       </form>
       {error && (
@@ -340,9 +344,9 @@ function Landing({
             text: "A GitHub Action can post your game plan every Tuesday, before waivers run.",
           },
         ].map((f) => (
-          <div key={f.title} className="rounded-2xl border border-ink-700/70 bg-ink-900/70 p-5">
+          <div key={f.title} className="border border-ink-700/80 border-t-4 border-t-mint-400 bg-ink-900/80 p-5">
             <div className="text-2xl">{f.icon}</div>
-            <div className="mt-3 font-semibold">{f.title}</div>
+            <div className="display mt-3 text-xl font-bold">{f.title}</div>
             <p className="mt-1 text-sm text-ink-400">{f.text}</p>
           </div>
         ))}
@@ -375,46 +379,56 @@ function Controls({
             <button
               key={l.league_id}
               onClick={() => setLeagueId(l.league_id)}
-              className={`flex shrink-0 items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition ${
-                active ? "border-mint-400/60 bg-mint-400/10" : "border-ink-700 bg-ink-900 hover:border-ink-600"
+              className={`flex shrink-0 -skew-x-12 items-center gap-2.5 px-4 py-2 text-left transition ${
+                active
+                  ? "prime-gradient text-ink-950 shadow-[0_0_24px_rgb(25_227_255/0.3)]"
+                  : "bg-ink-800 hover:bg-ink-700"
               }`}
             >
-              {l.avatar ? (
-                <img src={avatarUrl(l.avatar)} alt="" className="h-8 w-8 rounded-lg" />
-              ) : (
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink-700 text-sm font-bold">
-                  {l.name.charAt(0)}
-                </span>
-              )}
-              <span>
-                <span className="block max-w-[180px] truncate text-sm font-semibold">{l.name}</span>
-                <span className="block text-[11px] text-ink-400">
-                  {l.total_rosters} teams · {scoringOf(l)}
-                  {l.roster_positions.includes("SUPER_FLEX") ? " · SF" : ""}
+              <span className="flex skew-x-12 items-center gap-2.5">
+                {l.avatar ? (
+                  <img src={avatarUrl(l.avatar)} alt="" className="h-8 w-8 rounded-lg" />
+                ) : (
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink-700 text-sm font-bold">
+                    {l.name.charAt(0)}
+                  </span>
+                )}
+                <span>
+                  <span className="display block max-w-[200px] truncate text-base leading-tight font-bold">
+                    {l.name}
+                  </span>
+                  <span className={`block text-[11px] ${active ? "text-ink-950/75" : "text-ink-400"}`}>
+                    {l.total_rosters} teams · {scoringOf(l)}
+                    {l.roster_positions.includes("SUPER_FLEX") ? " · SF" : ""}
+                  </span>
                 </span>
               </span>
             </button>
           );
         })}
       </div>
-      <div className="flex shrink-0 items-center gap-1 self-start rounded-xl border border-ink-700 bg-ink-900 p-1 sm:self-auto">
+      <div className="display flex shrink-0 items-center gap-2 self-start sm:self-auto">
         <button
           aria-label="Previous week"
           disabled={week <= 1}
           onClick={() => setWeek(week - 1)}
-          className="h-8 w-8 rounded-lg text-ink-300 hover:bg-ink-800 disabled:opacity-30"
+          className="h-9 w-8 text-2xl text-ink-300 hover:text-mint-400 disabled:opacity-30"
         >
           ‹
         </button>
-        <div className="min-w-[88px] text-center">
-          <div className="text-sm font-semibold">Week {week}</div>
-          {week === currentWeek && <div className="text-[10px] font-medium text-mint-400">UPCOMING</div>}
+        <div className="min-w-[110px] -skew-x-12 bg-hot px-4 py-1 text-center text-white">
+          <div className="skew-x-12">
+            <div className="text-xl leading-tight font-extrabold">Week {week}</div>
+            {week === currentWeek && (
+              <div className="text-[10px] leading-tight font-bold tracking-[0.18em]">Upcoming</div>
+            )}
+          </div>
         </div>
         <button
           aria-label="Next week"
           disabled={week >= 18}
           onClick={() => setWeek(week + 1)}
-          className="h-8 w-8 rounded-lg text-ink-300 hover:bg-ink-800 disabled:opacity-30"
+          className="h-9 w-8 text-2xl text-ink-300 hover:text-mint-400 disabled:opacity-30"
         >
           ›
         </button>

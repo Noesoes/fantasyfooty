@@ -1,19 +1,21 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Saira, Saira_Condensed } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const saira = Saira({
+  variable: "--font-saira",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+// Broadcast-style condensed face for headings, scores and stats.
+const sairaCondensed = Saira_Condensed({
+  variable: "--font-saira-condensed",
   subsets: ["latin"],
+  weight: ["500", "600", "700", "800", "900"],
 });
 
 export const metadata: Metadata = {
-  title: "Lineup Advisor for Sleeper",
+  title: "Prime Time Lineup Advisor",
   description: "Weekly start/sit, drop and waiver-wire recommendations for your Sleeper fantasy football team.",
 };
 
@@ -27,7 +29,7 @@ export default function RootLayout({
       lang="en"
       data-theme="dark"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${saira.variable} ${sairaCondensed.variable} h-full antialiased`}
     >
       <head>
         {/* Apply the saved (or system) theme before first paint to avoid a flash. */}

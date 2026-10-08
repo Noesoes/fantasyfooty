@@ -22,37 +22,32 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "roster", label: "Roster" },
 ];
 
-export function Results({
-  a,
-  onRefresh,
-  refreshing,
-}: {
-  a: Analysis;
-  onRefresh: () => void;
-  refreshing: boolean;
-}) {
+export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => void; refreshing: boolean }) {
   const [tab, setTab] = useState<Tab>("plan");
   return (
     <div className="mt-6 flex flex-col gap-5">
+      <Ticker a={a} />
       <Scoreboard a={a} />
-      <nav className="sticky top-0 z-20 -mx-4 bg-ink-950/85 px-4 py-2 backdrop-blur sm:mx-0 sm:rounded-2xl sm:px-2">
-        <div className="no-scrollbar flex gap-1 overflow-x-auto rounded-xl bg-ink-900 p-1 ring-1 ring-ink-700/70">
+      <nav className="sticky top-0 z-20 -mx-4 bg-ink-950/90 px-4 py-2 backdrop-blur sm:mx-0 sm:px-1">
+        <div className="no-scrollbar flex gap-1 overflow-x-auto px-2">
           {TABS.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold whitespace-nowrap transition ${
-                tab === t.id ? "bg-mint-400 text-ink-950 shadow" : "text-ink-300 hover:bg-ink-800 hover:text-ink-100"
+              className={`display flex-1 shrink-0 -skew-x-12 px-4 py-2.5 text-base font-bold whitespace-nowrap transition ${
+                tab === t.id
+                  ? "prime-gradient text-ink-950 shadow-[0_0_24px_rgb(25_227_255/0.35)]"
+                  : "bg-ink-800 text-ink-400 hover:bg-ink-700 hover:text-ink-100"
               }`}
             >
-              {t.label}
-              {t.id === "waivers" && a.waivers.length > 0 && (
-                <span
-                  className={`ml-1.5 rounded-full px-1.5 text-[11px] ${tab === t.id ? "bg-ink-950/20" : "bg-ink-700"}`}
-                >
-                  {a.waivers.length}
-                </span>
-              )}
+              <span className="block skew-x-12">
+                {t.label}
+                {t.id === "waivers" && a.waivers.length > 0 && (
+                  <span className={`ml-1.5 px-1.5 text-xs ${tab === t.id ? "bg-ink-950/20" : "bg-hot text-white"}`}>
+                    {a.waivers.length}
+                  </span>
+                )}
+              </span>
             </button>
           ))}
         </div>
@@ -68,12 +63,42 @@ export function Results({
   );
 }
 
-function Avatar({ id, name }: { id: string | null; name: string }) {
+function Avatar({ id, name, ring = "ring-mint-400" }: { id: string | null; name: string; ring?: string }) {
   return id ? (
-    <img src={avatarUrl(id)} alt="" className="h-12 w-12 rounded-full ring-2 ring-ink-700" />
+    <img src={avatarUrl(id)} alt="" className={`h-14 w-14 shrink-0 rounded-full ring-[3px] ${ring}`} />
   ) : (
-    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-ink-700 text-lg font-bold text-ink-300 ring-2 ring-ink-600">
+    <div
+      className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-ink-700 text-lg font-bold text-ink-300 ring-[3px] ${ring}`}
+    >
       {name.charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
+/** Broadcast-style crawl of the week's headline facts. */
+function Ticker({ a }: { a: Analysis }) {
+  const gain = Math.round((a.optimalTotal - a.currentTotal) * 10) / 10;
+  const items = [
+    a.league.name,
+    a.scoringLabel,
+    waiverChip(a),
+    a.warnings.length ? `${a.warnings.length} lineup alert${a.warnings.length === 1 ? "" : "s"}` : "Lineup set",
+    gain > 0 ? `+${gain} with moves` : "Lineup optimal",
+    a.waivers.length ? `${a.waivers.length} waiver target${a.waivers.length === 1 ? "" : "s"}` : null,
+  ].filter(Boolean);
+  return (
+    <div className="display flex h-9 items-stretch overflow-hidden border border-ink-700/80 bg-ink-900 text-sm font-semibold">
+      <span className="flex shrink-0 items-center bg-hot px-4 pr-6 font-extrabold whitespace-nowrap text-white [clip-path:polygon(0_0,100%_0,85%_100%,0_100%)]">
+        Prime time · Wk {a.week}
+      </span>
+      <div className="no-scrollbar flex items-center gap-6 overflow-x-auto pl-4 whitespace-nowrap text-ink-100">
+        {items.map((t) => (
+          <span key={t as string}>
+            <span className="mr-1.5 text-hot">▸</span>
+            {t}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -83,60 +108,60 @@ function Scoreboard({ a }: { a: Analysis }) {
   const opp = a.opponent;
   const share = opp ? a.optimalTotal / Math.max(1, a.optimalTotal + opp.projected) : 0.5;
   return (
-    <section className="overflow-hidden rounded-2xl border border-ink-700/70 bg-gradient-to-br from-ink-850 to-ink-900">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-700/60 px-5 py-3 text-xs text-ink-400">
-        <span className="flex items-center gap-2">
-          <span className="font-semibold tracking-wider text-mint-400 uppercase">Week {a.week}</span>
-          <span className="rounded-md bg-ink-700/70 px-1.5 py-0.5 font-semibold text-ink-300">{waiverChip(a)}</span>
-        </span>
-        <span>
-          {a.league.name} · {a.scoringLabel}
-        </span>
-      </div>
-      <div className="grid gap-5 p-5 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
-        <div className="flex items-center gap-3">
+    <section className="overflow-hidden border border-ink-700/80 bg-gradient-to-b from-ink-800 to-ink-900 shadow-[0_0_48px_rgb(25_227_255/0.10)]">
+      <div className="grid sm:grid-cols-[1fr_150px_1fr]">
+        <div className="flex items-center gap-4 p-5">
           <Avatar id={a.avatar} name={a.teamName} />
           <div className="min-w-0">
-            <div className="truncate font-semibold">{a.teamName}</div>
-            <div className="flex items-baseline gap-2">
-              <span className="font-mono text-3xl font-bold tabular-nums text-ink-100">{a.optimalTotal.toFixed(1)}</span>
-              {gain > 0 && (
-                <span className="rounded-md bg-mint-400/15 px-1.5 py-0.5 text-xs font-semibold text-mint-300">
-                  +{gain} with moves
-                </span>
-              )}
+            <div className="display truncate text-2xl leading-tight font-extrabold">{a.teamName}</div>
+            <div className="text-xs text-ink-400">
+              Current lineup {a.currentTotal.toFixed(1)}
+              {gain > 0 && <span className="text-mint-300"> · +{gain} with moves</span>}
             </div>
-            <div className="text-xs text-ink-400">projected · current lineup {a.currentTotal.toFixed(1)}</div>
+          </div>
+          <div className="glow ml-auto font-mono text-6xl leading-none font-black text-ink-100 tabular-nums sm:text-7xl">
+            {a.optimalTotal.toFixed(1)}
           </div>
         </div>
         {opp ? (
           <>
-            <div className="hidden text-center text-sm font-bold text-ink-400 sm:block">VS</div>
-            <div className="flex items-center gap-3 sm:flex-row-reverse sm:text-right">
-              <Avatar id={opp.avatar} name={opp.teamName} />
+            <div className="prime-gradient display flex items-center justify-center gap-3 py-2 text-ink-950 sm:flex-col sm:gap-0 sm:py-0 sm:[clip-path:polygon(14%_0,100%_0,86%_100%,0_100%)]">
+              <span className="text-[11px] font-bold tracking-[0.14em]">Projected</span>
+              <span className="font-mono text-3xl leading-none font-black sm:text-4xl">{Math.round(share * 100)}%</span>
+              <span className="text-[11px] font-bold tracking-[0.14em]">Win share</span>
+            </div>
+            <div className="flex items-center gap-4 p-5 sm:flex-row-reverse sm:text-right">
+              <Avatar id={opp.avatar} name={opp.teamName} ring="ring-hot" />
               <div className="min-w-0">
-                <div className="truncate font-semibold">{opp.teamName}</div>
-                <div className="font-mono text-3xl font-bold tabular-nums text-ink-300">{opp.projected.toFixed(1)}</div>
-                <div className="text-xs text-ink-400">projected</div>
+                <div className="display truncate text-2xl leading-tight font-extrabold">{opp.teamName}</div>
+                <div className="text-xs text-ink-400">Opponent · projected</div>
+              </div>
+              <div className="glow-hot ml-auto font-mono text-6xl leading-none font-black text-rose-300 tabular-nums sm:mr-auto sm:ml-0 sm:text-7xl">
+                {opp.projected.toFixed(1)}
               </div>
             </div>
           </>
         ) : (
-          <div className="text-sm text-ink-400 sm:col-span-2 sm:text-right">No head-to-head matchup this week.</div>
+          <div className="flex items-center p-5 text-sm text-ink-400 sm:col-span-2 sm:justify-end">
+            No head-to-head matchup this week.
+          </div>
         )}
       </div>
       {opp && (
-        <div className="px-5 pb-5">
-          <div className="flex h-2 overflow-hidden rounded-full bg-ink-700">
-            <div className="bg-mint-400 transition-all" style={{ width: `${share * 100}%` }} />
-            <div className="flex-1 bg-pos-qb/70" />
+        <>
+          <div className="flex h-2">
+            <div
+              className="prime-gradient shadow-[0_0_12px_rgb(25_227_255/0.6)]"
+              style={{ width: `${share * 100}%` }}
+            />
+            <div className="flex-1 bg-hot" />
           </div>
-          <div className="mt-1.5 text-xs text-ink-400">
+          <div className="px-5 py-2.5 text-xs text-ink-400">
             {a.optimalTotal >= opp.projected
               ? `Projected to win by ${(a.optimalTotal - opp.projected).toFixed(1)} if you make the moves below.`
               : `Projected to lose by ${(opp.projected - a.optimalTotal).toFixed(1)} — the waiver tab may help close the gap.`}
           </div>
-        </div>
+        </>
       )}
     </section>
   );
@@ -203,7 +228,12 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
         title: (
           <>
             Claim <b>{w.player.name}</b>
-            {w.bid && <> for <b>${w.bid.suggested}</b></>}
+            {w.bid && (
+              <>
+                {" "}
+                for <b>${w.bid.suggested}</b>
+              </>
+            )}
             {w.dropFor && (
               <>
                 , drop <b>{w.dropFor.name}</b>
@@ -237,9 +267,9 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
           {a.warnings.map((w) => (
             <div
               key={w}
-              className="flex items-start gap-3 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-200"
+              className="flex items-center gap-3 bg-gradient-to-r from-hot to-[#b5179e] px-4 py-3 text-sm font-semibold text-white"
             >
-              <span aria-hidden>⚠️</span>
+              <span className="display shrink-0 bg-ink-950 px-2 py-0.5 text-base font-black text-white">Alert</span>
               <span>{w}</span>
             </div>
           ))}
@@ -270,13 +300,13 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
                     onClick={() => toggle(t.id)}
                     className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition ${
                       checked[t.id]
-                        ? "border-ink-700 bg-ink-850/40 opacity-55"
-                        : "border-ink-700 bg-ink-850 hover:border-ink-600"
+                        ? "border-ink-700 border-l-4 border-l-mint-400 bg-ink-850/40 opacity-55"
+                        : "border-ink-700 border-l-4 border-l-violet bg-ink-850 hover:border-ink-600"
                     }`}
                   >
                     <span
-                      className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                        checked[t.id] ? "bg-mint-400 text-ink-950" : "bg-ink-700 text-ink-300"
+                      className={`w-7 shrink-0 text-center font-mono text-4xl leading-none font-black ${
+                        checked[t.id] ? "text-mint-400" : "glow text-mint-400"
                       }`}
                     >
                       {checked[t.id] ? "✓" : i + 1}
@@ -302,7 +332,11 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
       </Card>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <QuickLink label="Recommended lineup" value={`${a.optimalLineup.length} starters`} onClick={() => goTo("lineup")} />
+        <QuickLink
+          label="Recommended lineup"
+          value={`${a.optimalLineup.length} starters`}
+          onClick={() => goTo("lineup")}
+        />
         <QuickLink label="Waiver targets" value={`${a.waivers.length} worth a claim`} onClick={() => goTo("waivers")} />
         <QuickLink label="Your roster" value={`${a.roster.length} players`} onClick={() => goTo("roster")} />
       </div>
@@ -312,12 +346,12 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
 
 function KindTag({ kind }: { kind: Task["kind"] }) {
   const style = {
-    start: "bg-mint-400/15 text-mint-300",
-    bench: "bg-amber-400/15 text-amber-300",
-    add: "bg-pos-wr/15 text-pos-wr",
+    start: "bg-mint-400 text-ink-950",
+    bench: "bg-ink-400 text-ink-950",
+    add: "bg-ink-100 text-ink-950",
   }[kind];
-  const label = { start: "START", bench: "BENCH", add: "WAIVER" }[kind];
-  return <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold tracking-wide ${style}`}>{label}</span>;
+  const label = { start: "Start", bench: "Bench", add: "Waiver" }[kind];
+  return <span className={`display px-2 py-0.5 text-xs leading-none font-extrabold ${style}`}>{label}</span>;
 }
 
 function QuickLink({ label, value, onClick }: { label: string; value: string; onClick: () => void }) {
@@ -452,7 +486,10 @@ function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => v
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {a.waivers.map((w, i) => (
-              <article key={w.player.id} className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-850 p-4">
+              <article
+                key={w.player.id}
+                className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-850 p-4"
+              >
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold tracking-wider text-ink-400 uppercase">Priority #{i + 1}</span>
                   <ClaimStatus w={w} />
@@ -478,10 +515,7 @@ function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => v
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <Stat label={`Wk ${a.week} proj`} value={w.player.onBye ? "BYE" : w.player.weekScore.toFixed(1)} />
                   <Stat label="Season avg" value={w.player.seasonAvg?.toFixed(1) ?? "—"} />
-                  <Stat
-                    label={`Last ${w.player.recentGames || 3}`}
-                    value={w.player.recentAvg?.toFixed(1) ?? "—"}
-                  />
+                  <Stat label={`Last ${w.player.recentGames || 3}`} value={w.player.recentAvg?.toFixed(1) ?? "—"} />
                 </div>
                 <p className="text-xs leading-relaxed text-ink-400">{w.reason}</p>
               </article>
@@ -493,12 +527,15 @@ function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => v
       {a.backupTargets.length > 0 && (
         <Card title="Backup targets">
           <p className="mb-3 text-sm text-ink-400">
-            Your top claims will probably be gone before your turn. These are good fits for your team that teams ahead of
-            you are less likely to take — put in claims for them too.
+            Your top claims will probably be gone before your turn. These are good fits for your team that teams ahead
+            of you are less likely to take — put in claims for them too.
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
             {a.backupTargets.map((p) => (
-              <div key={p.id} className="flex items-center justify-between gap-3 rounded-xl border border-ink-700 bg-ink-850 px-3 py-2.5">
+              <div
+                key={p.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-ink-700 bg-ink-850 px-3 py-2.5"
+              >
                 <PlayerLine p={p} size={34} sub={<MatchupChip p={p} compact />} />
                 <Points value={p.weekScore} />
               </div>
@@ -678,7 +715,11 @@ function ClaimStatus({ w }: { w: Analysis["waivers"][number] }) {
       </span>
     );
   }
-  return <span className="rounded-full bg-mint-400/15 px-2 py-0.5 text-[11px] font-semibold text-mint-300">Likely available</span>;
+  return (
+    <span className="rounded-full bg-mint-400/15 px-2 py-0.5 text-[11px] font-semibold text-mint-300">
+      Likely available
+    </span>
+  );
 }
 
 function Rivals({ a }: { a: Analysis }) {
@@ -753,7 +794,10 @@ function Trades({ a }: { a: Analysis }) {
   const max = Math.max(1, ...report.strengths.map((s) => Math.max(s.value, s.leagueAverage)));
   return (
     <div className="flex flex-col gap-5">
-      <Card title="Your team vs. the league" action={<span className="text-xs text-ink-400">rest-of-season starters</span>}>
+      <Card
+        title="Your team vs. the league"
+        action={<span className="text-xs text-ink-400">rest-of-season starters</span>}
+      >
         <div className="grid gap-4 sm:grid-cols-2">
           {report.strengths.map((s) => {
             const good = s.rank <= Math.ceil(s.teams / 3);
@@ -794,7 +838,9 @@ function Trades({ a }: { a: Analysis }) {
 
       <Card title="Trade ideas">
         {report.ideas.length === 0 ? (
-          <Empty>No trade clearly helps both you and another team right now. Check back after this week&apos;s games.</Empty>
+          <Empty>
+            No trade clearly helps both you and another team right now. Check back after this week&apos;s games.
+          </Empty>
         ) : (
           <div className="flex flex-col gap-3">
             {report.ideas.map((t, i) => (
@@ -836,8 +882,8 @@ function Trades({ a }: { a: Analysis }) {
           </div>
         )}
         <p className="mt-4 text-xs text-ink-400">
-          Every idea improves both teams&apos; best lineups for the rest of the season (pts/week) and is roughly even
-          on value over replacement, so it&apos;s worth proposing. Gains assume both teams start their best players.
+          Every idea improves both teams&apos; best lineups for the rest of the season (pts/week) and is roughly even on
+          value over replacement, so it&apos;s worth proposing. Gains assume both teams start their best players.
         </p>
       </Card>
     </div>
@@ -870,7 +916,11 @@ function cellStyle(v: number, max: number) {
 function ByeNote({ w }: { w: Plan["weeks"][number] }) {
   const affected = [...w.holes, ...w.thin];
   const relevant = w.byes.filter((p) => affected.includes(p.position));
-  const shown = relevant.length ? relevant : affected.some((h) => !["QB", "RB", "WR", "TE", "K", "DEF"].includes(h)) ? w.byes : [];
+  const shown = relevant.length
+    ? relevant
+    : affected.some((h) => !["QB", "RB", "WR", "TE", "K", "DEF"].includes(h))
+      ? w.byes
+      : [];
   if (!shown.length) return null;
   return <span className="text-ink-400"> ({shown.map((p) => p.name).join(", ")} on bye)</span>;
 }
@@ -889,10 +939,18 @@ function Planner({ a }: { a: Analysis }) {
   const alerts = plan.weeks.filter((w) => w.holes.length || w.thin.length);
   const best = Math.max(1, ...plan.weeks.map((w) => w.total));
   const cellMax = Math.max(1, ...plan.rows.flatMap((r) => r.cells.filter((c): c is number => typeof c === "number")));
-  const stashes = [...plan.rows].filter((r) => r.playoffPoints > 0).sort((x, y) => y.playoffPoints - x.playoffPoints).slice(0, 3);
+  const stashes = [...plan.rows]
+    .filter((r) => r.playoffPoints > 0)
+    .sort((x, y) => y.playoffPoints - x.playoffPoints)
+    .slice(0, 3);
   return (
     <div className="flex flex-col gap-5">
-      <Card title="Projected points by week" action={plan.playoffStart && <span className="text-xs text-ink-400">playoffs start week {plan.playoffStart}</span>}>
+      <Card
+        title="Projected points by week"
+        action={
+          plan.playoffStart && <span className="text-xs text-ink-400">playoffs start week {plan.playoffStart}</span>
+        }
+      >
         <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
           {plan.weeks.map((w) => (
             <div
@@ -913,7 +971,11 @@ function Planner({ a }: { a: Analysis }) {
                   w.holes.length ? "text-rose-300" : w.thin.length ? "text-amber-300" : "text-ink-400"
                 }`}
               >
-                {w.holes.length ? `hole: ${w.holes.join(", ")}` : w.thin.length ? `thin: ${w.thin.join(", ")}` : `${w.byes.length} on bye`}
+                {w.holes.length
+                  ? `hole: ${w.holes.join(", ")}`
+                  : w.thin.length
+                    ? `thin: ${w.thin.join(", ")}`
+                    : `${w.byes.length} on bye`}
               </span>
             </div>
           ))}
@@ -936,11 +998,12 @@ function Planner({ a }: { a: Analysis }) {
                 {w.holes.length
                   ? `no one to start at ${w.holes.join(", ")}`
                   : `no backup at ${w.thin.join(", ")} — one more injury and you're stuck`}
-                <ByeNote w={w} />
-                .{" "}
+                <ByeNote w={w} />.{" "}
                 {w.holes.length > 0 && (
                   <span className="text-ink-300">
-                    {w.week - 1 > a.week ? `Pick someone up on week ${w.week - 1} waivers.` : "Pick someone up this week."}
+                    {w.week - 1 > a.week
+                      ? `Pick someone up on week ${w.week - 1} waivers.`
+                      : "Pick someone up this week."}
                   </span>
                 )}
               </li>
@@ -953,16 +1016,23 @@ function Planner({ a }: { a: Analysis }) {
         <Card title="Playoff MVPs">
           <div className="grid gap-2 sm:grid-cols-3">
             {stashes.map((r) => (
-              <div key={r.player.id} className="flex items-center justify-between gap-2 rounded-xl border border-ink-700 bg-ink-850 px-3 py-2.5">
+              <div
+                key={r.player.id}
+                className="flex items-center justify-between gap-2 rounded-xl border border-ink-700 bg-ink-850 px-3 py-2.5"
+              >
                 <PlayerLine p={r.player} size={32} />
                 <div className="text-right">
                   <div className="font-mono text-sm font-semibold tabular-nums">{r.playoffPoints.toFixed(1)}</div>
-                  <div className="text-[10px] text-ink-400">wks {plan.playoffWeeks[0]}–{plan.playoffWeeks.at(-1)}</div>
+                  <div className="text-[10px] text-ink-400">
+                    wks {plan.playoffWeeks[0]}–{plan.playoffWeeks.at(-1)}
+                  </div>
                 </div>
               </div>
             ))}
           </div>
-          <p className="mt-3 text-xs text-ink-400">Projected points across the fantasy playoffs — protect these players.</p>
+          <p className="mt-3 text-xs text-ink-400">
+            Projected points across the fantasy playoffs — protect these players.
+          </p>
         </Card>
       )}
 
@@ -973,11 +1043,16 @@ function Planner({ a }: { a: Analysis }) {
               <tr className="text-[10px] tracking-wider text-ink-400 uppercase">
                 <th className="sticky left-0 z-10 bg-ink-900 py-2 pr-2 pl-4 text-left font-semibold sm:pl-5">Player</th>
                 {plan.weeks.map((w) => (
-                  <th key={w.week} className={`px-1 py-2 text-center font-semibold ${w.playoff ? "text-mint-400" : ""}`}>
+                  <th
+                    key={w.week}
+                    className={`px-1 py-2 text-center font-semibold ${w.playoff ? "text-mint-400" : ""}`}
+                  >
                     {w.week}
                   </th>
                 ))}
-                {plan.playoffWeeks.length > 0 && <th className="px-2 py-2 text-right font-semibold text-mint-400">Playoffs</th>}
+                {plan.playoffWeeks.length > 0 && (
+                  <th className="px-2 py-2 text-right font-semibold text-mint-400">Playoffs</th>
+                )}
                 <th className="w-3" />
               </tr>
             </thead>
@@ -993,7 +1068,9 @@ function Planner({ a }: { a: Analysis }) {
                   {r.cells.map((c, j) => (
                     <td key={j} className="px-0.5 py-1">
                       {c === "BYE" ? (
-                        <span className="block rounded bg-ink-700 px-1 py-1 text-center text-[9px] font-bold text-ink-400">BYE</span>
+                        <span className="block rounded bg-ink-700 px-1 py-1 text-center text-[9px] font-bold text-ink-400">
+                          BYE
+                        </span>
                       ) : c === null ? (
                         <span className="block py-1 text-center text-ink-600">·</span>
                       ) : (
@@ -1009,7 +1086,9 @@ function Planner({ a }: { a: Analysis }) {
                     </td>
                   ))}
                   {plan.playoffWeeks.length > 0 && (
-                    <td className="px-2 text-right font-mono font-semibold tabular-nums">{r.playoffPoints.toFixed(0)}</td>
+                    <td className="px-2 text-right font-mono font-semibold tabular-nums">
+                      {r.playoffPoints.toFixed(0)}
+                    </td>
                   )}
                   <td />
                 </tr>
@@ -1056,7 +1135,11 @@ function Record({ a }: { a: Analysis }) {
         <BigStat
           label="Start/sit calls right"
           value={r.calls ? `${r.hits}/${r.calls}` : "—"}
-          sub={r.calls ? `${Math.round((r.hits / r.calls) * 100)}% when the advisor disagreed with you` : "The advisor agreed with every lineup you set"}
+          sub={
+            r.calls
+              ? `${Math.round((r.hits / r.calls) * 100)}% when the advisor disagreed with you`
+              : "The advisor agreed with every lineup you set"
+          }
           tone={r.calls ? (r.hits / r.calls >= 0.55 ? "good" : r.hits / r.calls >= 0.45 ? "mid" : "bad") : "mid"}
         />
         <BigStat
@@ -1081,7 +1164,9 @@ function Record({ a }: { a: Analysis }) {
                 <span className="text-sm font-semibold">Week {w.week}</span>
                 {w.won !== null && (
                   <span className="flex gap-1.5 text-[11px] font-semibold">
-                    <span className={`rounded-full px-2 py-0.5 ${w.won ? "bg-mint-400/15 text-mint-300" : "bg-rose-500/15 text-rose-300"}`}>
+                    <span
+                      className={`rounded-full px-2 py-0.5 ${w.won ? "bg-mint-400/15 text-mint-300" : "bg-rose-500/15 text-rose-300"}`}
+                    >
                       You {w.won ? "won" : "lost"} vs {w.opponent?.toFixed(1)}
                     </span>
                     {w.advisorWon !== w.won && (
@@ -1118,7 +1203,9 @@ function Record({ a }: { a: Analysis }) {
                 <ul className="mt-3 flex flex-col gap-1">
                   {w.calls.map((c, i) => (
                     <li key={i} className="flex items-center gap-2 text-xs">
-                      <span className={`font-bold ${c.hit ? "text-mint-400" : "text-rose-300"}`}>{c.hit ? "✓" : "✗"}</span>
+                      <span className={`font-bold ${c.hit ? "text-mint-400" : "text-rose-300"}`}>
+                        {c.hit ? "✓" : "✗"}
+                      </span>
                       <span className="text-ink-300">
                         Advisor: start <b className="text-ink-100">{c.advisor.name}</b> ({c.advisor.points}) over{" "}
                         <b className="text-ink-100">{c.yours.name}</b> ({c.yours.points})
@@ -1132,15 +1219,25 @@ function Record({ a }: { a: Analysis }) {
         </ul>
         <p className="mt-2 text-xs text-ink-400">
           The advisor&apos;s lineup is rebuilt from Sleeper&apos;s pre-game projections for each week, using the roster
-          you had then; points are what players actually scored. The red tick is your opponent&apos;s score.
-          Excludes IDP slots.
+          you had then; points are what players actually scored. The red tick is your opponent&apos;s score. Excludes
+          IDP slots.
         </p>
       </Card>
     </div>
   );
 }
 
-function BigStat({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: "good" | "mid" | "bad" }) {
+function BigStat({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  tone: "good" | "mid" | "bad";
+}) {
   const color = { good: "text-mint-400", mid: "text-ink-100", bad: "text-rose-300" }[tone];
   return (
     <div className="rounded-2xl border border-ink-700/70 bg-ink-900 p-4">
@@ -1195,9 +1292,11 @@ function PlayerTable({
             <Th {...th} k="recentAvg">
               Last 3
             </Th>
-            {showSnaps && <Th {...th} k="snapShare">
-              Snaps
-            </Th>}
+            {showSnaps && (
+              <Th {...th} k="snapShare">
+                Snaps
+              </Th>
+            )}
             {showTrending && <Th {...th}>Adds</Th>}
             <th className="w-2 sm:w-3" />
           </tr>
@@ -1231,7 +1330,9 @@ function PlayerTable({
                     <span className="text-ink-400">—</span>
                   ) : (
                     <div className="ml-auto flex w-16 flex-col items-end gap-1">
-                      <span className="font-mono text-xs text-ink-300 tabular-nums">{Math.round(p.snapShare * 100)}%</span>
+                      <span className="font-mono text-xs text-ink-300 tabular-nums">
+                        {Math.round(p.snapShare * 100)}%
+                      </span>
                       <div className="h-1 w-full overflow-hidden rounded-full bg-ink-700">
                         <div className="h-full bg-pos-wr" style={{ width: `${p.snapShare * 100}%` }} />
                       </div>
@@ -1284,4 +1385,3 @@ function RoleTag({ role }: { role: NonNullable<PlayerAnalysis["role"]> }) {
   const label = { starter: "Starter", "fill-in": "Fill-in starter", sidelined: "Not starting", backup: "Backup" }[role];
   return <span className="rounded bg-ink-700 px-1 text-[10px] font-semibold text-ink-300">{label}</span>;
 }
-

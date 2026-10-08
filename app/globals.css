@@ -1,66 +1,88 @@
 @import "tailwindcss";
 
 @theme inline {
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-saira);
+  /* Numbers and headings use the condensed broadcast face. */
+  --font-mono: var(--font-saira-condensed);
+  --font-display: var(--font-saira-condensed);
 }
 
 /* Not `inline`: utilities reference these variables, so the light theme
    below can swap the whole palette by redefining them. */
 @theme {
-  /* Surfaces (950 = page, 900 = cards) and text (100 = primary). */
-  --color-ink-950: #0b0f19;
-  --color-ink-900: #111726;
-  --color-ink-850: #151c2e;
-  --color-ink-800: #1b2338;
-  --color-ink-700: #263049;
-  --color-ink-600: #36415e;
-  --color-ink-400: #7d89a8;
-  --color-ink-300: #a5afc8;
-  --color-ink-100: #e7ebf5;
+  /* Prime Time: midnight navy surfaces (950 = page, 900 = panels), text 100. */
+  --color-ink-950: #070a24;
+  --color-ink-900: #0e1338;
+  --color-ink-850: #121946;
+  --color-ink-800: #182057;
+  --color-ink-700: #252c66;
+  --color-ink-600: #3a4290;
+  --color-ink-400: #8b93c7;
+  --color-ink-300: #b3b9e3;
+  --color-ink-100: #eef1ff;
 
-  /* Accent */
-  --color-mint-300: #7af5cf;
-  --color-mint-400: #3ee8b5;
-  --color-mint-500: #1fcf9c;
+  /* Accent ("mint" name kept so components don't change): electric cyan. */
+  --color-mint-300: #7df0ff;
+  --color-mint-400: #19e3ff;
+  --color-mint-500: #00c4e6;
+  --color-violet: #7a5cff;
+  --color-hot: #ff2e88;
 
-  /* Positions (Sleeper-ish) */
-  --color-pos-qb: #ff5c8a;
-  --color-pos-rb: #20d8a5;
-  --color-pos-wr: #5aa9ff;
-  --color-pos-te: #ffad5a;
+  /* Bad news reads as broadcast magenta rather than red. */
+  --color-rose-200: #ffc1da;
+  --color-rose-300: #ff8ab9;
+  --color-rose-400: #ff5aa3;
+  --color-rose-500: #ff2e88;
+
+  --color-pos-qb: #ff5c9e;
+  --color-pos-rb: #2ff0b0;
+  --color-pos-wr: #4fa8ff;
+  --color-pos-te: #ffb03b;
   --color-pos-k: #b18cff;
   --color-pos-def: #9aa6c0;
+
+  /* Hard broadcast edges instead of soft rounded cards. */
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 3px;
+  --radius-xl: 3px;
+  --radius-2xl: 4px;
+  --radius-3xl: 6px;
 }
 
 [data-theme="light"] {
   color-scheme: light;
-  --color-ink-950: #f3f5fa;
+  /* Prime Time "day game": white panels, navy ink, same cyan/magenta. */
+  --color-ink-950: #eef1fb;
   --color-ink-900: #ffffff;
-  --color-ink-850: #f7f8fc;
-  --color-ink-800: #eceff6;
-  --color-ink-700: #dfe4ee;
-  --color-ink-600: #c7cfdf;
-  --color-ink-400: #627090;
-  --color-ink-300: #46516d;
-  --color-ink-100: #111726;
+  --color-ink-850: #f6f7fd;
+  --color-ink-800: #e7eaf7;
+  --color-ink-700: #d3d8ee;
+  --color-ink-600: #b4bbdc;
+  --color-ink-400: #5b6390;
+  --color-ink-300: #3a4170;
+  --color-ink-100: #0b1033;
 
-  --color-mint-300: #087a58;
-  --color-mint-400: #0e9f73;
-  --color-mint-500: #0b8a63;
+  --color-mint-300: #00739a;
+  --color-mint-400: #009fd0;
+  --color-mint-500: #0086b0;
+  --color-violet: #5b3df5;
+  --color-hot: #e0126f;
 
-  --color-pos-qb: #d92d63;
-  --color-pos-rb: #08936d;
-  --color-pos-wr: #2470d6;
+  --color-rose-200: #8c0842;
+  --color-rose-300: #b80c58;
+  --color-rose-400: #d4106a;
+  --color-rose-500: #e0126f;
+
+  --color-pos-qb: #d61f6c;
+  --color-pos-rb: #0a9a6e;
+  --color-pos-wr: #1f6fd6;
   --color-pos-te: #c46a12;
   --color-pos-k: #7c4ddb;
   --color-pos-def: #5d6985;
 
-  /* Status text tints are tuned for dark cards; darken them on white. */
   --color-amber-200: #8a4b06;
   --color-amber-300: #a05a08;
-  --color-rose-200: #9f1239;
-  --color-rose-300: #be123c;
 }
 
 :root:not([data-theme="light"]) {
@@ -69,12 +91,41 @@
 
 body {
   background:
-    radial-gradient(1200px 600px at 10% -10%, rgb(62 232 181 / 0.08), transparent 60%),
-    radial-gradient(900px 500px at 100% 0%, rgb(90 169 255 / 0.08), transparent 60%),
+    radial-gradient(1000px 420px at 50% -160px, rgb(122 92 255 / 0.35), transparent 70%),
+    radial-gradient(700px 300px at 100% 0%, rgb(25 227 255 / 0.08), transparent 70%),
     var(--color-ink-950);
   background-attachment: fixed;
   color: var(--color-ink-100);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-saira), system-ui, sans-serif;
+}
+
+[data-theme="light"] body {
+  background:
+    radial-gradient(1000px 420px at 50% -160px, rgb(122 92 255 / 0.14), transparent 70%),
+    var(--color-ink-950);
+}
+
+/* Broadcast type: condensed, uppercase, slightly tracked. */
+.display {
+  font-family: var(--font-saira-condensed), sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.glow {
+  text-shadow: 0 0 22px rgb(25 227 255 / 0.55);
+}
+.glow-hot {
+  text-shadow: 0 0 22px rgb(255 46 136 / 0.45);
+}
+[data-theme="light"] .glow,
+[data-theme="light"] .glow-hot {
+  text-shadow: none;
+}
+
+/* Cyan → violet broadcast gradient for active states. */
+.prime-gradient {
+  background-image: linear-gradient(90deg, var(--color-mint-400), var(--color-violet));
 }
 
 @keyframes shimmer {

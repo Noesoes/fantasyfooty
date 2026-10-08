@@ -25,7 +25,7 @@ const SLOT_LABEL: Record<string, string> = {
 export function PosBadge({ pos, className = "" }: { pos: string; className?: string }) {
   return (
     <span
-      className={`inline-flex items-center justify-center rounded-md px-1.5 py-0.5 text-[10px] font-bold tracking-wide ring-1 ring-inset ${
+      className={`display inline-flex items-center justify-center rounded-md px-1.5 py-0.5 text-[11px] leading-none font-bold ring-1 ring-inset ${
         POS_COLOR[pos] ?? "bg-ink-700 text-ink-300 ring-ink-600"
       } ${className}`}
     >
@@ -38,11 +38,11 @@ export function SlotBadge({ slot }: { slot: string }) {
   const pos = slot in POS_COLOR ? slot : null;
   return (
     <span
-      className={`inline-flex h-7 w-11 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold ring-1 ring-inset ${
+      className={`display inline-flex h-7 w-11 shrink-0 -skew-x-12 items-center justify-center text-sm font-extrabold ring-1 ring-inset ${
         pos ? POS_COLOR[pos] : "bg-ink-700/60 text-ink-300 ring-ink-600"
       }`}
     >
-      {SLOT_LABEL[slot] ?? slot}
+      <span className="skew-x-12">{SLOT_LABEL[slot] ?? slot}</span>
     </span>
   );
 }
@@ -121,7 +121,7 @@ export function MatchupChip({ p, compact }: { p: PlayerAnalysis; compact?: boole
   const g = GRADE[p.matchup.grade];
   return (
     <span title={describeMatchup(p.matchup, p.position)} className="inline-flex items-center gap-1.5 whitespace-nowrap">
-      <span className="text-xs font-medium text-ink-300">
+      <span className="display text-[13px] font-semibold text-ink-300">
         {p.matchup.opponent === p.team ? "" : "vs "}
         {p.matchup.opponent}
       </span>
@@ -139,15 +139,7 @@ export function MatchupChip({ p, compact }: { p: PlayerAnalysis; compact?: boole
   );
 }
 
-export function PlayerLine({
-  p,
-  size = 40,
-  sub,
-}: {
-  p: PlayerAnalysis;
-  size?: number;
-  sub?: React.ReactNode;
-}) {
+export function PlayerLine({ p, size = 40, sub }: { p: PlayerAnalysis; size?: number; sub?: React.ReactNode }) {
   return (
     <div className="flex min-w-0 items-center gap-3">
       <Headshot p={p} size={size} />
@@ -168,7 +160,9 @@ export function PlayerLine({
 
 export function Points({ value, muted }: { value: number; muted?: boolean }) {
   return (
-    <span className={`font-mono text-base font-semibold tabular-nums ${muted ? "text-ink-400" : "text-ink-100"}`}>
+    <span
+      className={`font-mono text-xl leading-none font-bold tabular-nums ${muted ? "text-ink-400" : "text-ink-100"}`}
+    >
       {value.toFixed(1)}
     </span>
   );
@@ -186,10 +180,14 @@ export function Card({
   className?: string;
 }) {
   return (
-    <section className={`rounded-2xl border border-ink-700/70 bg-ink-900/80 backdrop-blur ${className}`}>
+    <section
+      className={`border border-ink-700/80 bg-gradient-to-b from-ink-850 to-ink-900 shadow-[0_0_40px_rgb(25_227_255/0.05)] ${className}`}
+    >
       {title && (
         <header className="flex items-center justify-between gap-3 border-b border-ink-700/60 px-4 py-3 sm:px-5">
-          <h2 className="text-sm font-semibold tracking-wide text-ink-100 uppercase">{title}</h2>
+          <h2 className="display border-l-4 border-mint-400 pl-3 text-xl leading-none font-bold text-ink-100">
+            {title}
+          </h2>
           {action}
         </header>
       )}
@@ -199,5 +197,7 @@ export function Card({
 }
 
 export function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="rounded-xl border border-dashed border-ink-700 p-6 text-center text-sm text-ink-400">{children}</p>;
+  return (
+    <p className="rounded-xl border border-dashed border-ink-700 p-6 text-center text-sm text-ink-400">{children}</p>
+  );
 }
