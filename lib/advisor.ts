@@ -132,6 +132,8 @@ export interface Analysis {
   currentTotal: number;
   optimalTotal: number;
   opponent: Opponent | null;
+  /** When rosters were fetched (ms epoch); free agents are as of this time. */
+  fetchedAt: number;
   moves: LineupMove[];
   warnings: string[];
   roster: PlayerAnalysis[];
@@ -778,6 +780,7 @@ export async function analyzeLeague(opts: {
     scoringLabel: scoringLabel(league.scoring_settings),
     currentLineup,
     optimalLineup,
+    fetchedAt: Date.now(),
     currentTotal: total(currentLineup),
     optimalTotal: total(optimalLineup),
     moves: buildMoves(currentLineup, optimalLineup),

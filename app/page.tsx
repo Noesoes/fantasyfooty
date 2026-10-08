@@ -59,6 +59,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const requestId = useRef(0);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const findLeagues = useCallback(async (name: string, preferLeague?: string) => {
     setLoadingUser(true);
@@ -117,7 +118,7 @@ export default function Home() {
         if (id === requestId.current) setLoadingAnalysis(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- username is only used for saving
-  }, [user, state, leagueId, week]);
+  }, [user, state, leagueId, week, refreshKey]);
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -152,7 +153,12 @@ export default function Home() {
             {loadingAnalysis && !analysis && <Skeleton />}
             {analysis && (
               <div className={loadingAnalysis ? "pointer-events-none opacity-50 transition" : "transition"}>
-                <Results key={`${analysis.league.league_id}-${analysis.week}`} a={analysis} />
+                <Results
+                  key={`${analysis.league.league_id}-${analysis.week}`}
+                  a={analysis}
+                  onRefresh={() => setRefreshKey((k) => k + 1)}
+                  refreshing={loadingAnalysis}
+                />
               </div>
             )}
           </>

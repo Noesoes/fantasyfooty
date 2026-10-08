@@ -81,8 +81,14 @@ export interface TrendingPlayer {
 
 export class SleeperError extends Error {}
 
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
+/**
+ * `fresh` skips Sleeper's CDN cache (which can be ~10 minutes stale) by
+ * adding a throwaway query param. Used for rosters, so a player someone just
+ * picked up never shows as available.
+ */
+async function get<T>(path: string, fresh = false): Promise<T> {
+  const url = fresh ? `${BASE}${path}${path.includes("?") ? "&" : "?"}_=${Date.now()}` : `${BASE}${path}`;
+  const res = await fetch(url, fresh ? { cache: "no-store" } : undefined);
   if (!res.ok) {
     throw new SleeperError(`Sleeper API ${res.status} for ${path}`);
   }
@@ -108,7 +114,7 @@ export const getLeague = (leagueId: string) =>
   get<League | null>(`/v1/league/${leagueId}`);
 
 export const getRosters = (leagueId: string) =>
-  get<Roster[]>(`/v1/league/${leagueId}/rosters`);
+  get<Roster[]>(`/v1/league/${leagueId}/rosters`, true);
 
 export const getLeagueUsers = (leagueId: string) =>
   get<SleeperUser[]>(`/v1/league/${leagueId}/users`);
@@ -121,7 +127,7 @@ export interface MatchupRow {
 }
 
 export const getMatchups = (leagueId: string, week: number) =>
-  get<MatchupRow[] | null>(`/v1/league/${leagueId}/matchups/${week}`).then((m) => m ?? []);
+  get<MatchupRow[] | null>(`/v1/league/${leagueId}/matchups/${week}`, true).then((m) => m ?? []);
 
 export const getTrendingAdds = (lookbackHours = 72, limit = 200) =>
   get<TrendingPlayer[]>(

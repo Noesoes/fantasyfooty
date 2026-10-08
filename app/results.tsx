@@ -16,7 +16,15 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "roster", label: "Roster" },
 ];
 
-export function Results({ a }: { a: Analysis }) {
+export function Results({
+  a,
+  onRefresh,
+  refreshing,
+}: {
+  a: Analysis;
+  onRefresh: () => void;
+  refreshing: boolean;
+}) {
   const [tab, setTab] = useState<Tab>("plan");
   return (
     <div className="mt-6 flex flex-col gap-5">
@@ -45,7 +53,7 @@ export function Results({ a }: { a: Analysis }) {
       </nav>
       {tab === "plan" && <GamePlan a={a} goTo={setTab} />}
       {tab === "lineup" && <Lineup a={a} />}
-      {tab === "waivers" && <Waivers a={a} />}
+      {tab === "waivers" && <Waivers a={a} onRefresh={onRefresh} refreshing={refreshing} />}
       {tab === "roster" && <Roster a={a} />}
     </div>
   );
@@ -395,11 +403,25 @@ function ScoreBar({ value, max, muted }: { value: number; max: number; muted?: b
 
 // --- Waivers ---------------------------------------------------------------
 
-function Waivers({ a }: { a: Analysis }) {
+function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => void; refreshing: boolean }) {
   const positions = Object.keys(a.waiversByPosition).filter((p) => a.waiversByPosition[p].length);
   const [pos, setPos] = useState(positions[0] ?? "QB");
   return (
     <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-700/70 bg-ink-900 px-4 py-2.5 text-xs text-ink-400">
+        <span>
+          <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-mint-400" />
+          Only players on no roster in this league · checked{" "}
+          {new Date(a.fetchedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+        </span>
+        <button
+          onClick={onRefresh}
+          disabled={refreshing}
+          className="rounded-lg border border-ink-700 px-2.5 py-1 font-semibold text-ink-300 hover:border-mint-400/50 hover:text-ink-100 disabled:opacity-50"
+        >
+          {refreshing ? "Refreshing…" : "↻ Refresh"}
+        </button>
+      </div>
       <Card title="Recommended claims">
         {a.waivers.length === 0 ? (
           <Empty>No free agent clearly beats what you already have. Hold your waiver priority.</Empty>
