@@ -30,7 +30,7 @@ const RECENT_WEEKS = 3;
 // The Nth-best free agent at a position defines "replacement level".
 const REPLACEMENT_INDEX = 3;
 
-const SLOT_ELIGIBILITY: Record<string, string[]> = {
+export const SLOT_ELIGIBILITY: Record<string, string[]> = {
   QB: ["QB"],
   RB: ["RB"],
   WR: ["WR"],
@@ -44,7 +44,7 @@ const SLOT_ELIGIBILITY: Record<string, string[]> = {
 };
 
 // Statuses where the player will not suit up.
-const OUT_STATUSES = new Set(["Out", "IR", "PUP", "Sus", "NA", "DNR", "COV", "NFI"]);
+export const OUT_STATUSES = new Set(["Out", "IR", "PUP", "Sus", "NA", "DNR", "COV", "NFI"]);
 const INJURY_FACTOR: Record<string, number> = { Doubtful: 0.3, Questionable: 0.85 };
 
 export type MatchupGrade = "great" | "good" | "neutral" | "tough" | "brutal";
@@ -150,6 +150,8 @@ export interface Opponent {
 export interface Analysis {
   league: League;
   teamName: string;
+  /** Best-ball league: Sleeper sets the lineup automatically, so no start/sit advice. */
+  bestBall: boolean;
   /** Sleeper avatar id of the team owner, if set. */
   avatar: string | null;
   season: string;
@@ -173,6 +175,7 @@ export interface Analysis {
   drops: DropCandidate[];
   waivers: WaiverTarget[];
   waiversByPosition: Record<string, PlayerAnalysis[]>;
+  streamersByPosition: Record<string, PlayerAnalysis[]>;
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -608,6 +611,7 @@ export async function analyzeLeague(opts: {
     throw new Error("Your roster is empty — has the draft happened yet?");
   }
 
+  const bestBall = league.settings.best_ball === 1;
   const teamNameOf = (ownerId: string | null) => {
     const u = users.find((x) => x.user_id === ownerId);
     return ((u as unknown as { metadata?: { team_name?: string } })?.metadata?.team_name) || u?.display_name || "Team";
@@ -676,12 +680,13 @@ export async function analyzeLeague(opts: {
     p.position === "K" || p.position === "DEF" ? p.weekScore : p.rosValue;
 
   const waiversByPosition: Record<string, PlayerAnalysis[]> = {};
+  // Best free agents for THIS week only (gameday fill-ins).
+  const streamersByPosition: Record<string, PlayerAnalysis[]> = {};
   for (const pos of OFFENSE_ORDER) {
     if (!usedPositions.has(pos)) continue;
-    waiversByPosition[pos] = freeAgents
-      .filter((p) => p.position === pos)
-      .sort((a, b) => waiverRank(b) - waiverRank(a))
-      .slice(0, 8);
+    const atPos = freeAgents.filter((p) => p.position === pos);
+    waiversByPosition[pos] = [...atPos].sort((a, b) => waiverRank(b) - waiverRank(a)).slice(0, 8);
+    streamersByPosition[pos] = [...atPos].sort((a, b) => b.weekScore - a.weekScore).slice(0, 15);
   }
 
   // Value over replacement: how much better a player is than what's freely
@@ -913,12 +918,14 @@ export async function analyzeLeague(opts: {
     fetchedAt: Date.now(),
     currentTotal: total(currentLineup),
     optimalTotal: total(optimalLineup),
-    moves: buildMoves(currentLineup, optimalLineup),
-    warnings,
+    bestBall,
+    moves: bestBall ? [] : buildMoves(currentLineup, optimalLineup),
+    warnings: bestBall ? [] : warnings,
     roster,
     drops,
     waivers,
     waiversByPosition,
+    streamersByPosition,
   };
 }
 

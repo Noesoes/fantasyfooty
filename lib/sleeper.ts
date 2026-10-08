@@ -130,6 +130,19 @@ export interface MatchupRow {
 export const getMatchups = (leagueId: string, week: number) =>
   get<MatchupRow[] | null>(`/v1/league/${leagueId}/matchups/${week}`, true).then((m) => m ?? []);
 
+export interface ScheduledGame {
+  week: number;
+  game_id: string;
+  date: string;
+  home: string;
+  away: string;
+  /** "pre_game", "in_game", "complete", "canceled"... */
+  status: string;
+}
+
+export const getSchedule = (season: string) =>
+  get<ScheduledGame[]>(`/schedule/nfl/regular/${season}`, true);
+
 export const getTrendingAdds = (lookbackHours = 72, limit = 200) =>
   get<TrendingPlayer[]>(
     `/v1/players/nfl/trending/add?lookback_hours=${lookbackHours}&limit=${limit}`,

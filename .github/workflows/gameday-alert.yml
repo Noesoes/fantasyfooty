@@ -1,0 +1,57 @@
+name: Gameday lineup alert
+
+# Shortly after NFL inactives are announced (90 minutes before kickoff),
+# check whether any of your starters won't play and open an issue if so.
+# GitHub emails you about new issues on your own repos. Times are UTC and
+# chosen to land after inactives and before kickoff in both EDT and EST.
+on:
+  schedule:
+    - cron: "15 23 * * 4" # Thursday night game
+    - cron: "40 16 * * 0" # Sunday 1pm ET games
+    - cron: "40 19 * * 0" # Sunday 4pm ET games
+    - cron: "15 23 * * 0" # Sunday night game
+    - cron: "15 23 * * 1" # Monday night game
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: gameday-alert
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check lineups
+        env:
+          SLEEPER_USERNAME: ${{ vars.SLEEPER_USERNAME }}
+          SLEEPER_LEAGUE_ID: ${{ vars.SLEEPER_LEAGUE_ID }}
+        run: |
+          if [ -z "$SLEEPER_USERNAME" ]; then
+            echo "::error::Set the SLEEPER_USERNAME repository variable (Settings → Secrets and variables → Actions → Variables)."
+            exit 1
+          fi
+          npm run --silent gameday > alert.md
+          if [ -s alert.md ]; then cat alert.md >> "$GITHUB_STEP_SUMMARY"; else echo "All starters are good to go. ✅" >> "$GITHUB_STEP_SUMMARY"; fi
+      - name: Open an issue (once per distinct alert)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -s alert.md ] || exit 0
+          sig="$(grep -o 'gameday-sig:[a-z0-9]*' alert.md || true)"
+          gh label create gameday --color D93F0B --description "Gameday lineup alerts" --force --repo "$GITHUB_REPOSITORY" >/dev/null
+          if [ -n "$sig" ] && gh issue list --repo "$GITHUB_REPOSITORY" --label gameday --state all --limit 30 --json body --jq '.[].body' | grep -q "$sig"; then
+            echo "Already alerted about these exact issues; skipping."
+            exit 0
+          fi
+          gh issue create --repo "$GITHUB_REPOSITORY" --label gameday \
+            --title "$(head -n1 alert.md | sed 's/^# //')" --body-file alert.md

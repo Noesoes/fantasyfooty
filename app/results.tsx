@@ -214,6 +214,12 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
 
   return (
     <div className="flex flex-col gap-5">
+      {a.bestBall && (
+        <div className="rounded-xl border border-pos-wr/30 bg-pos-wr/10 px-4 py-3 text-sm text-ink-100">
+          <b>Best-ball league:</b> Sleeper picks your highest-scoring lineup automatically each week, so there are no
+          start/sit calls here. Waivers, trades and depth are what matter.
+        </div>
+      )}
       {a.warnings.length > 0 && (
         <div className="flex flex-col gap-2">
           {a.warnings.map((w) => (

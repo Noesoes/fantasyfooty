@@ -58,6 +58,10 @@ IDP slots aren't modeled: whoever is in them now stays put.
 
 To change when it runs, edit the `cron` line in `.github/workflows/weekly-report.yml` (times are UTC).
 
+### Gameday alerts
+
+`.github/workflows/gameday-alert.yml` runs shortly after NFL inactives are announced (Thursday night, Sunday 1pm / 4pm / night, Monday night). If any of your starters is ruled out, on bye, not starting at QB, doubtful, or has no projection, **and their game hasn't kicked off**, it opens an issue labeled `gameday` with the best bench (or free-agent) replacement. GitHub emails you when it's created. It stays quiet when everything is fine, posts each distinct alert only once, and skips best-ball leagues. It uses the same `SLEEPER_USERNAME` / `SLEEPER_LEAGUE_ID` variables. Run it locally with `SLEEPER_USERNAME=you npm run gameday`.
+
 ## Local development
 
 ```bash
