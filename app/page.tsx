@@ -67,7 +67,10 @@ export default function Home() {
     setAnalysis(null);
     try {
       const [found, nfl] = await Promise.all([getUser(name), getNflState()]);
-      if (!found) throw new Error(`No Sleeper account named "${name}". Check the spelling — it's your Sleeper username, not your display name.`);
+      if (!found)
+        throw new Error(
+          `No Sleeper account named "${name}". Check the spelling — it's your Sleeper username, not your display name.`,
+        );
       const season = nfl.league_season ?? nfl.season;
       const all = await getUserLeagues(found.user_id, season);
       if (all.length === 0) throw new Error(`${found.display_name} isn't in any ${season} NFL leagues on Sleeper.`);
@@ -104,7 +107,12 @@ export default function Home() {
     setLoadingAnalysis(true);
     setError(null);
     save({ username: user.username ?? username, leagueId });
-    analyzeLeague({ leagueId, userId: user.user_id, season: state.league_season ?? state.season, week })
+    analyzeLeague({
+      leagueId,
+      userId: user.user_id,
+      season: state.league_season ?? state.season,
+      week,
+    })
       .then((result) => {
         if (id === requestId.current) setAnalysis(result);
       })
@@ -138,7 +146,13 @@ export default function Home() {
       <TopBar user={user} onSignOut={signOut} />
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-16">
         {!user ? (
-          <Landing username={username} setUsername={setUsername} onSubmit={onSubmit} loading={loadingUser} error={error} />
+          <Landing
+            username={username}
+            setUsername={setUsername}
+            onSubmit={onSubmit}
+            loading={loadingUser}
+            error={error}
+          />
         ) : (
           <>
             <Controls
@@ -187,28 +201,72 @@ function Logo() {
   );
 }
 
+function ThemeToggle() {
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
+  useEffect(() => {
+    // The inline script in layout.tsx already applied the theme; mirror it.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing with the DOM after hydration
+    setTheme(document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark");
+  }, []);
+  function toggle() {
+    const next = theme === "light" ? "dark" : "light";
+    setTheme(next);
+    document.documentElement.setAttribute("data-theme", next);
+    try {
+      localStorage.setItem("theme", next);
+    } catch {
+      // The toggle still works for this visit.
+    }
+  }
+  return (
+    <button
+      onClick={toggle}
+      aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+      title={theme === "light" ? "Dark mode" : "Light mode"}
+      className="flex h-9 w-9 items-center justify-center rounded-full border border-ink-700 bg-ink-900 text-ink-300 transition hover:border-mint-400/50 hover:text-ink-100"
+    >
+      {theme === "light" ? (
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
+          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+          <circle cx="12" cy="12" r="4" />
+          <path
+            d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"
+            strokeLinecap="round"
+          />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 function TopBar({ user, onSignOut }: { user: SleeperUser | null; onSignOut: () => void }) {
   return (
-    <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-5">
+    <header className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 py-5">
       <Logo />
-      {user && (
-        <div className="flex items-center gap-2 rounded-full border border-ink-700 bg-ink-900 py-1 pr-1 pl-1">
-          {user.avatar ? (
-            <img src={avatarUrl(user.avatar)} alt="" className="h-7 w-7 rounded-full" />
-          ) : (
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-ink-700 text-xs font-bold">
-              {user.display_name.charAt(0).toUpperCase()}
-            </span>
-          )}
-          <span className="max-w-[120px] truncate text-sm font-medium">{user.display_name}</span>
-          <button
-            onClick={onSignOut}
-            className="rounded-full px-2.5 py-1 text-xs font-medium text-ink-400 hover:bg-ink-800 hover:text-ink-100"
-          >
-            Switch
-          </button>
-        </div>
-      )}
+      <div className="flex items-center gap-2">
+        <ThemeToggle />
+        {user && (
+          <div className="flex items-center gap-2 rounded-full border border-ink-700 bg-ink-900 py-1 pr-1 pl-1">
+            {user.avatar ? (
+              <img src={avatarUrl(user.avatar)} alt="" className="h-7 w-7 rounded-full" />
+            ) : (
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-ink-700 text-xs font-bold">
+                {user.display_name.charAt(0).toUpperCase()}
+              </span>
+            )}
+            <span className="max-w-[120px] truncate text-sm font-medium">{user.display_name}</span>
+            <button
+              onClick={onSignOut}
+              className="rounded-full px-2.5 py-1 text-xs font-medium text-ink-400 hover:bg-ink-800 hover:text-ink-100"
+            >
+              Switch
+            </button>
+          </div>
+        )}
+      </div>
     </header>
   );
 }

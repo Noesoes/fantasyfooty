@@ -35,6 +35,8 @@ Every player gets two scores.
 - A free agent gets priority if they'd crack your lineup, especially when one of your starters is out this week
 - Backup QBs and players Sleeper doesn't expect to play are never recommended as pickups. QB claims are capped at your number of QB/superflex spots
 
+**Waiver order:** shows your waiver priority (rolling or reverse standings) or FAAB budget left. Every team that claims before you (or has more FAAB to spend) is scored with the same model to guess which free agents they'd want. The app then simulates the waiver run in order, marks each of your claims as *likely gone*, *contested* or *likely available*, and suggests backup targets that are likely to still be there at your turn.
+
 The lineup optimizer fills the most restrictive slots first (QB, K, DEF, then FLEX, then SUPER_FLEX). It respects your league's `roster_positions`, skips players on IR/taxi, and won't suggest dropping below one QB per QB/superflex slot or your only player at a required position. K and DEF are treated as weekly streamers.
 
 IDP slots aren't modeled: whoever is in them now stays put.

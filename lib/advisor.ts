@@ -110,6 +110,34 @@ export interface WaiverTarget {
   /** Suggested player to release for this claim, if the roster is full. */
   dropFor: PlayerAnalysis | null;
   reason: string;
+  /** Teams ahead of you on waivers who would also likely want this player. */
+  contestedBy: string[];
+  /** Team projected to claim this player before your turn, if any. */
+  likelyClaimedBy: string | null;
+}
+
+export type WaiverType = "rolling" | "reverse" | "faab";
+
+export interface WaiverInfo {
+  type: WaiverType;
+  /** Your waiver priority; 1 = first claim. In FAAB leagues it only breaks ties. */
+  position: number | null;
+  teams: number;
+  /** FAAB budget for the season, and how much of it you have left. */
+  budget: number | null;
+  budgetLeft: number | null;
+}
+
+export interface Rival {
+  rosterId: number;
+  teamName: string;
+  avatar: string | null;
+  waiverPosition: number | null;
+  budgetLeft: number | null;
+  /** Free agents this team would most likely put in a claim for, best first. */
+  targets: { player: PlayerAnalysis; over: PlayerAnalysis | null }[];
+  /** Their projected top claim once the teams ahead of them have picked. */
+  projectedClaim: PlayerAnalysis | null;
 }
 
 export interface Opponent {
@@ -132,6 +160,11 @@ export interface Analysis {
   currentTotal: number;
   optimalTotal: number;
   opponent: Opponent | null;
+  waiver: WaiverInfo;
+  /** Good fits for your team that are likely still there at your turn. */
+  backupTargets: PlayerAnalysis[];
+  /** Teams that get claims processed before you (or can outbid you in FAAB), in that order. */
+  rivals: Rival[];
   /** When rosters were fetched (ms epoch); free agents are as of this time. */
   fetchedAt: number;
   moves: LineupMove[];
@@ -516,6 +549,24 @@ function buildMoves(current: LineupSlot[], optimal: LineupSlot[]): LineupMove[] 
   return [...starts, ...benches];
 }
 
+/**
+ * How much a free agent would improve a starting lineup (0 if they'd sit).
+ * Counts both rest-of-season and this week, so a free agent jumps the queue
+ * when the starter at that spot is out this week.
+ */
+function lineupUpgrade(t: PlayerAnalysis, lineup: LineupSlot[]) {
+  const slots = lineup.filter((s) => SLOT_ELIGIBILITY[s.slot]?.some((pos) => t.eligible.includes(pos)));
+  if (!slots.length) return { gain: 0, over: null as PlayerAnalysis | null };
+  if (slots.some((s) => !s.player)) return { gain: t.rosValue + t.weekScore * 0.5, over: null };
+  const filled = slots.map((s) => s.player as PlayerAnalysis);
+  const weakest = [...filled].sort((a, b) => a.rosValue - b.rosValue)[0];
+  const weakestThisWeek = [...filled].sort((a, b) => a.weekScore - b.weekScore)[0];
+  const rosGain = Math.max(0, t.rosValue - weakest.rosValue);
+  const weekGain = Math.max(0, t.weekScore - weakestThisWeek.weekScore);
+  const over = weekGain * 0.5 > rosGain ? weakestThisWeek : weakest;
+  return { gain: rosGain + weekGain * 0.5, over: rosGain + weekGain > 0 ? over : null };
+}
+
 /** How many players at each position the lineup needs at minimum (dedicated slots only). */
 function minimumNeeds(rosterPositions: string[]): Record<string, number> {
   const needs: Record<string, number> = {};
@@ -676,21 +727,7 @@ export async function analyzeLeague(opts: {
   const rosterFull = active.length >= rosterSize;
   const takenDrops = new Set<string>();
   const waivers: WaiverTarget[] = [];
-  // How much a free agent would improve your starting lineup (0 if they'd sit).
-  // Counts both rest-of-season and this week, so a free agent jumps the queue
-  // when the starter at that spot is out this week.
-  const startUpgrade = (t: PlayerAnalysis) => {
-    const slots = optimalLineup.filter((s) => SLOT_ELIGIBILITY[s.slot]?.some((pos) => t.eligible.includes(pos)));
-    if (!slots.length) return { gain: 0, over: null as PlayerAnalysis | null };
-    if (slots.some((s) => !s.player)) return { gain: t.rosValue + t.weekScore * 0.5, over: null };
-    const filled = slots.map((s) => s.player as PlayerAnalysis);
-    const weakest = [...filled].sort((a, b) => a.rosValue - b.rosValue)[0];
-    const weakestThisWeek = [...filled].sort((a, b) => a.weekScore - b.weekScore)[0];
-    const rosGain = Math.max(0, t.rosValue - weakest.rosValue);
-    const weekGain = Math.max(0, t.weekScore - weakestThisWeek.weekScore);
-    const over = weekGain * 0.5 > rosGain ? weakestThisWeek : weakest;
-    return { gain: rosGain + weekGain * 0.5, over: rosGain + weekGain > 0 ? over : null };
-  };
+  const startUpgrade = (t: PlayerAnalysis) => lineupUpgrade(t, optimalLineup);
   const claimValue = (t: PlayerAnalysis) => vor(t) + startUpgrade(t).gain;
 
   const perPosition: Record<string, number> = {};
@@ -749,8 +786,98 @@ export async function analyzeLeague(opts: {
           : `${dropFor.name} is your most expendable bench player`,
       );
     }
-    waivers.push({ player: target, dropFor, reason: capitalize(parts.join("; ")) + "." });
+    waivers.push({ player: target, dropFor, reason: capitalize(parts.join("; ")) + ".", contestedBy: [], likelyClaimedBy: null });
   }
+
+  // --- Waiver order and rivals ---
+  const waiverType: WaiverType =
+    league.settings.waiver_type === 2 ? "faab" : league.settings.waiver_type === 1 ? "reverse" : "rolling";
+  const budget = waiverType === "faab" ? Number(league.settings.waiver_budget ?? 100) : null;
+  const waiverPos = (r: Roster) => (typeof r.settings?.waiver_position === "number" ? r.settings.waiver_position : null);
+  const budgetLeft = (r: Roster) => (budget === null ? null : budget - Number(r.settings?.waiver_budget_used ?? 0));
+  const myPos = waiverPos(mine) ?? Infinity;
+  const myBudget = budgetLeft(mine) ?? 0;
+  // Who gets a player before you: in FAAB, anyone with more money left (or
+  // the same and a better tiebreak); otherwise anyone higher in the order.
+  const isAhead = (r: Roster) => {
+    const pos = waiverPos(r) ?? Infinity;
+    if (waiverType !== "faab") return pos < myPos;
+    const left = budgetLeft(r) ?? 0;
+    return left > myBudget || (left === myBudget && pos < myPos);
+  };
+
+  // Score each team ahead of you the same way as yours to guess what they'd
+  // claim: free agents who would crack their starting lineup.
+  const contestPool = freeAgents
+    .filter((p) => p.position !== "K" && p.position !== "DEF" && !p.onBye && vor(p) > -2)
+    .sort((a, b) => vor(b) - vor(a))
+    .slice(0, 40);
+  const rivals: Rival[] = rosters
+    .filter((r) => r.roster_id !== mine.roster_id && r.players?.length && isAhead(r))
+    .map((r) => {
+      const out = new Set([...(r.reserve ?? []), ...(r.taxi ?? [])]);
+      const theirIds = (r.players ?? []).filter((id) => id !== "0" && !out.has(id));
+      const theirPlayers = analyzePlayers(theirIds, inputs, new Map());
+      const theirCurrent = starterSlots.map((slot, i) => {
+        const id = r.starters?.[i];
+        return { slot, player: id && id !== "0" ? theirPlayers.get(id) ?? null : null };
+      });
+      const theirLineup = optimizeLineup(league.roster_positions, [...theirPlayers.values()], theirCurrent);
+      const targets = contestPool
+        .map((p) => ({ p, up: lineupUpgrade(p, theirLineup) }))
+        .filter((x) => x.up.gain >= 1)
+        .sort((a, b) => vor(b.p) + b.up.gain - (vor(a.p) + a.up.gain))
+        .slice(0, 5)
+        .map((x) => ({ player: x.p, over: x.up.over }));
+      return {
+        rosterId: r.roster_id,
+        teamName: teamNameOf(r.owner_id),
+        avatar: users.find((u) => u.user_id === r.owner_id)?.avatar ?? null,
+        waiverPosition: waiverPos(r),
+        budgetLeft: budgetLeft(r),
+        targets,
+        projectedClaim: null as PlayerAnalysis | null,
+      };
+    })
+    .sort((a, b) =>
+      waiverType === "faab"
+        ? (b.budgetLeft ?? 0) - (a.budgetLeft ?? 0) || (a.waiverPosition ?? 99) - (b.waiverPosition ?? 99)
+        : (a.waiverPosition ?? 99) - (b.waiverPosition ?? 99),
+    );
+  // Simulate the waiver run up to your turn: each team ahead takes its top
+  // target that hasn't gone yet. A rough guess (teams can put in several
+  // claims), but it shows which of your targets are realistic.
+  const claimedBy = new Map<string, string>();
+  for (const r of rivals) {
+    const pick = r.targets.find((t) => !claimedBy.has(t.player.id));
+    if (pick) {
+      r.projectedClaim = pick.player;
+      claimedBy.set(pick.player.id, r.teamName);
+    }
+  }
+  for (const w of waivers) {
+    w.contestedBy = rivals.filter((r) => r.targets.some((t) => t.player.id === w.player.id)).map((r) => r.teamName);
+    w.likelyClaimedBy = claimedBy.get(w.player.id) ?? null;
+  }
+  const recommended = new Set(waivers.map((w) => w.player.id));
+  const backupTargets: PlayerAnalysis[] = [];
+  if (waivers.some((w) => w.likelyClaimedBy)) {
+    const perPos: Record<string, number> = {};
+    for (const p of candidates) {
+      if (backupTargets.length >= 4) break;
+      if (recommended.has(p.id) || claimedBy.has(p.id) || claimValue(p) <= 0.5) continue;
+      if ((perPos[p.position] ?? 0) >= claimCap(p.position)) continue;
+      perPos[p.position] = (perPos[p.position] ?? 0) + 1;
+      backupTargets.push(p);
+    }
+  }
+  const waiver: WaiverInfo = {
+    type: waiverType,
+    position: waiverPos(mine),
+    teams: rosters.length,
+    budget,
+    budgetLeft: budgetLeft(mine),
+  };
 
   // This week's opponent, scored with the same model as your team.
   let opponent: Opponent | null = null;
@@ -773,6 +900,9 @@ export async function analyzeLeague(opts: {
   return {
     league,
     opponent,
+    waiver,
+    rivals,
+    backupTargets,
     teamName,
     avatar: owner?.avatar ?? null,
     season,

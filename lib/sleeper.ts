@@ -47,6 +47,7 @@ export interface Roster {
   starters: string[] | null;
   reserve: string[] | null;
   taxi: string[] | null;
+  settings?: { waiver_position?: number; waiver_budget_used?: number; wins?: number; losses?: number };
 }
 
 export interface PlayerInfo {

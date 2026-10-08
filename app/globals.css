@@ -3,8 +3,12 @@
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
 
-  /* Surfaces */
+/* Not `inline`: utilities reference these variables, so the light theme
+   below can swap the whole palette by redefining them. */
+@theme {
+  /* Surfaces (950 = page, 900 = cards) and text (100 = primary). */
   --color-ink-950: #0b0f19;
   --color-ink-900: #111726;
   --color-ink-850: #151c2e;
@@ -29,14 +33,44 @@
   --color-pos-def: #9aa6c0;
 }
 
-:root {
+[data-theme="light"] {
+  color-scheme: light;
+  --color-ink-950: #f3f5fa;
+  --color-ink-900: #ffffff;
+  --color-ink-850: #f7f8fc;
+  --color-ink-800: #eceff6;
+  --color-ink-700: #dfe4ee;
+  --color-ink-600: #c7cfdf;
+  --color-ink-400: #627090;
+  --color-ink-300: #46516d;
+  --color-ink-100: #111726;
+
+  --color-mint-300: #087a58;
+  --color-mint-400: #0e9f73;
+  --color-mint-500: #0b8a63;
+
+  --color-pos-qb: #d92d63;
+  --color-pos-rb: #08936d;
+  --color-pos-wr: #2470d6;
+  --color-pos-te: #c46a12;
+  --color-pos-k: #7c4ddb;
+  --color-pos-def: #5d6985;
+
+  /* Status text tints are tuned for dark cards; darken them on white. */
+  --color-amber-200: #8a4b06;
+  --color-amber-300: #a05a08;
+  --color-rose-200: #9f1239;
+  --color-rose-300: #be123c;
+}
+
+:root:not([data-theme="light"]) {
   color-scheme: dark;
 }
 
 body {
   background:
-    radial-gradient(1200px 600px at 10% -10%, rgba(62, 232, 181, 0.08), transparent 60%),
-    radial-gradient(900px 500px at 100% 0%, rgba(90, 169, 255, 0.08), transparent 60%),
+    radial-gradient(1200px 600px at 10% -10%, rgb(62 232 181 / 0.08), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgb(90 169 255 / 0.08), transparent 60%),
     var(--color-ink-950);
   background-attachment: fixed;
   color: var(--color-ink-100);
@@ -53,7 +87,12 @@ body {
 }
 
 .skeleton {
-  background: linear-gradient(90deg, #1b2338 0px, #263049 160px, #1b2338 320px);
+  background: linear-gradient(
+    90deg,
+    var(--color-ink-800) 0px,
+    var(--color-ink-700) 160px,
+    var(--color-ink-800) 320px
+  );
   background-size: 800px 100%;
   animation: shimmer 1.4s linear infinite;
 }

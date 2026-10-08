@@ -56,15 +56,45 @@ export function renderMarkdown(a: Analysis): string {
   lines.push("");
 
   lines.push("## Waiver wire");
+  lines.push(waiverLine(a));
+  lines.push("");
   if (a.waivers.length === 0) {
     lines.push("No free agent is clearly better than what you already have.");
   } else {
     for (const w of a.waivers) {
       const drop = w.dropFor ? `, drop ${tag(w.dropFor)}` : "";
-      lines.push(`- **Add** ${tag(w.player)}${drop} — ${w.reason}`);
+      const contested = w.likelyClaimedBy
+        ? ` 🚫 Likely claimed before your turn by ${w.likelyClaimedBy}.`
+        : w.contestedBy.length
+          ? ` ⚠️ Also wanted by ${w.contestedBy.slice(0, 3).join(", ")}${w.contestedBy.length > 3 ? ` +${w.contestedBy.length - 3}` : ""}.`
+          : " ✅ Likely available at your turn.";
+      lines.push(`- **Add** ${tag(w.player)}${drop} — ${w.reason}${contested}`);
     }
   }
   lines.push("");
+
+  if (a.backupTargets.length) {
+    lines.push(
+      `**Backup targets likely still there at your turn:** ${a.backupTargets
+        .map((p) => `${p.name} (${p.position}, ${p.team})`)
+        .join(", ")}`,
+    );
+    lines.push("");
+  }
+  const rivals = a.rivals.filter((r) => r.targets.length);
+  if (rivals.length) {
+    lines.push(a.waiver.type === "faab" ? "### Teams with more FAAB than you" : "### Teams ahead of you on waivers");
+    lines.push("| Team | Priority | Projected claim | Also interested in |");
+    lines.push("| --- | --- | --- | --- |");
+    for (const r of rivals) {
+      const prio = a.waiver.type === "faab" ? `$${r.budgetLeft} left` : `#${r.waiverPosition}`;
+      const others = r.targets.filter((t) => t.player.id !== r.projectedClaim?.id).slice(0, 2);
+      lines.push(
+        `| ${r.teamName} | ${prio} | ${r.projectedClaim?.name ?? "—"} | ${others.map((t) => t.player.name).join(", ")} |`,
+      );
+    }
+    lines.push("");
+  }
 
   lines.push("## Drop candidates");
   if (a.drops.length === 0) {
@@ -92,4 +122,14 @@ export function renderMarkdown(a: Analysis): string {
     "_Projections and stats from Sleeper. Re-check injury news before kickoff — statuses change late in the week._",
   );
   return lines.join("\n");
+}
+
+export function waiverLine(a: Analysis): string {
+  const w = a.waiver;
+  const ahead = a.rivals.length;
+  if (w.type === "faab") {
+    return `**FAAB:** $${w.budgetLeft} of $${w.budget} left · ${ahead === 0 ? "nobody has more to spend" : `${ahead} team${ahead === 1 ? "" : "s"} can outbid you`}${w.position ? ` · tiebreak #${w.position}` : ""}`;
+  }
+  const kind = w.type === "reverse" ? "reverse standings" : "rolling";
+  return `**Waiver priority:** #${w.position ?? "?"} of ${w.teams} (${kind})${ahead ? ` · ${ahead} team${ahead === 1 ? "" : "s"} claim before you` : " · you claim first"}`;
 }
