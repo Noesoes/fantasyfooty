@@ -401,6 +401,8 @@ function minimumNeeds(rosterPositions: string[]): Record<string, number> {
   for (const slot of rosterPositions) {
     const elig = SLOT_ELIGIBILITY[slot];
     if (elig?.length === 1) needs[elig[0]] = (needs[elig[0]] ?? 0) + 1;
+    // Superflex slots are almost always filled by a QB, so keep one per slot.
+    if (slot === "SUPER_FLEX") needs.QB = (needs.QB ?? 0) + 1;
   }
   return needs;
 }
