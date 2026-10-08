@@ -3,6 +3,7 @@
 import { describeMatchup, type Analysis, type PlayerAnalysis } from "./advisor";
 import { findTrades } from "./trades";
 import type { TrackRecord } from "./backtest";
+import type { InjuryReport } from "./injuries";
 
 function tag(p: PlayerAnalysis): string {
   const bits = [`${p.position}${p.team ? `, ${p.team}` : ""}`];
@@ -11,7 +12,7 @@ function tag(p: PlayerAnalysis): string {
   return `**${p.name}** (${bits.join(", ")})`;
 }
 
-export function renderMarkdown(a: Analysis, record?: TrackRecord | null): string {
+export function renderMarkdown(a: Analysis, record?: TrackRecord | null, injuries?: InjuryReport | null): string {
   const lines: string[] = [];
   lines.push(`# Week ${a.week} game plan — ${a.teamName}`);
   lines.push("");
@@ -42,9 +43,7 @@ export function renderMarkdown(a: Analysis, record?: TrackRecord | null): string
   if (a.moves.length === 0) {
     lines.push(`Your current lineup is already optimal (${a.currentTotal} projected pts). No changes needed.`);
   } else {
-    lines.push(
-      `Making these changes takes your projection from **${a.currentTotal}** to **${a.optimalTotal}** pts.`,
-    );
+    lines.push(`Making these changes takes your projection from **${a.currentTotal}** to **${a.optimalTotal}** pts.`);
     lines.push("");
     for (const m of a.moves) {
       const head = m.action === "start" ? `**Start** ${tag(m.player)} at ${m.slot}` : `**Bench** ${tag(m.player)}`;
@@ -52,6 +51,24 @@ export function renderMarkdown(a: Analysis, record?: TrackRecord | null): string
     }
   }
   lines.push("");
+
+  const hurt = injuries?.rows.filter((r) => r.side === "mine" && r.verdict !== "Bye") ?? [];
+  if (injuries && hurt.length) {
+    lines.push("### Injury report");
+    lines.push(`${injuries.healthyStarters} of ${injuries.totalStarters} starters fully healthy.`);
+    lines.push("");
+    lines.push("| Player | Status | Practice | Chance to play | Latest |");
+    lines.push("| --- | --- | --- | ---: | --- |");
+    for (const r of hurt) {
+      const practice = r.practice
+        .map((n) => `${n.day.slice(0, 3)} ${n.level === "Limited" ? "LP" : n.level === "Full" ? "FP" : "DNP"}`)
+        .join(" → ");
+      lines.push(
+        `| ${r.starter ? "**" : ""}${r.player.name}${r.starter ? "**" : ""} (${r.player.position}) | ${r.designation ?? "—"} | ${practice || "—"} | ${Math.round(r.probability * 100)}% · ${r.verdict} | ${(r.headline?.text ?? "").replace(/\|/g, "/")} |`,
+      );
+    }
+    lines.push("");
+  }
 
   lines.push("### Recommended lineup");
   lines.push("| Slot | Player | Proj | Matchup | Notes |");
@@ -78,10 +95,10 @@ export function renderMarkdown(a: Analysis, record?: TrackRecord | null): string
       const contested = w.bid
         ? ""
         : w.likelyClaimedBy
-        ? ` 🚫 Likely claimed before your turn by ${w.likelyClaimedBy}.`
-        : w.contestedBy.length
-          ? ` ⚠️ Also wanted by ${w.contestedBy.slice(0, 3).join(", ")}${w.contestedBy.length > 3 ? ` +${w.contestedBy.length - 3}` : ""}.`
-          : " ✅ Likely available at your turn.";
+          ? ` 🚫 Likely claimed before your turn by ${w.likelyClaimedBy}.`
+          : w.contestedBy.length
+            ? ` ⚠️ Also wanted by ${w.contestedBy.slice(0, 3).join(", ")}${w.contestedBy.length > 3 ? ` +${w.contestedBy.length - 3}` : ""}.`
+            : " ✅ Likely available at your turn.";
       const bid = w.bid ? ` ${bidText(w.bid)}` : "";
       lines.push(`- **Add** ${tag(w.player)}${drop} — ${w.reason}${bid}${contested}`);
     }
@@ -123,13 +140,16 @@ export function renderMarkdown(a: Analysis, record?: TrackRecord | null): string
   lines.push("## Trade ideas");
   if (trades.strengths.length) {
     lines.push(
-      trades.strengths.map((st) => `${st.position} #${st.rank}/${st.teams}`).join(" · ") + " _(your starters vs. the league)_",
+      trades.strengths.map((st) => `${st.position} #${st.rank}/${st.teams}`).join(" · ") +
+        " _(your starters vs. the league)_",
     );
     lines.push("");
   }
   if (trades.ideas.length === 0) lines.push("No trade clearly helps both sides right now.");
   for (const t of trades.ideas.slice(0, 3)) {
-    lines.push(`- **With ${t.teamName}:** give ${t.give.map(tag).join(" + ")}, get ${t.get.map(tag).join(" + ")} — ${t.reason}`);
+    lines.push(
+      `- **With ${t.teamName}:** give ${t.give.map(tag).join(" + ")}, get ${t.get.map(tag).join(" + ")} — ${t.reason}`,
+    );
   }
   lines.push("");
 

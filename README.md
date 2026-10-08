@@ -45,6 +45,14 @@ Every player gets two scores.
 
 **Track record (Record tab):** replays every completed week from Sleeper's matchup history (each week's roster, starters and actual points). It compares the lineup you started, the lineup the advisor would have picked from that week's pre-game projections, and the best lineup in hindsight. It also grades each start/sit call where the advisor disagreed with you. The weekly report opens with last week's result. Nothing needs to be stored, so it works for any league.
 
+**Injury report (Injuries tab):** for everyone on your roster and your opponent's starters, it estimates the chance each player plays this week and labels it Playing, Likely, Toss-up, Unlikely or Out. The estimate combines:
+- the official designation (Sleeper and ESPN's league-wide injury report)
+- this week's practice participation (DNP / limited / full), parsed sentence by sentence from Sleeper's player news feed and ESPN's notes, ignoring recaps of earlier weeks and hedged "if he practices…" sentences
+- reports that a player was ruled out or is expected to play
+- whether Sleeper still projects the player, and QB depth charts
+
+Each card shows the practice trend, the latest headline, ESPN's estimated return date, and a backup plan for at-risk starters (a bench player, or a free agent if you have none). The weekly report includes the same table. The deploy workflow snapshots ESPN's report into `injuries.json` every 3 hours, so the browser reads it from the site's own address.
+
 The lineup optimizer fills the most restrictive slots first (QB, K, DEF, then FLEX, then SUPER_FLEX). It respects your league's `roster_positions`, skips players on IR/taxi, and won't suggest dropping below one QB per QB/superflex slot or your only player at a required position. K and DEF are treated as weekly streamers.
 
 IDP slots aren't modeled: whoever is in them now stays put.
@@ -102,6 +110,8 @@ lib/trades.ts              trade finder and positional strength
 lib/planner.ts             rest-of-season projections, byes and playoff weeks
 lib/backtest.ts            track record from past weeks' actual scores
 lib/gameday.ts             pre-kickoff inactive check
+lib/injuries.ts            injury report and chance-to-play estimates
+scripts/fetch-injuries.mjs ESPN injury snapshot used by the deploy workflow
 scripts/weekly-report.ts   CLI entry point used by the weekly GitHub Action
 scripts/gameday-alert.ts   CLI entry point used by the gameday GitHub Action
 app/page.tsx               landing page, league/week controls

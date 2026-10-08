@@ -7,14 +7,16 @@ import { describeMatchup, type Analysis, type PlayerAnalysis } from "@/lib/advis
 import { avatarUrl } from "@/lib/sleeper";
 import { findTrades } from "@/lib/trades";
 import { buildPlan, type Plan } from "@/lib/planner";
+import { buildInjuryReport, type InjuryReport, type InjuryRow, type Verdict } from "@/lib/injuries";
 import { buildTrackRecord, type TrackRecord } from "@/lib/backtest";
 import { Card, Empty, Headshot, MatchupChip, PlayerLine, Points, PosBadge, SlotBadge } from "./ui";
 
-type Tab = "plan" | "lineup" | "waivers" | "trades" | "planner" | "record" | "roster";
+type Tab = "plan" | "lineup" | "injuries" | "waivers" | "trades" | "planner" | "record" | "roster";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "plan", label: "Game plan" },
   { id: "lineup", label: "Lineup" },
+  { id: "injuries", label: "Injuries" },
   { id: "waivers", label: "Waivers" },
   { id: "trades", label: "Trades" },
   { id: "planner", label: "Season" },
@@ -54,6 +56,7 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
       </nav>
       {tab === "plan" && <GamePlan a={a} goTo={setTab} />}
       {tab === "lineup" && <Lineup a={a} />}
+      {tab === "injuries" && <Injuries a={a} />}
       {tab === "waivers" && <Waivers a={a} onRefresh={onRefresh} refreshing={refreshing} />}
       {tab === "trades" && <Trades a={a} />}
       {tab === "planner" && <Planner a={a} />}
@@ -1245,6 +1248,213 @@ function BigStat({
       <div className={`mt-1 font-mono text-2xl font-bold tabular-nums ${color}`}>{value}</div>
       <div className="mt-0.5 text-xs text-ink-400">{sub}</div>
     </div>
+  );
+}
+
+// --- Injury report --------------------------------------------------------
+
+const VERDICT_STYLE: Record<Verdict, { text: string; bar: string; chip: string }> = {
+  Playing: { text: "text-mint-400", bar: "bg-mint-400", chip: "bg-mint-400 text-ink-950" },
+  Likely: { text: "text-lime-400", bar: "bg-lime-400", chip: "bg-lime-400 text-ink-950" },
+  "Toss-up": { text: "text-amber-300", bar: "bg-amber-400", chip: "bg-amber-400 text-ink-950" },
+  Unlikely: { text: "text-rose-300", bar: "bg-rose-400", chip: "bg-rose-400 text-white" },
+  Out: { text: "text-rose-400", bar: "bg-rose-500", chip: "bg-rose-500 text-white" },
+  Bye: { text: "text-ink-400", bar: "bg-ink-600", chip: "bg-ink-600 text-ink-100" },
+};
+
+function timeAgo(ms: number) {
+  const mins = Math.max(1, Math.round((Date.now() - ms) / 60000));
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  return hrs < 48 ? `${hrs}h ago` : `${Math.round(hrs / 24)}d ago`;
+}
+
+function Injuries({ a }: { a: Analysis }) {
+  const [refresh, setRefresh] = useState(0);
+  const { data: r, error } = useAsync<InjuryReport>(() => buildInjuryReport(a), [a, refresh]);
+  if (error) return <Empty>Couldn&apos;t load injury reports: {error}</Empty>;
+  if (!r) {
+    return (
+      <div className="flex flex-col gap-3" aria-busy="true">
+        <div className="skeleton h-24" />
+        <div className="skeleton h-40" />
+        <div className="skeleton h-40" />
+      </div>
+    );
+  }
+  const myStarters = r.rows.filter((x) => x.side === "mine" && x.starter);
+  const bench = r.rows.filter((x) => x.side === "mine" && !x.starter);
+  const opp = r.rows.filter((x) => x.side === "opponent");
+  const atRisk = myStarters.filter((x) => x.probability < 0.6).length;
+
+  // Healthy bench fallback for an at-risk starter at the same position.
+  const risky = new Set(r.rows.filter((x) => x.side === "mine" && x.probability < 0.85).map((x) => x.player.id));
+  const starters = new Set(a.currentLineup.map((s) => s.player?.id));
+  // Healthy bench player at the same position, else the best free agent.
+  const pivot = (row: InjuryRow) => {
+    const fits = (p: PlayerAnalysis) =>
+      !risky.has(p.id) && p.weekScore > 0 && p.eligible.some((e) => row.player.eligible.includes(e));
+    const fromBench = a.roster
+      .filter((p) => !starters.has(p.id) && fits(p))
+      .sort((x, y) => y.weekScore - x.weekScore)[0];
+    if (fromBench) return { player: fromBench, freeAgent: false };
+    const fa = row.player.eligible
+      .flatMap((pos) => a.streamersByPosition[pos] ?? [])
+      .filter((p) => fits(p) && !p.injury)
+      .sort((x, y) => y.weekScore - x.weekScore)[0];
+    return fa ? { player: fa, freeAgent: true } : undefined;
+  };
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <BigStat
+          label="Healthy starters"
+          value={`${r.healthyStarters}/${r.totalStarters}`}
+          sub="starters with no injury concern this week"
+          tone={
+            r.healthyStarters === r.totalStarters ? "good" : r.healthyStarters >= r.totalStarters - 1 ? "mid" : "bad"
+          }
+        />
+        <BigStat
+          label="Starters at risk"
+          value={String(atRisk)}
+          sub={atRisk ? "under 60% to play — have a backup ready" : "nobody in your lineup is in real doubt"}
+          tone={atRisk ? "bad" : "good"}
+        />
+        <div className="flex flex-col justify-between gap-2 border border-ink-700/70 bg-ink-900 p-4">
+          <div className="display text-[11px] font-bold tracking-wider text-ink-400">Sources</div>
+          <div className="text-xs text-ink-300">
+            Sleeper news feed
+            {r.espnAvailable && r.espnAsOf
+              ? ` + ESPN injury report (as of ${new Date(r.espnAsOf).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })})`
+              : " (ESPN report unavailable right now)"}
+          </div>
+          <button
+            onClick={() => setRefresh((n) => n + 1)}
+            className="display self-start -skew-x-12 bg-ink-800 px-3 py-1 text-sm font-bold text-ink-100 hover:bg-ink-700"
+          >
+            <span className="block skew-x-12">↻ Refresh reports</span>
+          </button>
+        </div>
+      </div>
+
+      <InjurySection title="Your starters" rows={myStarters} pivot={pivot} empty="All your starters are healthy. ✅" />
+      {bench.length > 0 && <InjurySection title="Your bench & IR" rows={bench} />}
+      {a.opponent && (
+        <InjurySection
+          title={`${a.opponent.teamName}'s starters`}
+          rows={opp}
+          empty="Your opponent's lineup has no injury concerns."
+        />
+      )}
+      <p className="text-xs text-ink-400">
+        Play chances are rules of thumb from the official designation, this week&apos;s practice reports, news and
+        Sleeper&apos;s projections — not a guarantee. Final word comes with inactives, 90 minutes before kickoff.
+      </p>
+    </div>
+  );
+}
+
+function InjurySection({
+  title,
+  rows,
+  pivot,
+  empty,
+}: {
+  title: string;
+  rows: InjuryRow[];
+  pivot?: (r: InjuryRow) => { player: PlayerAnalysis; freeAgent: boolean } | undefined;
+  empty?: string;
+}) {
+  return (
+    <Card title={title} action={<span className="text-xs text-ink-400">{rows.length} on the report</span>}>
+      {rows.length === 0 ? (
+        <Empty>{empty ?? "Nothing to report."}</Empty>
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {rows.map((r) => {
+            const v = VERDICT_STYLE[r.verdict];
+            const backup = pivot && r.probability < 0.6 && r.verdict !== "Bye" ? pivot(r) : undefined;
+            return (
+              <li key={r.player.id} className="border border-ink-700 bg-ink-850 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <PlayerLine
+                    p={r.player}
+                    sub={r.bodyPart ? <span className="text-ink-300">{r.bodyPart}</span> : undefined}
+                  />
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className={`font-mono text-3xl leading-none font-black tabular-nums ${v.text}`}>
+                        {r.verdict === "Bye" ? "—" : `${Math.round(r.probability * 100)}%`}
+                      </div>
+                      <div className="display text-[10px] font-bold tracking-wider text-ink-400">to play</div>
+                    </div>
+                    <span className={`display -skew-x-12 px-2.5 py-1 text-sm font-extrabold ${v.chip}`}>
+                      <span className="block skew-x-12">{r.verdict}</span>
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-3 h-1.5 bg-ink-700">
+                  <div className={`h-full ${v.bar}`} style={{ width: `${Math.max(2, r.probability * 100)}%` }} />
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                  {r.designation && (
+                    <span className="display bg-ink-700 px-2 py-0.5 font-bold text-ink-100">{r.designation}</span>
+                  )}
+                  {r.practice.map((n) => (
+                    <span
+                      key={n.day}
+                      title={`${n.day}: ${n.level}`}
+                      className={`display px-2 py-0.5 font-bold ${
+                        n.level === "Full"
+                          ? "bg-mint-400/15 text-mint-300"
+                          : n.level === "Limited"
+                            ? "bg-amber-400/15 text-amber-300"
+                            : "bg-rose-500/15 text-rose-300"
+                      }`}
+                    >
+                      {n.day.slice(0, 3)} {n.level === "Limited" ? "LP" : n.level === "Full" ? "FP" : "DNP"}
+                    </span>
+                  ))}
+                  {r.locked && (
+                    <span className="display bg-ink-700 px-2 py-0.5 font-bold text-ink-300">🔒 Game started</span>
+                  )}
+                </div>
+                {r.reasons.length > 0 && <p className="mt-2 text-xs text-ink-300">{r.reasons.join(" · ")}</p>}
+                {r.headline && (
+                  <p className="mt-2 border-l-2 border-ink-600 pl-3 text-xs text-ink-400">
+                    {r.headline.url ? (
+                      <a
+                        href={r.headline.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-ink-100 hover:text-mint-400"
+                      >
+                        {r.headline.text}
+                      </a>
+                    ) : (
+                      <span className="text-ink-100">{r.headline.text}</span>
+                    )}{" "}
+                    — {r.headline.source}, {timeAgo(r.headline.published)}
+                  </p>
+                )}
+                {backup && (
+                  <p className="mt-2 text-xs font-semibold text-mint-300">
+                    {r.verdict === "Out"
+                      ? `Start ${backup.player.name} instead`
+                      : `Backup plan: start ${backup.player.name}`}{" "}
+                    ({backup.player.position}, {backup.player.weekScore.toFixed(1)} proj
+                    {backup.freeAgent ? ", free agent — add them first" : ""})
+                    {r.verdict === "Out" ? "." : ` if ${r.player.name.split(" ").slice(-1)[0]} is ruled out.`}
+                  </p>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
   );
 }
 

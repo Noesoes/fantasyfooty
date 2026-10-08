@@ -3,6 +3,9 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  # Rebuild every 3 hours so the bundled ESPN injury snapshot stays fresh.
+  schedule:
+    - cron: "17 */3 * * *"
   workflow_dispatch:
 
 permissions:
@@ -24,6 +27,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Snapshot ESPN injury report
+        run: node scripts/fetch-injuries.mjs
+        continue-on-error: true
       - run: npm run build
         env:
           BASE_PATH: /${{ github.event.repository.name }}

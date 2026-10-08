@@ -152,6 +152,17 @@ export const getPlayerWeeklyProjections = (season: string, playerId: string) =>
     `/projections/nfl/player/${playerId}?season_type=regular&season=${season}&grouping=week`,
   ).then((d) => d ?? {});
 
+export interface NewsItem {
+  player_id: string;
+  published: number;
+  source: string;
+  metadata: { title?: string; description?: string; url?: string };
+}
+
+/** Latest news blurbs for one player (Rotowire, RotoBaller, …), newest first. */
+export const getPlayerNews = (playerId: string) =>
+  get<NewsItem[] | null>(`/players/nfl/${playerId}/news`).then((n) => n ?? []);
+
 export const getTrendingAdds = (lookbackHours = 72, limit = 200) =>
   get<TrendingPlayer[]>(
     `/v1/players/nfl/trending/add?lookback_hours=${lookbackHours}&limit=${limit}`,

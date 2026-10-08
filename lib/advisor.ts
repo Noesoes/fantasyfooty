@@ -178,6 +178,8 @@ export interface Opponent {
   avatar: string | null;
   /** Their current starters' expected points this week. */
   projected: number;
+  /** Their starters this week, analyzed like yours. */
+  starters: PlayerAnalysis[];
 }
 
 export interface Analysis {
@@ -993,6 +995,7 @@ export async function analyzeLeague(opts: {
       teamName: teamNameOf(ownerId),
       avatar: users.find((u) => u.user_id === ownerId)?.avatar ?? null,
       projected: total(starters.map((id) => ({ slot: "", player: scored.get(id) ?? null }))),
+      starters: starters.map((id) => scored.get(id)).filter((p): p is PlayerAnalysis => Boolean(p)),
     };
   }
 

@@ -9,6 +9,7 @@
 import { analyzeLeague } from "../lib/advisor";
 import { renderMarkdown } from "../lib/report";
 import { buildTrackRecord } from "../lib/backtest";
+import { buildInjuryReport } from "../lib/injuries";
 import { getNflState, getUser, getUserLeagues, upcomingWeek } from "../lib/sleeper";
 
 async function main() {
@@ -28,9 +29,7 @@ async function main() {
 
   const leagueIds = process.env.SLEEPER_LEAGUE_ID?.trim()
     ? process.env.SLEEPER_LEAGUE_ID.split(",").map((s) => s.trim())
-    : (await getUserLeagues(user.user_id, season))
-        .filter((l) => l.status === "in_season")
-        .map((l) => l.league_id);
+    : (await getUserLeagues(user.user_id, season)).filter((l) => l.status === "in_season").map((l) => l.league_id);
 
   if (leagueIds.length === 0) {
     console.log(`No in-season ${season} leagues found for ${username}.`);
@@ -41,8 +40,11 @@ async function main() {
   for (const leagueId of leagueIds) {
     try {
       const analysis = await analyzeLeague({ leagueId, userId: user.user_id, season, week });
-      const record = await buildTrackRecord(analysis).catch(() => null);
-      sections.push(renderMarkdown(analysis, record));
+      const [record, injuries] = await Promise.all([
+        buildTrackRecord(analysis).catch(() => null),
+        buildInjuryReport(analysis).catch(() => null),
+      ]);
+      sections.push(renderMarkdown(analysis, record, injuries));
     } catch (err) {
       sections.push(`# League ${leagueId}\n\nCouldn't analyze: ${(err as Error).message}`);
     }
