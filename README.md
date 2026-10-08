@@ -1,5 +1,7 @@
 # Sleeper Lineup Advisor
 
+**Live site: https://noesoes.github.io/fantasyfooty/**
+
 Weekly fantasy football advice for your [Sleeper](https://sleeper.com) team:
 
 - **Start / sit**: builds your best lineup for the week and tells you who to swap in and out (byes, injuries, matchups).
