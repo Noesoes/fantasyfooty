@@ -30,6 +30,7 @@ export interface SleeperUser {
 export interface League {
   league_id: string;
   name: string;
+  avatar?: string | null;
   season: string;
   status: string;
   total_rosters: number;
@@ -112,6 +113,16 @@ export const getRosters = (leagueId: string) =>
 export const getLeagueUsers = (leagueId: string) =>
   get<SleeperUser[]>(`/v1/league/${leagueId}/users`);
 
+export interface MatchupRow {
+  roster_id: number;
+  matchup_id: number | null;
+  starters: string[] | null;
+  points: number;
+}
+
+export const getMatchups = (leagueId: string, week: number) =>
+  get<MatchupRow[] | null>(`/v1/league/${leagueId}/matchups/${week}`).then((m) => m ?? []);
+
 export const getTrendingAdds = (lookbackHours = 72, limit = 200) =>
   get<TrendingPlayer[]>(
     `/v1/players/nfl/trending/add?lookback_hours=${lookbackHours}&limit=${limit}`,
@@ -155,3 +166,7 @@ export function upcomingWeek(state: NflState, now = new Date()): number {
   const byCalendar = Math.floor(days / 7) + 1;
   return Math.min(18, Math.max(1, state.week, byCalendar));
 }
+
+export const playerPhotoUrl = (id: string) => `https://sleepercdn.com/content/nfl/players/thumb/${id}.jpg`;
+export const teamLogoUrl = (team: string) => `https://sleepercdn.com/images/team_logos/nfl/${team.toLowerCase()}.png`;
+export const avatarUrl = (avatar: string) => `https://sleepercdn.com/avatars/thumbs/${avatar}`;

@@ -1,14 +1,11 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+/* eslint-disable @next/next/no-img-element -- remote Sleeper CDN images in a static export */
+
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { analyzeLeague, type Analysis } from "@/lib/advisor";
 import {
-  analyzeLeague,
-  describeMatchup,
-  type Analysis,
-  type MatchupGrade,
-  type PlayerAnalysis,
-} from "@/lib/advisor";
-import {
+  avatarUrl,
   getNflState,
   getUser,
   getUserLeagues,
@@ -17,6 +14,7 @@ import {
   type NflState,
   type SleeperUser,
 } from "@/lib/sleeper";
+import { Results } from "./results";
 
 const STORAGE_KEY = "sleeper-advisor";
 
@@ -36,6 +34,19 @@ function save(data: { username: string; leagueId?: string }) {
   }
 }
 
+function forget() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function scoringOf(l: League) {
+  const rec = l.scoring_settings.rec ?? 0;
+  return rec >= 1 ? "PPR" : rec >= 0.5 ? "Half PPR" : "Std";
+}
+
 export default function Home() {
   const [username, setUsername] = useState("");
   const [user, setUser] = useState<SleeperUser | null>(null);
@@ -43,29 +54,22 @@ export default function Home() {
   const [leagues, setLeagues] = useState<League[]>([]);
   const [leagueId, setLeagueId] = useState("");
   const [week, setWeek] = useState(1);
-  const [loading, setLoading] = useState<"user" | "analysis" | null>(null);
+  const [loadingUser, setLoadingUser] = useState(false);
+  const [loadingAnalysis, setLoadingAnalysis] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const requestId = useRef(0);
 
-  useEffect(() => {
-    const saved = loadSaved();
-    if (saved.username) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring from localStorage after hydration
-      setUsername(saved.username);
-      void findLeagues(saved.username, saved.leagueId);
-    }
-  }, []);
-
-  async function findLeagues(name: string, preferLeague?: string) {
-    setLoading("user");
+  const findLeagues = useCallback(async (name: string, preferLeague?: string) => {
+    setLoadingUser(true);
     setError(null);
     setAnalysis(null);
     try {
       const [found, nfl] = await Promise.all([getUser(name), getNflState()]);
-      if (!found) throw new Error(`No Sleeper account named "${name}".`);
+      if (!found) throw new Error(`No Sleeper account named "${name}". Check the spelling — it's your Sleeper username, not your display name.`);
       const season = nfl.league_season ?? nfl.season;
       const all = await getUserLeagues(found.user_id, season);
-      if (all.length === 0) throw new Error(`${found.display_name} isn't in any ${season} NFL leagues.`);
+      if (all.length === 0) throw new Error(`${found.display_name} isn't in any ${season} NFL leagues on Sleeper.`);
       setUser(found);
       setState(nfl);
       setLeagues(all);
@@ -78,387 +82,299 @@ export default function Home() {
       setUser(null);
       setLeagues([]);
     } finally {
-      setLoading(null);
+      setLoadingUser(false);
     }
-  }
+  }, []);
 
-  async function runAnalysis() {
+  useEffect(() => {
+    const saved = loadSaved();
+    if (saved.username) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring from localStorage after hydration
+      setUsername(saved.username);
+      void findLeagues(saved.username, saved.leagueId);
+    }
+  }, [findLeagues]);
+
+  // Re-run the analysis whenever the league or week changes.
+  useEffect(() => {
     if (!user || !state || !leagueId) return;
-    setLoading("analysis");
+    const id = ++requestId.current;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- kicking off a fetch for the new selection
+    setLoadingAnalysis(true);
     setError(null);
-    try {
-      save({ username, leagueId });
-      const result = await analyzeLeague({
-        leagueId,
-        userId: user.user_id,
-        season: state.league_season ?? state.season,
-        week,
+    save({ username: user.username ?? username, leagueId });
+    analyzeLeague({ leagueId, userId: user.user_id, season: state.league_season ?? state.season, week })
+      .then((result) => {
+        if (id === requestId.current) setAnalysis(result);
+      })
+      .catch((err) => {
+        if (id === requestId.current) {
+          setError((err as Error).message);
+          setAnalysis(null);
+        }
+      })
+      .finally(() => {
+        if (id === requestId.current) setLoadingAnalysis(false);
       });
-      setAnalysis(result);
-    } catch (err) {
-      setError((err as Error).message);
-      setAnalysis(null);
-    } finally {
-      setLoading(null);
-    }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- username is only used for saving
+  }, [user, state, leagueId, week]);
 
-  function onSubmitUser(e: FormEvent) {
+  function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (username.trim()) void findLeagues(username.trim());
   }
 
-  return (
-    <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-12">
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Sleeper Lineup Advisor</h1>
-        <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-          Who to start, who to bench, who to drop and who to grab off waivers, based on this week&apos;s
-          projections, matchups, injuries and recent form.
-        </p>
-      </header>
-
-      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <form onSubmit={onSubmitUser} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <label className="flex-1">
-            <span className="mb-1 block text-sm font-medium">Sleeper username</span>
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="e.g. fantasyking22"
-              autoCapitalize="none"
-              autoCorrect="off"
-              className="w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 outline-none focus:border-emerald-500 dark:border-zinc-700"
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={loading !== null || !username.trim()}
-            className="rounded-lg bg-zinc-900 px-4 py-2 font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-          >
-            {loading === "user" ? "Looking up…" : "Find my leagues"}
-          </button>
-        </form>
-
-        {user && leagues.length > 0 && (
-          <div className="mt-4 flex flex-col gap-3 border-t border-zinc-200 pt-4 sm:flex-row sm:items-end dark:border-zinc-800">
-            <label className="flex-1">
-              <span className="mb-1 block text-sm font-medium">League</span>
-              <select
-                value={leagueId}
-                onChange={(e) => setLeagueId(e.target.value)}
-                className="w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-              >
-                {leagues.map((l) => (
-                  <option key={l.league_id} value={l.league_id}>
-                    {l.name} ({l.total_rosters} teams)
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span className="mb-1 block text-sm font-medium">Week</span>
-              <select
-                value={week}
-                onChange={(e) => setWeek(Number(e.target.value))}
-                className="w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 sm:w-28 dark:border-zinc-700 dark:bg-zinc-900"
-              >
-                {Array.from({ length: 18 }, (_, i) => i + 1).map((w) => (
-                  <option key={w} value={w}>
-                    Week {w}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              onClick={runAnalysis}
-              disabled={loading !== null}
-              className="rounded-lg bg-emerald-600 px-5 py-2 font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-            >
-              {loading === "analysis" ? "Crunching…" : "Get recommendations"}
-            </button>
-          </div>
-        )}
-      </section>
-
-      {error && (
-        <p className="mt-6 rounded-lg border border-red-300 bg-red-50 p-4 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
-          {error}
-        </p>
-      )}
-
-      {analysis && <Results key={`${analysis.league.league_id}-${analysis.week}`} a={analysis} />}
-
-      <footer className="mt-12 text-sm text-zinc-500">
-        Data from Sleeper&apos;s public API. Recommendations are a starting point — check injury news before
-        kickoff.
-      </footer>
-    </main>
-  );
-}
-
-const GRADE_STYLE: Record<MatchupGrade, string> = {
-  great: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
-  good: "bg-lime-100 text-lime-800 dark:bg-lime-950 dark:text-lime-300",
-  neutral: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-  tough: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
-  brutal: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
-};
-
-function MatchupBadge({ p }: { p: PlayerAnalysis }) {
-  if (p.onBye) return <span className="rounded px-1.5 py-0.5 text-xs font-medium bg-zinc-200 dark:bg-zinc-700">BYE</span>;
-  if (!p.matchup) return <span className="text-zinc-400">—</span>;
-  return (
-    <span
-      title={describeMatchup(p.matchup, p.position)}
-      className={`rounded px-1.5 py-0.5 text-xs font-medium ${GRADE_STYLE[p.matchup.grade]}`}
-    >
-      vs {p.matchup.opponent}
-    </span>
-  );
-}
-
-function InjuryBadge({ status }: { status: string | null }) {
-  if (!status) return null;
-  const severe = !["Questionable"].includes(status);
-  return (
-    <span
-      className={`ml-1.5 rounded px-1 text-[11px] font-semibold ${
-        severe ? "bg-red-600 text-white" : "bg-amber-400 text-amber-950"
-      }`}
-    >
-      {status === "Questionable" ? "Q" : status === "Doubtful" ? "D" : status}
-    </span>
-  );
-}
-
-function Name({ p }: { p: PlayerAnalysis }) {
-  return (
-    <span className="font-medium">
-      {p.name}
-      <span className="ml-1.5 text-xs font-normal text-zinc-500">
-        {p.position} · {p.team ?? "FA"}
-      </span>
-      <InjuryBadge status={p.injury} />
-    </span>
-  );
-}
-
-function Card({ title, children, className = "" }: { title: string; children: React.ReactNode; className?: string }) {
-  return (
-    <section
-      className={`rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 ${className}`}
-    >
-      <h2 className="mb-3 text-lg font-semibold">{title}</h2>
-      {children}
-    </section>
-  );
-}
-
-function Results({ a }: { a: Analysis }) {
-  const starts = a.moves.filter((m) => m.action === "start");
-  const benches = a.moves.filter((m) => m.action === "bench");
-  const positions = Object.keys(a.waiversByPosition).filter((p) => a.waiversByPosition[p].length);
-  const [pos, setPos] = useState(positions[0] ?? "QB");
+  function signOut() {
+    forget();
+    setUser(null);
+    setLeagues([]);
+    setAnalysis(null);
+    setUsername("");
+  }
 
   return (
-    <div className="mt-8 flex flex-col gap-6">
-      <div>
-        <h2 className="text-2xl font-bold">
-          Week {a.week}: {a.teamName}
-        </h2>
-        <p className="text-sm text-zinc-500">
-          {a.league.name} · {a.scoringLabel}
-        </p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Current lineup" value={`${a.currentTotal} pts`} />
-        <Stat label="Optimized lineup" value={`${a.optimalTotal} pts`} accent={a.optimalTotal > a.currentTotal} />
-        <Stat label="Lineup changes" value={String(starts.length)} />
-        <Stat label="Waiver adds" value={String(a.waivers.length)} />
-      </div>
-
-      {a.warnings.length > 0 && (
-        <ul className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-          {a.warnings.map((w) => (
-            <li key={w}>⚠️ {w}</li>
-          ))}
-        </ul>
-      )}
-
-      <Card title="Start / sit">
-        {a.moves.length === 0 ? (
-          <p className="text-zinc-600 dark:text-zinc-400">Your lineup is already optimal. No changes needed. ✅</p>
+    <div className="flex min-h-full flex-col">
+      <TopBar user={user} onSignOut={signOut} />
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-16">
+        {!user ? (
+          <Landing username={username} setUsername={setUsername} onSubmit={onSubmit} loading={loadingUser} error={error} />
         ) : (
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-emerald-600">Start</h3>
-              <ul className="flex flex-col gap-3">
-                {starts.map((m) => (
-                  <li key={m.player.id} className="rounded-lg border-l-4 border-emerald-500 bg-emerald-50/50 p-3 dark:bg-emerald-950/30">
-                    <div className="flex items-center justify-between gap-2">
-                      <Name p={m.player} />
-                      <span className="text-xs text-zinc-500">{m.slot}</span>
-                    </div>
-                    <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{m.reason}</p>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-amber-600">Bench</h3>
-              <ul className="flex flex-col gap-3">
-                {benches.map((m) => (
-                  <li key={m.player.id} className="rounded-lg border-l-4 border-amber-500 bg-amber-50/50 p-3 dark:bg-amber-950/30">
-                    <Name p={m.player} />
-                    <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{m.reason}</p>
-                  </li>
-                ))}
-                {benches.length === 0 && (
-                  <li className="text-sm text-zinc-500">Nobody to bench — the new starters fill empty slots.</li>
-                )}
-              </ul>
-            </div>
-          </div>
+          <>
+            <Controls
+              leagues={leagues}
+              leagueId={leagueId}
+              setLeagueId={setLeagueId}
+              week={week}
+              setWeek={setWeek}
+              currentWeek={state ? upcomingWeek(state) : week}
+            />
+            {error && <ErrorBox message={error} />}
+            {loadingAnalysis && !analysis && <Skeleton />}
+            {analysis && (
+              <div className={loadingAnalysis ? "pointer-events-none opacity-50 transition" : "transition"}>
+                <Results key={`${analysis.league.league_id}-${analysis.week}`} a={analysis} />
+              </div>
+            )}
+          </>
         )}
-      </Card>
+      </main>
+      <footer className="mx-auto w-full max-w-5xl px-4 pb-8 text-xs text-ink-400">
+        Data from Sleeper&apos;s public API · Not affiliated with Sleeper · Always check injury news before kickoff.
+      </footer>
+    </div>
+  );
+}
 
-      <Card title="Recommended lineup">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs uppercase text-zinc-500">
-              <tr>
-                <th className="py-2 pr-3">Slot</th>
-                <th className="py-2 pr-3">Player</th>
-                <th className="py-2 pr-3">Matchup</th>
-                <th className="py-2 text-right">Proj</th>
-              </tr>
-            </thead>
-            <tbody>
-              {a.optimalLineup.map((s, i) => (
-                <tr key={i} className="border-t border-zinc-100 dark:border-zinc-800">
-                  <td className="py-2 pr-3 font-mono text-xs text-zinc-500">{s.slot}</td>
-                  <td className="py-2 pr-3">{s.player ? <Name p={s.player} /> : <em className="text-zinc-400">empty</em>}</td>
-                  <td className="py-2 pr-3">{s.player && <MatchupBadge p={s.player} />}</td>
-                  <td className="py-2 text-right tabular-nums">{s.player?.weekScore ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card title="Waiver wire pickups">
-          {a.waivers.length === 0 ? (
-            <p className="text-zinc-600 dark:text-zinc-400">No free agent clearly beats what you already have.</p>
-          ) : (
-            <ul className="flex flex-col gap-3">
-              {a.waivers.map((w) => (
-                <li key={w.player.id} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-                  <div className="text-sm">
-                    <span className="mr-1 font-semibold text-emerald-600">Add</span>
-                    <Name p={w.player} />
-                  </div>
-                  {w.dropFor && (
-                    <div className="mt-0.5 text-sm">
-                      <span className="mr-1 font-semibold text-red-600">Drop</span>
-                      <Name p={w.dropFor} />
-                    </div>
-                  )}
-                  <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{w.reason}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card title="Drop candidates">
-          {a.drops.length === 0 ? (
-            <p className="text-zinc-600 dark:text-zinc-400">Nobody on your bench is an obvious cut.</p>
-          ) : (
-            <ul className="flex flex-col gap-3">
-              {a.drops.map((d) => (
-                <li key={d.player.id} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-                  <Name p={d.player} />
-                  <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{d.reason}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+function Logo() {
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-mint-400 to-pos-wr shadow-lg shadow-mint-400/20">
+        <svg viewBox="0 0 24 24" className="h-5 w-5 text-ink-950" fill="currentColor" aria-hidden>
+          <path d="M20.6 3.4c-1.7-.4-5.6-.8-9.4 1.4-2.8 1.6-4.7 4-5.7 6.6-.9 2.4-1 4.9-.8 6.3l.1.6.6.1c.5.1 1.1.1 1.8.1 1.4 0 3.1-.2 4.8-.9 2.6-1 5-2.9 6.6-5.7 2.2-3.8 1.8-7.7 1.4-9.4l-.1-.6-.6-.1Zm-8.5 11.3-1.4-1.4-1.1 1.1-1-1 1.1-1.1-1.4-1.4 1-1 1.4 1.4 1.1-1.1-1.4-1.4 1-1 1.4 1.4 1.1-1.1 1 1-1.1 1.1 1.4 1.4-1 1-1.4-1.4-1.1 1.1 1.4 1.4-1 1Z" />
+        </svg>
       </div>
+      <div className="leading-tight">
+        <div className="text-[15px] font-bold tracking-tight">Lineup Advisor</div>
+        <div className="hidden text-[11px] text-ink-400 sm:block">for Sleeper fantasy football</div>
+      </div>
+    </div>
+  );
+}
 
-      {positions.length > 0 && (
-        <Card title="Best available by position">
-          <div className="mb-3 flex flex-wrap gap-2">
-            {positions.map((p) => (
-              <button
-                key={p}
-                onClick={() => setPos(p)}
-                className={`rounded-full px-3 py-1 text-sm font-medium ${
-                  pos === p ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "bg-zinc-100 dark:bg-zinc-800"
-                }`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-          <PlayerTable players={a.waiversByPosition[pos] ?? []} showTrending />
-        </Card>
+function TopBar({ user, onSignOut }: { user: SleeperUser | null; onSignOut: () => void }) {
+  return (
+    <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-5">
+      <Logo />
+      {user && (
+        <div className="flex items-center gap-2 rounded-full border border-ink-700 bg-ink-900 py-1 pr-1 pl-1">
+          {user.avatar ? (
+            <img src={avatarUrl(user.avatar)} alt="" className="h-7 w-7 rounded-full" />
+          ) : (
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-ink-700 text-xs font-bold">
+              {user.display_name.charAt(0).toUpperCase()}
+            </span>
+          )}
+          <span className="max-w-[120px] truncate text-sm font-medium">{user.display_name}</span>
+          <button
+            onClick={onSignOut}
+            className="rounded-full px-2.5 py-1 text-xs font-medium text-ink-400 hover:bg-ink-800 hover:text-ink-100"
+          >
+            Switch
+          </button>
+        </div>
+      )}
+    </header>
+  );
+}
+
+function Landing({
+  username,
+  setUsername,
+  onSubmit,
+  loading,
+  error,
+}: {
+  username: string;
+  setUsername: (v: string) => void;
+  onSubmit: (e: FormEvent) => void;
+  loading: boolean;
+  error: string | null;
+}) {
+  return (
+    <div className="flex flex-col items-center pt-10 text-center sm:pt-16">
+      <span className="mb-5 rounded-full border border-mint-400/30 bg-mint-400/10 px-3 py-1 text-xs font-semibold text-mint-300">
+        Free · No login · Works with any Sleeper league
+      </span>
+      <h1 className="max-w-2xl text-4xl font-extrabold tracking-tight text-balance sm:text-6xl">
+        Set the right lineup.{" "}
+        <span className="bg-gradient-to-r from-mint-400 to-pos-wr bg-clip-text text-transparent">Win your week.</span>
+      </h1>
+      <p className="mt-4 max-w-xl text-base text-ink-300 sm:text-lg">
+        Start/sit calls, waiver pickups and drop candidates for your Sleeper team, built from this week&apos;s
+        projections, matchups, injuries, depth charts and recent form.
+      </p>
+
+      <form onSubmit={onSubmit} className="mt-8 flex w-full max-w-md flex-col gap-2 sm:flex-row">
+        <input
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="Your Sleeper username"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          className="h-12 flex-1 rounded-xl border border-ink-700 bg-ink-900 px-4 text-base outline-none placeholder:text-ink-400 focus:border-mint-400 focus:ring-4 focus:ring-mint-400/15"
+        />
+        <button
+          type="submit"
+          disabled={loading || !username.trim()}
+          className="h-12 rounded-xl bg-mint-400 px-6 font-semibold text-ink-950 transition hover:bg-mint-300 disabled:opacity-40"
+        >
+          {loading ? "Loading…" : "Analyze my team"}
+        </button>
+      </form>
+      {error && (
+        <div className="mt-4 w-full max-w-md">
+          <ErrorBox message={error} />
+        </div>
       )}
 
-      <Card title="Your roster">
-        <PlayerTable players={a.roster} />
-      </Card>
+      <div className="mt-14 grid w-full gap-3 text-left sm:grid-cols-3">
+        {[
+          {
+            icon: "🎯",
+            title: "Start / sit",
+            text: "Builds your best lineup from projections, matchups, byes and injury status — and flags QBs who aren't starting.",
+          },
+          {
+            icon: "📈",
+            title: "Waiver wire",
+            text: "Ranks free agents by value over replacement, tells you who to drop, and highlights who the rest of Sleeper is adding.",
+          },
+          {
+            icon: "📬",
+            title: "Weekly report",
+            text: "A GitHub Action can post your game plan every Tuesday, before waivers run.",
+          },
+        ].map((f) => (
+          <div key={f.title} className="rounded-2xl border border-ink-700/70 bg-ink-900/70 p-5">
+            <div className="text-2xl">{f.icon}</div>
+            <div className="mt-3 font-semibold">{f.title}</div>
+            <p className="mt-1 text-sm text-ink-400">{f.text}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function Controls({
+  leagues,
+  leagueId,
+  setLeagueId,
+  week,
+  setWeek,
+  currentWeek,
+}: {
+  leagues: League[];
+  leagueId: string;
+  setLeagueId: (id: string) => void;
+  week: number;
+  setWeek: (w: number) => void;
+  currentWeek: number;
+}) {
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="text-xs uppercase tracking-wide text-zinc-500">{label}</div>
-      <div className={`mt-1 text-2xl font-semibold tabular-nums ${accent ? "text-emerald-600" : ""}`}>{value}</div>
-    </div>
-  );
-}
-
-function PlayerTable({ players, showTrending }: { players: PlayerAnalysis[]; showTrending?: boolean }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="text-left text-xs uppercase text-zinc-500">
-          <tr>
-            <th className="py-2 pr-3">Player</th>
-            <th className="py-2 pr-3">Matchup</th>
-            <th className="py-2 pr-3 text-right">Week proj</th>
-            <th className="py-2 pr-3 text-right">Season avg</th>
-            <th className="py-2 pr-3 text-right">Last 3</th>
-            {showTrending && <th className="py-2 text-right">Adds (72h)</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {players.map((p) => (
-            <tr key={p.id} className="border-t border-zinc-100 dark:border-zinc-800">
-              <td className="py-2 pr-3">
-                <Name p={p} />
-              </td>
-              <td className="py-2 pr-3">
-                <MatchupBadge p={p} />
-              </td>
-              <td className="py-2 pr-3 text-right tabular-nums">{p.weekScore}</td>
-              <td className="py-2 pr-3 text-right tabular-nums">{p.seasonAvg ?? "—"}</td>
-              <td className="py-2 pr-3 text-right tabular-nums">{p.recentAvg ?? "—"}</td>
-              {showTrending && (
-                <td className="py-2 text-right tabular-nums">{p.trendingAdds ? p.trendingAdds.toLocaleString() : "—"}</td>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
+        {leagues.map((l) => {
+          const active = l.league_id === leagueId;
+          return (
+            <button
+              key={l.league_id}
+              onClick={() => setLeagueId(l.league_id)}
+              className={`flex shrink-0 items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition ${
+                active ? "border-mint-400/60 bg-mint-400/10" : "border-ink-700 bg-ink-900 hover:border-ink-600"
+              }`}
+            >
+              {l.avatar ? (
+                <img src={avatarUrl(l.avatar)} alt="" className="h-8 w-8 rounded-lg" />
+              ) : (
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink-700 text-sm font-bold">
+                  {l.name.charAt(0)}
+                </span>
               )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              <span>
+                <span className="block max-w-[180px] truncate text-sm font-semibold">{l.name}</span>
+                <span className="block text-[11px] text-ink-400">
+                  {l.total_rosters} teams · {scoringOf(l)}
+                  {l.roster_positions.includes("SUPER_FLEX") ? " · SF" : ""}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex shrink-0 items-center gap-1 self-start rounded-xl border border-ink-700 bg-ink-900 p-1 sm:self-auto">
+        <button
+          aria-label="Previous week"
+          disabled={week <= 1}
+          onClick={() => setWeek(week - 1)}
+          className="h-8 w-8 rounded-lg text-ink-300 hover:bg-ink-800 disabled:opacity-30"
+        >
+          ‹
+        </button>
+        <div className="min-w-[88px] text-center">
+          <div className="text-sm font-semibold">Week {week}</div>
+          {week === currentWeek && <div className="text-[10px] font-medium text-mint-400">UPCOMING</div>}
+        </div>
+        <button
+          aria-label="Next week"
+          disabled={week >= 18}
+          onClick={() => setWeek(week + 1)}
+          className="h-8 w-8 rounded-lg text-ink-300 hover:bg-ink-800 disabled:opacity-30"
+        >
+          ›
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ErrorBox({ message }: { message: string }) {
+  return (
+    <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-left text-sm text-rose-200">
+      {message}
+    </div>
+  );
+}
+
+function Skeleton() {
+  return (
+    <div className="mt-6 flex flex-col gap-5" aria-busy="true" aria-label="Loading recommendations">
+      <div className="skeleton h-40 rounded-2xl" />
+      <div className="skeleton h-12 rounded-2xl" />
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} className="skeleton h-20 rounded-2xl" />
+      ))}
     </div>
   );
 }

@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sleeper Lineup Advisor",
+  title: "Lineup Advisor for Sleeper",
   description: "Weekly start/sit, drop and waiver-wire recommendations for your Sleeper fantasy football team.",
 };
 

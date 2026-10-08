@@ -11,7 +11,7 @@ Weekly fantasy football advice for your [Sleeper](https://sleeper.com) team:
 
 It runs two ways:
 
-1. **Web app**: enter your Sleeper username, pick a league and week, and get recommendations. It's a static site with no backend; your browser talks to Sleeper's public API directly.
+1. **Web app**: enter your Sleeper username and get a game plan for each of your leagues: a to-do checklist, your projected score vs. this week's opponent, a recommended lineup, waiver claims with who to drop, and your full roster with snap shares. It's a static site with no backend; your browser talks to Sleeper's public API directly.
 2. **Weekly report**: a scheduled GitHub Action runs every **Tuesday morning** (after Monday Night Football, before Sleeper's default Wednesday waiver run) and posts next week's recommendations as a GitHub issue. GitHub emails you when it's created.
 
 ## How the recommendations work
@@ -21,18 +21,21 @@ Every player gets two scores.
 **This week's expected points** (`weekScore`), used for start/sit:
 
 - Sleeper's weekly projection, scored with **your league's own scoring settings**
-- Blended 80/20 with the player's average over the last 3 games (recent form)
+- Blended 80/20 with recent form (last 3 games)
 - Nudged up or down by the **opponent's points allowed to that position** this season (shrunk toward neutral early in the season, when samples are small)
+- **QB depth chart:** Sleeper only projects pass attempts for the QB it expects to start, so backups score 0, and a usual starter who isn't projected to start (e.g. Lamar with Huntley projected to start) is flagged
 - Zeroed for **byes** and players ruled Out/IR/Suspended. Questionable ×0.85, Doubtful ×0.3
 
 **Rest-of-season value** (`rosValue`), used for drops and waivers:
 
-- 40% season average + 35% last-3 average + 25% this week's projection
+- Season average and recent form, each **shrunk toward the projection when the sample is small**, so one spot start doesn't read as "27 pts/game"
+- Role adjustments: backup QBs ×0.25, injury fill-in starters ×0.6, part-time players (<35% of snaps) ×0.85
 - Discounted for IR/Out/suspension, with a small bump for players trending in adds across Sleeper
 - Compared as **value over replacement** (vs. the ~4th-best free agent at the same position), so QBs don't crowd out every other position in 1-QB leagues
-- A waiver target scores higher if they'd crack your starting lineup
+- A free agent gets priority if they'd crack your lineup, especially when one of your starters is out this week
+- Backup QBs and players Sleeper doesn't expect to play are never recommended as pickups. QB claims are capped at your number of QB/superflex spots
 
-The lineup optimizer fills the most restrictive slots first (QB, K, DEF, then FLEX, then SUPER_FLEX). It respects your league's `roster_positions`, skips players on IR/taxi, and won't suggest dropping your only player at a required position. K and DEF are treated as weekly streamers.
+The lineup optimizer fills the most restrictive slots first (QB, K, DEF, then FLEX, then SUPER_FLEX). It respects your league's `roster_positions`, skips players on IR/taxi, and won't suggest dropping below one QB per QB/superflex slot or your only player at a required position. K and DEF are treated as weekly streamers.
 
 IDP slots aren't modeled: whoever is in them now stays put.
 

@@ -15,6 +15,12 @@ export function renderMarkdown(a: Analysis): string {
   lines.push("");
   lines.push(`_${a.league.name} · ${a.scoringLabel} · ${a.season} season_`);
   lines.push("");
+  if (a.opponent) {
+    lines.push(
+      `**Matchup:** you (${a.optimalTotal} projected with these moves) vs ${a.opponent.teamName} (${a.opponent.projected} projected)`,
+    );
+    lines.push("");
+  }
 
   lines.push("## Start / sit");
   if (a.warnings.length) {

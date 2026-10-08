@@ -13,6 +13,7 @@ import {
   getAllPlayers,
   getLeague,
   getLeagueUsers,
+  getMatchups,
   getRosters,
   getSeasonStats,
   getTrendingAdds,
@@ -58,6 +59,9 @@ export interface Matchup {
   grade: MatchupGrade;
 }
 
+/** QB depth-chart status; null for other positions. */
+export type PlayerRole = "starter" | "fill-in" | "sidelined" | "backup" | null;
+
 export interface PlayerAnalysis {
   id: string;
   name: string;
@@ -72,6 +76,11 @@ export interface PlayerAnalysis {
   seasonAvg: number | null;
   gamesPlayed: number;
   recentAvg: number | null;
+  /** Games behind recentAvg (out of the last RECENT_WEEKS). */
+  recentGames: number;
+  /** Share of team offensive snaps over the recent games, 0-1. */
+  snapShare: number | null;
+  role: PlayerRole;
   trendingAdds: number;
   weekScore: number;
   rosValue: number;
@@ -103,9 +112,18 @@ export interface WaiverTarget {
   reason: string;
 }
 
+export interface Opponent {
+  teamName: string;
+  avatar: string | null;
+  /** Their current starters' expected points this week. */
+  projected: number;
+}
+
 export interface Analysis {
   league: League;
   teamName: string;
+  /** Sleeper avatar id of the team owner, if set. */
+  avatar: string | null;
   season: string;
   week: number;
   scoringLabel: string;
@@ -113,6 +131,7 @@ export interface Analysis {
   optimalLineup: LineupSlot[];
   currentTotal: number;
   optimalTotal: number;
+  opponent: Opponent | null;
   moves: LineupMove[];
   warnings: string[];
   roster: PlayerAnalysis[];
@@ -225,6 +244,11 @@ interface Inputs {
   trending: TrendingPlayer[];
 }
 
+/** Blend an observed per-game total with a prior, weighting the prior like `k` extra games. */
+function shrink(total: number, games: number, prior: number, k: number): number {
+  return (total + prior * k) / (games + k);
+}
+
 function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<string, PlayerInfo>) {
   const { league, projections, seasonStats, recentStats, trending } = inputs;
   const scoring = league.scoring_settings;
@@ -239,15 +263,35 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
   );
   const teamsPlaying = new Set(opponentByTeam.keys());
   const matchupFor = buildDefenseTable(seasonStats);
+  const nameOf = (id: string) => displayName(projById.get(id)?.player ?? seasonById.get(id)?.player, id);
+
+  // Who starts at QB. Sleeper only projects pass attempts for the QB it
+  // expects to start this week; the "usual" starter is whoever has started
+  // the most games this season. Comparing the two spots injury fill-ins.
+  const weekStarterQB = new Map<string, { id: string; att: number }>();
+  for (const r of projections) {
+    const att = r.stats.pass_att ?? 0;
+    if (r.player?.position !== "QB" || !r.team || att < 10) continue;
+    const cur = weekStarterQB.get(r.team);
+    if (!cur || att > cur.att) weekStarterQB.set(r.team, { id: r.player_id, att });
+  }
+  const usualStarterQB = new Map<string, { id: string; gs: number }>();
+  for (const r of seasonStats) {
+    const gs = r.stats.gs ?? 0;
+    if (r.player?.position !== "QB" || !r.team || gs < 1) continue;
+    const cur = usualStarterQB.get(r.team);
+    if (!cur || gs > cur.gs) usualStarterQB.set(r.team, { id: r.player_id, gs });
+  }
 
   const result = new Map<string, PlayerAnalysis>();
   for (const id of ids) {
     if (!id || id === "0" || result.has(id)) continue;
     const proj = projById.get(id);
-    const info: Partial<PlayerInfo> | undefined = proj?.player ?? extraInfo.get(id);
+    const info: Partial<PlayerInfo> | undefined = proj?.player ?? extraInfo.get(id) ?? seasonById.get(id)?.player;
     const position = info?.position ?? (/^[A-Z]{2,3}$/.test(id) ? "DEF" : "?");
     const team = (position === "DEF" ? id : proj?.team ?? info?.team) ?? null;
     const injury = info?.injury_status ?? null;
+    const isOut = Boolean(injury && OUT_STATUSES.has(injury));
     const notes: string[] = [];
 
     const projection = proj ? points(proj.stats, scoring, position) : 0;
@@ -255,30 +299,83 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
 
     const season = seasonById.get(id);
     const gamesPlayed = season?.stats.gp ?? 0;
-    const seasonAvg = season && gamesPlayed > 0 ? points(season.stats, scoring, position) / gamesPlayed : null;
+    const seasonPts = season && gamesPlayed > 0 ? points(season.stats, scoring, position) : 0;
+    const seasonAvg = gamesPlayed > 0 ? seasonPts / gamesPlayed : null;
 
-    const recentPoints: number[] = [];
+    let recentPts = 0;
+    let recentGames = 0;
+    let snaps = 0;
+    let teamSnaps = 0;
     for (const week of recentById) {
       const row = week.get(id);
-      if (row && (row.stats.gp ?? 0) > 0) recentPoints.push(points(row.stats, scoring, position));
+      if (!row) continue;
+      if ((row.stats.gp ?? 0) > 0) {
+        recentPts += points(row.stats, scoring, position);
+        recentGames += 1;
+      }
+      if ((row.stats.tm_off_snp ?? 0) > 0) {
+        snaps += row.stats.off_snp ?? 0;
+        teamSnaps += row.stats.tm_off_snp ?? 0;
+      }
     }
-    const recentAvg = recentPoints.length
-      ? recentPoints.reduce((a, b) => a + b, 0) / recentPoints.length
-      : null;
+    const recentAvg = recentGames > 0 ? recentPts / recentGames : null;
+    const snapShare = teamSnaps > 0 && position !== "K" && position !== "DEF" ? snaps / teamSnaps : null;
+
+    // Prior for small samples. A projection is the best guess at a player's
+    // role; a healthy player on a team that plays but gets no projection
+    // probably isn't expected to play, so the prior is zero. Byes and
+    // injuries say nothing about role, so fall back to the raw averages.
+    const prior =
+      projection > 0 ? projection : onBye || isOut || injury ? (recentAvg ?? seasonAvg ?? 0) : 0;
+    // A single spot start shouldn't read as "27 pts/game": observed averages
+    // are shrunk toward the prior until there's a real sample.
+    const seasonForm = shrink(seasonPts, gamesPlayed, prior, 2);
+    const recentForm = shrink(recentPts, recentGames, prior, 1);
 
     const opponent = proj?.opponent ?? (team ? opponentByTeam.get(team) : undefined);
     const matchup = opponent ? matchupFor(opponent, position) : null;
 
-    // --- This week's expected points ---
-    let weekScore = projection > 0 ? projection : (recentAvg ?? seasonAvg ?? 0) * 0.8;
-    if (projection > 0 && recentAvg !== null) weekScore = 0.8 * projection + 0.2 * recentAvg;
-    if (matchup) {
-      // Projections already bake in the matchup, so only lean on it lightly.
-      const nudge = Math.min(1.12, Math.max(0.88, 1 + (matchup.ratio - 1) * 0.5));
-      weekScore *= nudge;
+    // --- Role ---
+    let role: PlayerRole = null;
+    let roleFactor = 1;
+    if (position === "QB" && team) {
+      const weekStarter = weekStarterQB.get(team)?.id;
+      const usual = usualStarterQB.get(team)?.id;
+      if (onBye || !weekStarter) {
+        role = usual === id ? "starter" : usual ? "backup" : null;
+      } else if (weekStarter === id) {
+        role = usual && usual !== id ? "fill-in" : "starter";
+      } else {
+        role = usual === id ? "sidelined" : "backup";
+      }
+      if (role === "fill-in") {
+        roleFactor = 0.6;
+        notes.push(`Starting in place of ${nameOf(usual as string)}; value drops once the regular starter returns`);
+      } else if (role === "sidelined") {
+        roleFactor = 0.8;
+        notes.push(`Not expected to start this week (${nameOf(weekStarter as string)} is projected to start)`);
+      } else if (role === "backup") {
+        roleFactor = 0.25;
+        notes.push(`Backup QB${weekStarter || usual ? ` behind ${nameOf((weekStarter ?? usual) as string)}` : ""}`);
+      }
+    } else if (snapShare !== null && recentGames >= 2 && snapShare < 0.35) {
+      roleFactor = 0.85;
+      notes.push(`Part-time role (${Math.round(snapShare * 100)}% of snaps lately)`);
     }
-    if (projection === 0 && team && !onBye && !(injury && OUT_STATUSES.has(injury))) {
-      notes.push("No Sleeper projection yet — estimated from recent games");
+
+    // --- This week's expected points ---
+    let weekScore: number;
+    if (projection > 0) {
+      weekScore = 0.8 * projection + 0.2 * recentForm;
+    } else if (role === "backup" || role === "sidelined") {
+      weekScore = 0;
+    } else {
+      weekScore = 0.6 * recentForm;
+      if (team && !onBye && !isOut) notes.push("No Sleeper projection — may be inactive, check news before starting");
+    }
+    if (matchup && weekScore > 0) {
+      // Projections already bake in the matchup, so only lean on it lightly.
+      weekScore *= Math.min(1.12, Math.max(0.88, 1 + (matchup.ratio - 1) * 0.5));
     }
     if (!team) {
       weekScore = 0;
@@ -287,7 +384,7 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
       weekScore = 0;
       notes.push("On bye this week");
     }
-    if (injury && OUT_STATUSES.has(injury)) {
+    if (isOut) {
       weekScore = 0;
       notes.push(`Ruled ${injury}${info?.injury_body_part ? ` (${info.injury_body_part})` : ""}`);
     } else if (injury && INJURY_FACTOR[injury]) {
@@ -296,19 +393,14 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
     }
 
     // --- Rest-of-season value ---
-    const weekly = projection > 0 ? projection : seasonAvg ?? 0;
-    let rosValue: number;
-    if (seasonAvg !== null && recentAvg !== null) {
-      rosValue = 0.4 * seasonAvg + 0.35 * recentAvg + 0.25 * weekly;
-    } else {
-      rosValue = weekly;
-    }
+    let rosValue = 0.4 * seasonForm + 0.35 * recentForm + 0.25 * (projection > 0 ? projection : prior);
+    rosValue *= roleFactor;
     if (injury === "IR" || injury === "PUP") rosValue *= 0.45;
     else if (injury === "Out") rosValue *= 0.75;
     else if (injury === "Sus") rosValue *= 0.7;
     if (!team) rosValue *= 0.2;
     const adds = trendById.get(id) ?? 0;
-    if (adds > 0) rosValue *= 1 + Math.min(0.15, Math.log10(1 + adds) / 40);
+    if (adds > 0) rosValue *= 1 + Math.min(0.1, Math.log10(1 + adds) / 60);
 
     result.set(id, {
       id,
@@ -324,6 +416,9 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
       seasonAvg: seasonAvg === null ? null : round1(seasonAvg),
       gamesPlayed,
       recentAvg: recentAvg === null ? null : round1(recentAvg),
+      recentGames,
+      snapShare: snapShare === null ? null : Math.round(snapShare * 100) / 100,
+      role,
       trendingAdds: adds,
       weekScore: round1(weekScore),
       rosValue: round1(rosValue),
@@ -332,6 +427,15 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
   }
   return result;
 }
+
+const SLOT_NAMES: Record<string, string> = {
+  SUPER_FLEX: "Superflex",
+  FLEX: "Flex",
+  WRRB_FLEX: "RB/WR flex",
+  REC_FLEX: "WR/TE flex",
+};
+
+export const slotName = (slot: string) => SLOT_NAMES[slot] ?? slot;
 
 const isStarterSlot = (slot: string) => slot in SLOT_ELIGIBILITY;
 
@@ -377,10 +481,18 @@ function benchReason(p: PlayerAnalysis): string {
   return `projects ${p.weekScore} pts`;
 }
 
+/** "12.3 pts/game over the last 3 games" — with the real sample size. */
+function formText(p: PlayerAnalysis): string | null {
+  if (p.recentAvg === null) return null;
+  const games = p.recentGames === 1 ? "1 game" : `${p.recentGames} games`;
+  return `${p.recentAvg} pts/game over the last ${games}`;
+}
+
 function startReason(p: PlayerAnalysis): string {
   const parts = [`projects ${p.weekScore} pts`];
   if (p.matchup) parts.push(describeMatchup(p.matchup, p.position));
-  if (p.recentAvg !== null) parts.push(`averaging ${p.recentAvg} over the last ${RECENT_WEEKS} games`);
+  const form = formText(p);
+  if (form) parts.push(form);
   return parts.join(", ");
 }
 
@@ -392,7 +504,7 @@ function buildMoves(current: LineupSlot[], optimal: LineupSlot[]): LineupMove[] 
     .sort((a, b) => (b.player as PlayerAnalysis).weekScore - (a.player as PlayerAnalysis).weekScore)
     .map((s) => {
       const p = s.player as PlayerAnalysis;
-      return { action: "start", player: p, slot: s.slot, reason: capitalize(startReason(p)) + "." };
+      return { action: "start", player: p, slot: slotName(s.slot), reason: capitalize(startReason(p)) + "." };
     });
   const benches: LineupMove[] = current
     .filter((s) => s.player && !optimalIds.has(s.player.id))
@@ -423,10 +535,11 @@ export async function analyzeLeague(opts: {
   const { leagueId, userId, season, week } = opts;
   const recentWeeks = Array.from({ length: RECENT_WEEKS }, (_, i) => week - 1 - i).filter((w) => w >= 1);
 
-  const [league, rosters, users, projections, seasonStats, trending, ...recentStats] = await Promise.all([
+  const [league, rosters, users, matchups, projections, seasonStats, trending, ...recentStats] = await Promise.all([
     getLeague(leagueId),
     getRosters(leagueId),
     getLeagueUsers(leagueId),
+    getMatchups(leagueId, week).catch(() => []),
     getWeekProjections(season, week),
     getSeasonStats(season).catch(() => [] as StatRow[]),
     getTrendingAdds().catch(() => [] as TrendingPlayer[]),
@@ -442,11 +555,12 @@ export async function analyzeLeague(opts: {
     throw new Error("Your roster is empty — has the draft happened yet?");
   }
 
+  const teamNameOf = (ownerId: string | null) => {
+    const u = users.find((x) => x.user_id === ownerId);
+    return ((u as unknown as { metadata?: { team_name?: string } })?.metadata?.team_name) || u?.display_name || "Team";
+  };
   const owner = users.find((u) => u.user_id === userId);
-  const teamName =
-    ((owner as unknown as { metadata?: { team_name?: string } })?.metadata?.team_name) ||
-    owner?.display_name ||
-    "Your team";
+  const teamName = teamNameOf(userId);
 
   const inputs: Inputs = { league, week, projections, seasonStats, recentStats, trending };
 
@@ -481,9 +595,9 @@ export async function analyzeLeague(opts: {
 
   const warnings: string[] = [];
   for (const s of currentLineup) {
-    if (!s.player) warnings.push(`Your ${s.slot} slot is empty.`);
+    if (!s.player) warnings.push(`Your ${slotName(s.slot)} slot is empty.`);
     else if (s.player.weekScore === 0) {
-      warnings.push(`${s.player.name} is in your ${s.slot} slot: ${s.player.notes[0] ?? "not projected to score"}.`);
+      warnings.push(`${s.player.name} is in your ${slotName(s.slot)} slot: ${s.player.notes[0] ?? "not projected to score"}.`);
     }
   }
 
@@ -496,7 +610,13 @@ export async function analyzeLeague(opts: {
     .filter((r) => !rostered.has(r.player_id) && usedPositions.has(r.player?.position ?? ""))
     .map((r) => r.player_id);
   const freeAgents = [...analyzePlayers(freeAgentIds, inputs, new Map()).values()].filter(
-    (p) => p.team && !(p.injury && OUT_STATUSES.has(p.injury)),
+    (p) =>
+      p.team &&
+      !(p.injury && OUT_STATUSES.has(p.injury)) &&
+      // Backups and players Sleeper doesn't expect to play aren't pickups.
+      p.role !== "backup" &&
+      p.role !== "sidelined" &&
+      (p.projection > 0 || p.onBye),
   );
   // Rank by rest-of-season value, but streaming K/DEF lean on this week only.
   const waiverRank = (p: PlayerAnalysis) =>
@@ -537,12 +657,14 @@ export async function analyzeLeague(opts: {
   };
 
   const dropPool = benchPlayers.filter((p) => canDrop(p)).sort((a, b) => vor(a) - vor(b));
-  const drops: DropCandidate[] = dropPool.slice(0, 3).map((p) => {
+  // Only flag players at or below what the waiver wire offers at their spot.
+  const drops: DropCandidate[] = dropPool.filter((p) => vor(p) < 1).slice(0, 3).map((p) => {
     const reasons: string[] = [];
     if (p.injury === "IR" || p.injury === "PUP") reasons.push(`on ${p.injury}`);
     if (!p.team) reasons.push("no longer on an NFL roster");
     if (p.seasonAvg !== null) reasons.push(`${p.seasonAvg} pts/game this season`);
-    if (p.recentAvg !== null) reasons.push(`${p.recentAvg} over the last ${RECENT_WEEKS}`);
+    const form = formText(p);
+    if (form) reasons.push(form);
     if (p.seasonAvg === null && p.recentAvg === null) reasons.push(`projects ${p.projection} pts this week`);
     return { player: p, reason: `Lowest rest-of-season value on your bench: ${reasons.join(", ")}.` };
   });
@@ -553,19 +675,27 @@ export async function analyzeLeague(opts: {
   const takenDrops = new Set<string>();
   const waivers: WaiverTarget[] = [];
   // How much a free agent would improve your starting lineup (0 if they'd sit).
+  // Counts both rest-of-season and this week, so a free agent jumps the queue
+  // when the starter at that spot is out this week.
   const startUpgrade = (t: PlayerAnalysis) => {
-    const slots = optimalLineup.filter(
-      (s) => s.player && SLOT_ELIGIBILITY[s.slot]?.some((pos) => t.eligible.includes(pos)),
-    );
+    const slots = optimalLineup.filter((s) => SLOT_ELIGIBILITY[s.slot]?.some((pos) => t.eligible.includes(pos)));
     if (!slots.length) return { gain: 0, over: null as PlayerAnalysis | null };
-    const weakest = slots
-      .map((s) => s.player as PlayerAnalysis)
-      .sort((a, b) => a.rosValue - b.rosValue)[0];
-    return { gain: Math.max(0, t.rosValue - weakest.rosValue), over: weakest };
+    if (slots.some((s) => !s.player)) return { gain: t.rosValue + t.weekScore * 0.5, over: null };
+    const filled = slots.map((s) => s.player as PlayerAnalysis);
+    const weakest = [...filled].sort((a, b) => a.rosValue - b.rosValue)[0];
+    const weakestThisWeek = [...filled].sort((a, b) => a.weekScore - b.weekScore)[0];
+    const rosGain = Math.max(0, t.rosValue - weakest.rosValue);
+    const weekGain = Math.max(0, t.weekScore - weakestThisWeek.weekScore);
+    const over = weekGain * 0.5 > rosGain ? weakestThisWeek : weakest;
+    return { gain: rosGain + weekGain * 0.5, over: rosGain + weekGain > 0 ? over : null };
   };
   const claimValue = (t: PlayerAnalysis) => vor(t) + startUpgrade(t).gain;
 
   const perPosition: Record<string, number> = {};
+  // One QB claim per QB-capable lineup spot (two in superflex); K/DEF are
+  // weekly streams, so one each.
+  const qbSpots = league.roster_positions.filter((slot) => slot === "QB" || slot === "SUPER_FLEX").length;
+  const claimCap = (pos: string) => (pos === "K" || pos === "DEF" ? 1 : pos === "QB" ? Math.max(1, qbSpots) : 2);
   const candidates = freeAgents
     .filter((p) => p.position !== "K" && p.position !== "DEF")
     .sort((a, b) => claimValue(b) - claimValue(a))
@@ -577,7 +707,7 @@ export async function analyzeLeague(opts: {
 
   for (const target of [...candidates, ...streamers]) {
     if (waivers.length >= 6) break;
-    if ((perPosition[target.position] ?? 0) >= (target.position === "K" || target.position === "DEF" ? 1 : 2)) continue;
+    if ((perPosition[target.position] ?? 0) >= claimCap(target.position)) continue;
     const streamer = target.position === "K" || target.position === "DEF";
     const upgrade = startUpgrade(target);
     let dropFor: PlayerAnalysis | null = null;
@@ -606,7 +736,8 @@ export async function analyzeLeague(opts: {
     const parts: string[] = [];
     if (!streamer && upgrade.over && upgrade.gain > 0) parts.push(`would start over ${upgrade.over.name}`);
     if (target.trendingAdds > 0) parts.push(`${target.trendingAdds.toLocaleString()} adds across Sleeper in the last 72h`);
-    if (target.recentAvg !== null) parts.push(`${target.recentAvg} pts/game over the last ${RECENT_WEEKS}`);
+    const form = formText(target);
+    if (form) parts.push(form);
     if (target.onBye) parts.push(`on bye in week ${week}`);
     else parts.push(`projects ${target.weekScore} pts in week ${week}${target.matchup ? ` ${describeMatchup(target.matchup, target.position)}` : ""}`);
     if (dropFor) {
@@ -619,9 +750,29 @@ export async function analyzeLeague(opts: {
     waivers.push({ player: target, dropFor, reason: capitalize(parts.join("; ")) + "." });
   }
 
+  // This week's opponent, scored with the same model as your team.
+  let opponent: Opponent | null = null;
+  const mineMatchup = matchups.find((m) => m.roster_id === mine.roster_id);
+  const theirs = mineMatchup?.matchup_id
+    ? matchups.find((m) => m.matchup_id === mineMatchup.matchup_id && m.roster_id !== mine.roster_id)
+    : undefined;
+  if (theirs) {
+    const theirRoster = rosters.find((r) => r.roster_id === theirs.roster_id);
+    const starters = (theirs.starters ?? theirRoster?.starters ?? []).filter((id) => id && id !== "0");
+    const scored = analyzePlayers(starters, inputs, new Map());
+    const ownerId = theirRoster?.owner_id ?? null;
+    opponent = {
+      teamName: teamNameOf(ownerId),
+      avatar: users.find((u) => u.user_id === ownerId)?.avatar ?? null,
+      projected: total(starters.map((id) => ({ slot: "", player: scored.get(id) ?? null }))),
+    };
+  }
+
   return {
     league,
+    opponent,
     teamName,
+    avatar: owner?.avatar ?? null,
     season,
     week,
     scoringLabel: scoringLabel(league.scoring_settings),
