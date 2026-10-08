@@ -41,6 +41,8 @@ Every player gets two scores.
 
 **Trade finder (Trades tab):** values every team by its best rest-of-season lineup (plus a little bench depth), tries every 1-for-1, 2-for-1 and 1-for-2 between your top players and each team's, and keeps trades that improve *both* lineups and are roughly even on value over replacement (so QBs are worth more in superflex). It also ranks your starters at each position against the league, to show what you can trade from and what you need.
 
+**Season planner (Season tab):** pulls Sleeper's projection for every remaining week for each of your players, builds your best lineup each week, and flags weeks where byes leave you with no one to start (holes) or no backup (thin), so you can plan pickups a week early. It also shows each player's projected points across your league's fantasy playoff weeks.
+
 The lineup optimizer fills the most restrictive slots first (QB, K, DEF, then FLEX, then SUPER_FLEX). It respects your league's `roster_positions`, skips players on IR/taxi, and won't suggest dropping below one QB per QB/superflex slot or your only player at a required position. K and DEF are treated as weekly streamers.
 
 IDP slots aren't modeled: whoever is in them now stays put.

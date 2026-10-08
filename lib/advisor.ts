@@ -225,7 +225,7 @@ function scoringLabel(scoring: Record<string, number>): string {
 }
 
 /** Fantasy points for a stat line under the league's scoring settings. */
-function points(stats: Record<string, number>, scoring: Record<string, number>, position: string): number {
+export function points(stats: Record<string, number>, scoring: Record<string, number>, position: string): number {
   const label = scoringLabel(scoring);
   const preset =
     label === "PPR" ? stats.pts_ppr : label === "Half PPR" ? stats.pts_half_ppr : stats.pts_std;

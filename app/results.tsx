@@ -6,15 +6,17 @@ import { useEffect, useMemo, useState } from "react";
 import { describeMatchup, type Analysis, type PlayerAnalysis } from "@/lib/advisor";
 import { avatarUrl } from "@/lib/sleeper";
 import { findTrades } from "@/lib/trades";
+import { buildPlan, type Plan } from "@/lib/planner";
 import { Card, Empty, Headshot, MatchupChip, PlayerLine, Points, PosBadge, SlotBadge } from "./ui";
 
-type Tab = "plan" | "lineup" | "waivers" | "trades" | "roster";
+type Tab = "plan" | "lineup" | "waivers" | "trades" | "planner" | "roster";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "plan", label: "Game plan" },
   { id: "lineup", label: "Lineup" },
   { id: "waivers", label: "Waivers" },
   { id: "trades", label: "Trades" },
+  { id: "planner", label: "Season" },
   { id: "roster", label: "Roster" },
 ];
 
@@ -57,6 +59,7 @@ export function Results({
       {tab === "lineup" && <Lineup a={a} />}
       {tab === "waivers" && <Waivers a={a} onRefresh={onRefresh} refreshing={refreshing} />}
       {tab === "trades" && <Trades a={a} />}
+      {tab === "planner" && <Planner a={a} />}
       {tab === "roster" && <Roster a={a} />}
     </div>
   );
@@ -832,6 +835,188 @@ function Trades({ a }: { a: Analysis }) {
         <p className="mt-4 text-xs text-ink-400">
           Every idea improves both teams&apos; best lineups for the rest of the season (pts/week) and is roughly even
           on value over replacement, so it&apos;s worth proposing. Gains assume both teams start their best players.
+        </p>
+      </Card>
+    </div>
+  );
+}
+
+// --- Season planner -------------------------------------------------------
+
+function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
+  const [state, setState] = useState<{ data: T | null; error: string | null }>({ data: null, error: null });
+  useEffect(() => {
+    let live = true;
+    fn()
+      .then((data) => live && setState({ data, error: null }))
+      .catch((err) => live && setState({ data: null, error: (err as Error).message }));
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- caller supplies deps
+  }, deps);
+  return state;
+}
+
+function cellStyle(v: number, max: number) {
+  const t = Math.max(0, Math.min(1, v / max));
+  return { backgroundColor: `color-mix(in srgb, var(--color-mint-400) ${Math.round(8 + t * 47)}%, transparent)` };
+}
+
+/** Byes at the positions a planner alert is about. */
+function ByeNote({ w }: { w: Plan["weeks"][number] }) {
+  const affected = [...w.holes, ...w.thin];
+  const relevant = w.byes.filter((p) => affected.includes(p.position));
+  const shown = relevant.length ? relevant : affected.some((h) => !["QB", "RB", "WR", "TE", "K", "DEF"].includes(h)) ? w.byes : [];
+  if (!shown.length) return null;
+  return <span className="text-ink-400"> ({shown.map((p) => p.name).join(", ")} on bye)</span>;
+}
+
+function Planner({ a }: { a: Analysis }) {
+  const { data: plan, error } = useAsync<Plan>(() => buildPlan(a), [a]);
+  if (error) return <Empty>Couldn&apos;t load future projections: {error}</Empty>;
+  if (!plan) {
+    return (
+      <div className="flex flex-col gap-3" aria-busy="true">
+        <div className="skeleton h-28 rounded-2xl" />
+        <div className="skeleton h-72 rounded-2xl" />
+      </div>
+    );
+  }
+  const alerts = plan.weeks.filter((w) => w.holes.length || w.thin.length);
+  const best = Math.max(1, ...plan.weeks.map((w) => w.total));
+  const cellMax = Math.max(1, ...plan.rows.flatMap((r) => r.cells.filter((c): c is number => typeof c === "number")));
+  const stashes = [...plan.rows].filter((r) => r.playoffPoints > 0).sort((x, y) => y.playoffPoints - x.playoffPoints).slice(0, 3);
+  return (
+    <div className="flex flex-col gap-5">
+      <Card title="Projected points by week" action={plan.playoffStart && <span className="text-xs text-ink-400">playoffs start week {plan.playoffStart}</span>}>
+        <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          {plan.weeks.map((w) => (
+            <div
+              key={w.week}
+              className={`flex w-20 shrink-0 flex-col items-center gap-1 rounded-xl border px-2 py-2.5 ${
+                w.playoff ? "border-mint-400/50 bg-mint-400/10" : "border-ink-700 bg-ink-850"
+              }`}
+            >
+              <span className="text-[10px] font-bold tracking-wider text-ink-400 uppercase">
+                {w.playoff ? "Playoff" : "Week"} {w.week}
+              </span>
+              <span className="font-mono text-lg font-bold tabular-nums">{w.total.toFixed(0)}</span>
+              <div className="h-1 w-full overflow-hidden rounded-full bg-ink-700">
+                <div className="h-full bg-mint-400" style={{ width: `${(w.total / best) * 100}%` }} />
+              </div>
+              <span
+                className={`text-[10px] font-semibold ${
+                  w.holes.length ? "text-rose-300" : w.thin.length ? "text-amber-300" : "text-ink-400"
+                }`}
+              >
+                {w.holes.length ? `hole: ${w.holes.join(", ")}` : w.thin.length ? `thin: ${w.thin.join(", ")}` : `${w.byes.length} on bye`}
+              </span>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card title="Heads up">
+        {alerts.length === 0 ? (
+          <Empty>No bye-week holes coming up — your depth covers every week.</Empty>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {alerts.map((w) => (
+              <li
+                key={w.week}
+                className={`rounded-xl border px-4 py-3 text-sm ${
+                  w.holes.length ? "border-rose-500/30 bg-rose-500/10" : "border-amber-400/30 bg-amber-400/10"
+                }`}
+              >
+                <b>Week {w.week}:</b>{" "}
+                {w.holes.length
+                  ? `no one to start at ${w.holes.join(", ")}`
+                  : `no backup at ${w.thin.join(", ")} — one more injury and you're stuck`}
+                <ByeNote w={w} />
+                .{" "}
+                {w.holes.length > 0 && (
+                  <span className="text-ink-300">
+                    {w.week - 1 > a.week ? `Pick someone up on week ${w.week - 1} waivers.` : "Pick someone up this week."}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      {plan.playoffWeeks.length > 0 && stashes.length > 0 && (
+        <Card title="Playoff MVPs">
+          <div className="grid gap-2 sm:grid-cols-3">
+            {stashes.map((r) => (
+              <div key={r.player.id} className="flex items-center justify-between gap-2 rounded-xl border border-ink-700 bg-ink-850 px-3 py-2.5">
+                <PlayerLine p={r.player} size={32} />
+                <div className="text-right">
+                  <div className="font-mono text-sm font-semibold tabular-nums">{r.playoffPoints.toFixed(1)}</div>
+                  <div className="text-[10px] text-ink-400">wks {plan.playoffWeeks[0]}–{plan.playoffWeeks.at(-1)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-ink-400">Projected points across the fantasy playoffs — protect these players.</p>
+        </Card>
+      )}
+
+      <Card title="Week-by-week projections">
+        <div className="-mx-4 overflow-x-auto sm:-mx-5">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[10px] tracking-wider text-ink-400 uppercase">
+                <th className="sticky left-0 z-10 bg-ink-900 py-2 pr-2 pl-4 text-left font-semibold sm:pl-5">Player</th>
+                {plan.weeks.map((w) => (
+                  <th key={w.week} className={`px-1 py-2 text-center font-semibold ${w.playoff ? "text-mint-400" : ""}`}>
+                    {w.week}
+                  </th>
+                ))}
+                {plan.playoffWeeks.length > 0 && <th className="px-2 py-2 text-right font-semibold text-mint-400">Playoffs</th>}
+                <th className="w-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {plan.rows.map((r) => (
+                <tr key={r.player.id} className="border-t border-ink-700/40">
+                  <td className="sticky left-0 z-10 bg-ink-900 py-1.5 pr-2 pl-4 sm:pl-5">
+                    <span className="flex items-center gap-1.5 whitespace-nowrap">
+                      <PosBadge pos={r.player.position} />
+                      <span className="max-w-[120px] truncate font-medium">{r.player.name}</span>
+                    </span>
+                  </td>
+                  {r.cells.map((c, j) => (
+                    <td key={j} className="px-0.5 py-1">
+                      {c === "BYE" ? (
+                        <span className="block rounded bg-ink-700 px-1 py-1 text-center text-[9px] font-bold text-ink-400">BYE</span>
+                      ) : c === null ? (
+                        <span className="block py-1 text-center text-ink-600">·</span>
+                      ) : (
+                        <span
+                          className={`block rounded px-1 py-1 text-center font-mono tabular-nums ${
+                            plan.weeks[j].starters.includes(r.player.id) ? "font-semibold text-ink-100" : "text-ink-400"
+                          }`}
+                          style={cellStyle(c, cellMax)}
+                        >
+                          {c.toFixed(0)}
+                        </span>
+                      )}
+                    </td>
+                  ))}
+                  {plan.playoffWeeks.length > 0 && (
+                    <td className="px-2 text-right font-mono font-semibold tabular-nums">{r.playoffPoints.toFixed(0)}</td>
+                  )}
+                  <td />
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-xs text-ink-400">
+          Bold = in your best lineup that week. Darker green = more points. Future weeks use Sleeper&apos;s projections,
+          which update as the season goes.
         </p>
       </Card>
     </div>

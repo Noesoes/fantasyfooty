@@ -143,6 +143,12 @@ export interface ScheduledGame {
 export const getSchedule = (season: string) =>
   get<ScheduledGame[]>(`/schedule/nfl/regular/${season}`, true);
 
+/** One player's projection for every week of the season (null on byes / when unprojected). */
+export const getPlayerWeeklyProjections = (season: string, playerId: string) =>
+  get<Record<string, StatRow | null> | null>(
+    `/projections/nfl/player/${playerId}?season_type=regular&season=${season}&grouping=week`,
+  ).then((d) => d ?? {});
+
 export const getTrendingAdds = (lookbackHours = 72, limit = 200) =>
   get<TrendingPlayer[]>(
     `/v1/players/nfl/trending/add?lookback_hours=${lookbackHours}&limit=${limit}`,
