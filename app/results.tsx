@@ -7,9 +7,10 @@ import { describeMatchup, type Analysis, type PlayerAnalysis } from "@/lib/advis
 import { avatarUrl } from "@/lib/sleeper";
 import { findTrades } from "@/lib/trades";
 import { buildPlan, type Plan } from "@/lib/planner";
+import { buildTrackRecord, type TrackRecord } from "@/lib/backtest";
 import { Card, Empty, Headshot, MatchupChip, PlayerLine, Points, PosBadge, SlotBadge } from "./ui";
 
-type Tab = "plan" | "lineup" | "waivers" | "trades" | "planner" | "roster";
+type Tab = "plan" | "lineup" | "waivers" | "trades" | "planner" | "record" | "roster";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "plan", label: "Game plan" },
@@ -17,6 +18,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "waivers", label: "Waivers" },
   { id: "trades", label: "Trades" },
   { id: "planner", label: "Season" },
+  { id: "record", label: "Record" },
   { id: "roster", label: "Roster" },
 ];
 
@@ -60,6 +62,7 @@ export function Results({
       {tab === "waivers" && <Waivers a={a} onRefresh={onRefresh} refreshing={refreshing} />}
       {tab === "trades" && <Trades a={a} />}
       {tab === "planner" && <Planner a={a} />}
+      {tab === "record" && <Record a={a} />}
       {tab === "roster" && <Roster a={a} />}
     </div>
   );
@@ -1019,6 +1022,131 @@ function Planner({ a }: { a: Analysis }) {
           which update as the season goes.
         </p>
       </Card>
+    </div>
+  );
+}
+
+// --- Track record ---------------------------------------------------------
+
+function Record({ a }: { a: Analysis }) {
+  const { data: r, error } = useAsync<TrackRecord>(() => buildTrackRecord(a), [a]);
+  if (error) return <Empty>Couldn&apos;t load past weeks: {error}</Empty>;
+  if (!r) {
+    return (
+      <div className="flex flex-col gap-3" aria-busy="true">
+        <div className="skeleton h-28 rounded-2xl" />
+        <div className="skeleton h-64 rounded-2xl" />
+      </div>
+    );
+  }
+  if (r.weeks.length === 0) return <Empty>No completed weeks yet — check back after your first games.</Empty>;
+  const diff = Math.round((r.totals.advisor - r.totals.yours) * 10) / 10;
+  const pct = (x: number) => `${Math.round((x / Math.max(1, r.totals.best)) * 100)}%`;
+  const max = Math.max(1, ...r.weeks.map((w) => Math.max(w.best, w.opponent ?? 0)));
+  const extraWins = r.weeks.filter((w) => w.advisorWon && w.won === false).length;
+  const lostWins = r.weeks.filter((w) => w.won && w.advisorWon === false).length;
+  return (
+    <div className="flex flex-col gap-5">
+      {r.bestBall && (
+        <div className="rounded-xl border border-pos-wr/30 bg-pos-wr/10 px-4 py-3 text-sm">
+          Best-ball league: Sleeper already starts your best lineup, so there are no start/sit calls to grade.
+        </div>
+      )}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <BigStat
+          label="Start/sit calls right"
+          value={r.calls ? `${r.hits}/${r.calls}` : "—"}
+          sub={r.calls ? `${Math.round((r.hits / r.calls) * 100)}% when the advisor disagreed with you` : "The advisor agreed with every lineup you set"}
+          tone={r.calls ? (r.hits / r.calls >= 0.55 ? "good" : r.hits / r.calls >= 0.45 ? "mid" : "bad") : "mid"}
+        />
+        <BigStat
+          label="Advisor vs. your lineups"
+          value={`${diff >= 0 ? "+" : ""}${diff} pts`}
+          sub={`over ${r.weeks.length} week${r.weeks.length === 1 ? "" : "s"}${extraWins ? ` · ${extraWins} more win${extraWins === 1 ? "" : "s"}` : ""}${lostWins ? ` · ${lostWins} fewer win${lostWins === 1 ? "" : "s"}` : ""}`}
+          tone={diff > 0 ? "good" : diff < 0 ? "bad" : "mid"}
+        />
+        <BigStat
+          label="Share of max possible"
+          value={`${pct(r.totals.yours)} → ${pct(r.totals.advisor)}`}
+          sub="your lineups vs. the advisor's, against the best lineup in hindsight"
+          tone="mid"
+        />
+      </div>
+
+      <Card title="Week by week">
+        <ul className="flex flex-col divide-y divide-ink-700/60">
+          {[...r.weeks].reverse().map((w) => (
+            <li key={w.week} className="py-4">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-semibold">Week {w.week}</span>
+                {w.won !== null && (
+                  <span className="flex gap-1.5 text-[11px] font-semibold">
+                    <span className={`rounded-full px-2 py-0.5 ${w.won ? "bg-mint-400/15 text-mint-300" : "bg-rose-500/15 text-rose-300"}`}>
+                      You {w.won ? "won" : "lost"} vs {w.opponent?.toFixed(1)}
+                    </span>
+                    {w.advisorWon !== w.won && (
+                      <span className="rounded-full bg-ink-700 px-2 py-0.5 text-ink-300">
+                        Advisor lineup would have {w.advisorWon ? "won" : "lost"}
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {[
+                  { label: "You", v: w.yours, c: "bg-ink-300" },
+                  { label: "Advisor", v: w.advisor, c: "bg-mint-400" },
+                  { label: "Best", v: w.best, c: "bg-ink-600" },
+                ].map((b) => (
+                  <div key={b.label} className="flex items-center gap-3 text-xs">
+                    <span className="w-14 shrink-0 text-ink-400">{b.label}</span>
+                    <div className="relative h-2 flex-1 rounded-full bg-ink-800">
+                      <div className={`h-full rounded-full ${b.c}`} style={{ width: `${(b.v / max) * 100}%` }} />
+                      {w.opponent !== null && (
+                        <div
+                          className="absolute -top-0.5 h-3 w-0.5 rounded bg-rose-400"
+                          style={{ left: `${(w.opponent / max) * 100}%` }}
+                          title="Opponent"
+                        />
+                      )}
+                    </div>
+                    <span className="w-12 shrink-0 text-right font-mono tabular-nums">{b.v.toFixed(1)}</span>
+                  </div>
+                ))}
+              </div>
+              {w.calls.length > 0 && (
+                <ul className="mt-3 flex flex-col gap-1">
+                  {w.calls.map((c, i) => (
+                    <li key={i} className="flex items-center gap-2 text-xs">
+                      <span className={`font-bold ${c.hit ? "text-mint-400" : "text-rose-300"}`}>{c.hit ? "✓" : "✗"}</span>
+                      <span className="text-ink-300">
+                        Advisor: start <b className="text-ink-100">{c.advisor.name}</b> ({c.advisor.points}) over{" "}
+                        <b className="text-ink-100">{c.yours.name}</b> ({c.yours.points})
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-xs text-ink-400">
+          The advisor&apos;s lineup is rebuilt from Sleeper&apos;s pre-game projections for each week, using the roster
+          you had then; points are what players actually scored. The red tick is your opponent&apos;s score.
+          Excludes IDP slots.
+        </p>
+      </Card>
+    </div>
+  );
+}
+
+function BigStat({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: "good" | "mid" | "bad" }) {
+  const color = { good: "text-mint-400", mid: "text-ink-100", bad: "text-rose-300" }[tone];
+  return (
+    <div className="rounded-2xl border border-ink-700/70 bg-ink-900 p-4">
+      <div className="text-[11px] font-semibold tracking-wider text-ink-400 uppercase">{label}</div>
+      <div className={`mt-1 font-mono text-2xl font-bold tabular-nums ${color}`}>{value}</div>
+      <div className="mt-0.5 text-xs text-ink-400">{sub}</div>
     </div>
   );
 }

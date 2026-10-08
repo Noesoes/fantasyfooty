@@ -2,6 +2,7 @@
 
 import { describeMatchup, type Analysis, type PlayerAnalysis } from "./advisor";
 import { findTrades } from "./trades";
+import type { TrackRecord } from "./backtest";
 
 function tag(p: PlayerAnalysis): string {
   const bits = [`${p.position}${p.team ? `, ${p.team}` : ""}`];
@@ -10,7 +11,7 @@ function tag(p: PlayerAnalysis): string {
   return `**${p.name}** (${bits.join(", ")})`;
 }
 
-export function renderMarkdown(a: Analysis): string {
+export function renderMarkdown(a: Analysis, record?: TrackRecord | null): string {
   const lines: string[] = [];
   lines.push(`# Week ${a.week} game plan — ${a.teamName}`);
   lines.push("");
@@ -19,6 +20,16 @@ export function renderMarkdown(a: Analysis): string {
   if (a.opponent) {
     lines.push(
       `**Matchup:** you (${a.optimalTotal} projected with these moves) vs ${a.opponent.teamName} (${a.opponent.projected} projected)`,
+    );
+    lines.push("");
+  }
+
+  const last = record?.weeks.at(-1);
+  if (record && last && !a.bestBall) {
+    const diff = Math.round((last.advisor - last.yours) * 10) / 10;
+    lines.push(
+      `**Last week (week ${last.week}):** you scored ${last.yours}; the advisor's lineup would have scored ${last.advisor} (${diff >= 0 ? "+" : ""}${diff}); best possible ${last.best}.` +
+        (record.calls ? ` Season start/sit calls: ${record.hits}/${record.calls} right.` : ""),
     );
     lines.push("");
   }

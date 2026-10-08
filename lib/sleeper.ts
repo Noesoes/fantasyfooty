@@ -125,6 +125,9 @@ export interface MatchupRow {
   matchup_id: number | null;
   starters: string[] | null;
   points: number;
+  /** Everyone on the roster that week, and each player's actual points. */
+  players?: string[] | null;
+  players_points?: Record<string, number> | null;
 }
 
 export const getMatchups = (leagueId: string, week: number) =>

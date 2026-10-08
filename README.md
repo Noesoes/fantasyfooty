@@ -43,6 +43,8 @@ Every player gets two scores.
 
 **Season planner (Season tab):** pulls Sleeper's projection for every remaining week for each of your players, builds your best lineup each week, and flags weeks where byes leave you with no one to start (holes) or no backup (thin), so you can plan pickups a week early. It also shows each player's projected points across your league's fantasy playoff weeks.
 
+**Track record (Record tab):** replays every completed week from Sleeper's matchup history (each week's roster, starters and actual points). It compares the lineup you started, the lineup the advisor would have picked from that week's pre-game projections, and the best lineup in hindsight. It also grades each start/sit call where the advisor disagreed with you. The weekly report opens with last week's result. Nothing needs to be stored, so it works for any league.
+
 The lineup optimizer fills the most restrictive slots first (QB, K, DEF, then FLEX, then SUPER_FLEX). It respects your league's `roster_positions`, skips players on IR/taxi, and won't suggest dropping below one QB per QB/superflex slot or your only player at a required position. K and DEF are treated as weekly streamers.
 
 IDP slots aren't modeled: whoever is in them now stays put.
@@ -96,6 +98,13 @@ The `/projections` and `/stats` endpoints are undocumented: they're what the Sle
 lib/sleeper.ts             Sleeper API client + "which week is upcoming" logic
 lib/advisor.ts             scoring, lineup optimizer, drop & waiver logic
 lib/report.ts              Markdown rendering for the weekly issue
-scripts/weekly-report.ts   CLI entry point used by the GitHub Action
-app/page.tsx               the web UI
+lib/trades.ts              trade finder and positional strength
+lib/planner.ts             rest-of-season projections, byes and playoff weeks
+lib/backtest.ts            track record from past weeks' actual scores
+lib/gameday.ts             pre-kickoff inactive check
+scripts/weekly-report.ts   CLI entry point used by the weekly GitHub Action
+scripts/gameday-alert.ts   CLI entry point used by the gameday GitHub Action
+app/page.tsx               landing page, league/week controls
+app/results.tsx            the tabs (game plan, lineup, waivers, trades, season, record, roster)
+app/ui.tsx                 shared UI pieces
 ```

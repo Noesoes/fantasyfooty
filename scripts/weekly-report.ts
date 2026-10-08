@@ -8,6 +8,7 @@
 
 import { analyzeLeague } from "../lib/advisor";
 import { renderMarkdown } from "../lib/report";
+import { buildTrackRecord } from "../lib/backtest";
 import { getNflState, getUser, getUserLeagues, upcomingWeek } from "../lib/sleeper";
 
 async function main() {
@@ -40,7 +41,8 @@ async function main() {
   for (const leagueId of leagueIds) {
     try {
       const analysis = await analyzeLeague({ leagueId, userId: user.user_id, season, week });
-      sections.push(renderMarkdown(analysis));
+      const record = await buildTrackRecord(analysis).catch(() => null);
+      sections.push(renderMarkdown(analysis, record));
     } catch (err) {
       sections.push(`# League ${leagueId}\n\nCouldn't analyze: ${(err as Error).message}`);
     }

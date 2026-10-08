@@ -38,6 +38,20 @@ jobs:
           fi
           npm run --silent report > report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
+          # GitHub issues max out at 65,536 characters (many leagues can exceed it).
+          if [ "$(wc -c < report.md)" -gt 60000 ]; then
+            head -c 60000 report.md > trimmed.md
+            echo "" >> trimmed.md
+            echo "_Trimmed to fit in an issue. Full report: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/${GITHUB_RUN_ID}_" >> trimmed.md
+            mv trimmed.md report.md
+          fi
+          # GitHub issues max out at 65,536 characters (many leagues can exceed it).
+          if [ "$(wc -c < report.md)" -gt 60000 ]; then
+            head -c 60000 report.md > trimmed.md
+            printf '\n\n_…trimmed to fit in an issue. The full report is in this run'"'"'s summary: %s_\n' \
+              "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> trimmed.md
+            mv trimmed.md report.md
+          fi
       - name: Post as issue
         env:
           GH_TOKEN: ${{ github.token }}
