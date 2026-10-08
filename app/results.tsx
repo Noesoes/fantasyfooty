@@ -5,14 +5,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { describeMatchup, type Analysis, type PlayerAnalysis } from "@/lib/advisor";
 import { avatarUrl } from "@/lib/sleeper";
-import { Card, Empty, Headshot, MatchupChip, PlayerLine, Points, SlotBadge } from "./ui";
+import { findTrades } from "@/lib/trades";
+import { Card, Empty, Headshot, MatchupChip, PlayerLine, Points, PosBadge, SlotBadge } from "./ui";
 
-type Tab = "plan" | "lineup" | "waivers" | "roster";
+type Tab = "plan" | "lineup" | "waivers" | "trades" | "roster";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "plan", label: "Game plan" },
   { id: "lineup", label: "Lineup" },
   { id: "waivers", label: "Waivers" },
+  { id: "trades", label: "Trades" },
   { id: "roster", label: "Roster" },
 ];
 
@@ -54,6 +56,7 @@ export function Results({
       {tab === "plan" && <GamePlan a={a} goTo={setTab} />}
       {tab === "lineup" && <Lineup a={a} />}
       {tab === "waivers" && <Waivers a={a} onRefresh={onRefresh} refreshing={refreshing} />}
+      {tab === "trades" && <Trades a={a} />}
       {tab === "roster" && <Roster a={a} />}
     </div>
   );
@@ -735,6 +738,104 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function compact(n: number) {
   return n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
+}
+
+// --- Trades ----------------------------------------------------------------
+
+function Trades({ a }: { a: Analysis }) {
+  const report = useMemo(() => findTrades(a), [a]);
+  const max = Math.max(1, ...report.strengths.map((s) => Math.max(s.value, s.leagueAverage)));
+  return (
+    <div className="flex flex-col gap-5">
+      <Card title="Your team vs. the league" action={<span className="text-xs text-ink-400">rest-of-season starters</span>}>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {report.strengths.map((s) => {
+            const good = s.rank <= Math.ceil(s.teams / 3);
+            const bad = s.rank > Math.floor((s.teams * 2) / 3);
+            return (
+              <div key={s.position}>
+                <div className="mb-1.5 flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2">
+                    <PosBadge pos={s.position} />
+                    <span className={`font-semibold ${good ? "text-mint-400" : bad ? "text-rose-300" : ""}`}>
+                      #{s.rank} of {s.teams}
+                    </span>
+                  </span>
+                  <span className="font-mono text-xs text-ink-400 tabular-nums">
+                    {s.value} vs avg {s.leagueAverage} pts/wk
+                  </span>
+                </div>
+                <div className="relative h-2 rounded-full bg-ink-700">
+                  <div
+                    className={`h-full rounded-full ${good ? "bg-mint-400" : bad ? "bg-rose-500" : "bg-ink-300"}`}
+                    style={{ width: `${(s.value / max) * 100}%` }}
+                  />
+                  <div
+                    className="absolute -top-1 h-4 w-0.5 rounded bg-ink-100"
+                    style={{ left: `${(s.leagueAverage / max) * 100}%` }}
+                    title="League average"
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <p className="mt-4 text-xs text-ink-400">
+          Strong spots are where you can afford to trade from; weak spots are what to trade for. The tick mark is the
+          league average.
+        </p>
+      </Card>
+
+      <Card title="Trade ideas">
+        {report.ideas.length === 0 ? (
+          <Empty>No trade clearly helps both you and another team right now. Check back after this week&apos;s games.</Empty>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {report.ideas.map((t, i) => (
+              <article key={i} className="rounded-xl border border-ink-700 bg-ink-850 p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <span className="flex items-center gap-2 text-sm font-semibold">
+                    {t.avatar ? (
+                      <img src={avatarUrl(t.avatar)} alt="" className="h-6 w-6 rounded-full" />
+                    ) : (
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-ink-700 text-[11px] font-bold">
+                        {t.teamName.charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                    with {t.teamName}
+                  </span>
+                  <span className="flex gap-1.5 text-[11px] font-semibold">
+                    <span className="rounded-full bg-mint-400/15 px-2 py-0.5 text-mint-300">You +{t.yourGain}/wk</span>
+                    <span className="rounded-full bg-ink-700 px-2 py-0.5 text-ink-300">Them +{t.theirGain}/wk</span>
+                  </span>
+                </div>
+                <div className="grid items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
+                  <div className="flex flex-col gap-2">
+                    <span className="text-[10px] font-bold tracking-wider text-rose-300 uppercase">You give</span>
+                    {t.give.map((p) => (
+                      <PlayerLine key={p.id} p={p} size={34} />
+                    ))}
+                  </div>
+                  <span className="hidden text-xl text-ink-400 sm:block">⇄</span>
+                  <div className="flex flex-col gap-2">
+                    <span className="text-[10px] font-bold tracking-wider text-mint-400 uppercase">You get</span>
+                    {t.get.map((p) => (
+                      <PlayerLine key={p.id} p={p} size={34} />
+                    ))}
+                  </div>
+                </div>
+                <p className="mt-3 text-xs leading-relaxed text-ink-400">{t.reason}</p>
+              </article>
+            ))}
+          </div>
+        )}
+        <p className="mt-4 text-xs text-ink-400">
+          Every idea improves both teams&apos; best lineups for the rest of the season (pts/week) and is roughly even
+          on value over replacement, so it&apos;s worth proposing. Gains assume both teams start their best players.
+        </p>
+      </Card>
+    </div>
+  );
 }
 
 // --- Roster ----------------------------------------------------------------

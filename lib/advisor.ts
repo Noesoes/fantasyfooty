@@ -143,6 +143,14 @@ export interface WaiverInfo {
   budgetLeft: number | null;
 }
 
+export interface OtherTeam {
+  rosterId: number;
+  teamName: string;
+  avatar: string | null;
+  /** Active players (IR/taxi excluded). */
+  players: PlayerAnalysis[];
+}
+
 interface TeamModel {
   roster: Roster;
   teamName: string;
@@ -197,6 +205,10 @@ export interface Analysis {
   moves: LineupMove[];
   warnings: string[];
   roster: PlayerAnalysis[];
+  /** Your roster minus IR/taxi — the players who can be started or traded. */
+  activeRoster: PlayerAnalysis[];
+  /** Every other team, modeled like yours (for trades). */
+  otherTeams: OtherTeam[];
   drops: DropCandidate[];
   waivers: WaiverTarget[];
   waiversByPosition: Record<string, PlayerAnalysis[]>;
@@ -1003,6 +1015,13 @@ export async function analyzeLeague(opts: {
     moves: bestBall ? [] : buildMoves(currentLineup, optimalLineup),
     warnings: bestBall ? [] : warnings,
     roster,
+    activeRoster: active,
+    otherTeams: others.map((t) => ({
+      rosterId: t.roster.roster_id,
+      teamName: t.teamName,
+      avatar: t.avatar,
+      players: t.players,
+    })),
     drops,
     waivers,
     waiversByPosition,

@@ -39,6 +39,8 @@ Every player gets two scores.
 
 **FAAB bids:** in FAAB leagues every other team is modeled too. A player's worth is a share of your remaining budget based on how much they'd add over your lineup (≈5 pts/game ≈ a quarter of your budget, capped at 35%). Each interested team's likely bid is estimated the same way from their own need and budget. The suggestion bids just over the likeliest competitor without going past 1.6× the player's worth to you, and bids low when nobody else needs the player.
 
+**Trade finder (Trades tab):** values every team by its best rest-of-season lineup (plus a little bench depth), tries every 1-for-1, 2-for-1 and 1-for-2 between your top players and each team's, and keeps trades that improve *both* lineups and are roughly even on value over replacement (so QBs are worth more in superflex). It also ranks your starters at each position against the league, to show what you can trade from and what you need.
+
 The lineup optimizer fills the most restrictive slots first (QB, K, DEF, then FLEX, then SUPER_FLEX). It respects your league's `roster_positions`, skips players on IR/taxi, and won't suggest dropping below one QB per QB/superflex slot or your only player at a required position. K and DEF are treated as weekly streamers.
 
 IDP slots aren't modeled: whoever is in them now stays put.

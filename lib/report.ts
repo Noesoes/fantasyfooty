@@ -1,6 +1,7 @@
 // Renders an Analysis as Markdown, for the weekly GitHub issue / job summary.
 
 import { describeMatchup, type Analysis, type PlayerAnalysis } from "./advisor";
+import { findTrades } from "./trades";
 
 function tag(p: PlayerAnalysis): string {
   const bits = [`${p.position}${p.team ? `, ${p.team}` : ""}`];
@@ -104,6 +105,20 @@ export function renderMarkdown(a: Analysis): string {
     lines.push("Nobody on your bench is an obvious cut.");
   } else {
     for (const d of a.drops) lines.push(`- ${tag(d.player)} — ${d.reason}`);
+  }
+  lines.push("");
+
+  const trades = findTrades(a);
+  lines.push("## Trade ideas");
+  if (trades.strengths.length) {
+    lines.push(
+      trades.strengths.map((st) => `${st.position} #${st.rank}/${st.teams}`).join(" · ") + " _(your starters vs. the league)_",
+    );
+    lines.push("");
+  }
+  if (trades.ideas.length === 0) lines.push("No trade clearly helps both sides right now.");
+  for (const t of trades.ideas.slice(0, 3)) {
+    lines.push(`- **With ${t.teamName}:** give ${t.give.map(tag).join(" + ")}, get ${t.get.map(tag).join(" + ")} — ${t.reason}`);
   }
   lines.push("");
 
