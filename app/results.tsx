@@ -194,6 +194,7 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
         title: (
           <>
             Claim <b>{w.player.name}</b>
+            {w.bid && <> for <b>${w.bid.suggested}</b></>}
             {w.dropFor && (
               <>
                 , drop <b>{w.dropFor.name}</b>
@@ -201,9 +202,11 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
             )}
           </>
         ),
-        detail: w.likelyClaimedBy
-          ? `Heads up: ${w.likelyClaimedBy} is ahead of you and likely to claim this player first. ${w.reason}`
-          : w.reason,
+        detail: w.bid
+          ? `${bidSummary(w.bid)} ${w.reason}`
+          : w.likelyClaimedBy
+            ? `Heads up: ${w.likelyClaimedBy} is ahead of you and likely to claim this player first. ${w.reason}`
+            : w.reason,
         players: w.dropFor ? [w.player, w.dropFor] : [w.player],
       });
     }
@@ -462,6 +465,7 @@ function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => v
                     <PlayerLine p={w.dropFor} size={32} />
                   </div>
                 )}
+                {w.bid && <BidBox bid={w.bid} />}
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <Stat label={`Wk ${a.week} proj`} value={w.player.onBye ? "BYE" : w.player.weekScore.toFixed(1)} />
                   <Stat label="Season avg" value={w.player.seasonAvg?.toFixed(1) ?? "—"} />
@@ -535,6 +539,13 @@ function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => v
   );
 }
 
+function bidSummary(b: NonNullable<Analysis["waivers"][number]["bid"]>) {
+  const top = b.competitors[0];
+  if (!top) return "Little competition expected.";
+  if (b.toWin !== null && b.toWin > b.ceiling) return `${top.teamName} may outbid you (~$${top.estimate}).`;
+  return `Should beat ${top.teamName}'s likely ~$${top.estimate}.`;
+}
+
 function waiverChip(a: Analysis) {
   const w = a.waiver;
   if (w.type === "faab") return `FAAB $${w.budgetLeft ?? "?"}`;
@@ -591,7 +602,53 @@ function WaiverStatus({ a }: { a: Analysis }) {
   );
 }
 
+function BidBox({ bid }: { bid: NonNullable<Analysis["waivers"][number]["bid"]> }) {
+  const top = bid.competitors[0];
+  return (
+    <div className="flex items-center gap-4 rounded-xl border border-mint-400/30 bg-mint-400/10 px-4 py-3">
+      <div>
+        <div className="font-mono text-2xl font-bold text-mint-300 tabular-nums">${bid.suggested}</div>
+        <div className="text-[10px] font-semibold tracking-wider text-ink-400 uppercase">Suggested bid</div>
+      </div>
+      <div className="min-w-0 flex-1 text-xs text-ink-300">
+        <div>
+          Worth ~${bid.value} to you · max <b>${bid.ceiling}</b>
+        </div>
+        {top ? (
+          <div className="mt-0.5 truncate text-ink-400">
+            {bid.competitors.map((c) => `${c.teamName} ~$${c.estimate}`).join(" · ")}
+          </div>
+        ) : (
+          <div className="mt-0.5 text-ink-400">No one else is likely to bid much.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ClaimStatus({ w }: { w: Analysis["waivers"][number] }) {
+  if (w.bid) {
+    const top = w.bid.competitors[0];
+    if (w.likelyClaimedBy && top) {
+      return (
+        <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[11px] font-semibold text-rose-300">
+          Likely outbid · {top.teamName}
+        </span>
+      );
+    }
+    if (w.bid.competitors.length) {
+      return (
+        <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
+          {w.bid.competitors.length} other team{w.bid.competitors.length === 1 ? "" : "s"} bidding
+        </span>
+      );
+    }
+    return (
+      <span className="rounded-full bg-mint-400/15 px-2 py-0.5 text-[11px] font-semibold text-mint-300">
+        Little competition
+      </span>
+    );
+  }
   if (w.likelyClaimedBy) {
     return (
       <span

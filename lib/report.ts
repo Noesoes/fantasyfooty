@@ -63,12 +63,15 @@ export function renderMarkdown(a: Analysis): string {
   } else {
     for (const w of a.waivers) {
       const drop = w.dropFor ? `, drop ${tag(w.dropFor)}` : "";
-      const contested = w.likelyClaimedBy
+      const contested = w.bid
+        ? ""
+        : w.likelyClaimedBy
         ? ` 🚫 Likely claimed before your turn by ${w.likelyClaimedBy}.`
         : w.contestedBy.length
           ? ` ⚠️ Also wanted by ${w.contestedBy.slice(0, 3).join(", ")}${w.contestedBy.length > 3 ? ` +${w.contestedBy.length - 3}` : ""}.`
           : " ✅ Likely available at your turn.";
-      lines.push(`- **Add** ${tag(w.player)}${drop} — ${w.reason}${contested}`);
+      const bid = w.bid ? ` ${bidText(w.bid)}` : "";
+      lines.push(`- **Add** ${tag(w.player)}${drop} — ${w.reason}${bid}${contested}`);
     }
   }
   lines.push("");
@@ -132,4 +135,15 @@ export function waiverLine(a: Analysis): string {
   }
   const kind = w.type === "reverse" ? "reverse standings" : "rolling";
   return `**Waiver priority:** #${w.position ?? "?"} of ${w.teams} (${kind})${ahead ? ` · ${ahead} team${ahead === 1 ? "" : "s"} claim before you` : " · you claim first"}`;
+}
+
+export function bidText(b: NonNullable<Analysis["waivers"][number]["bid"]>): string {
+  const top = b.competitors[0];
+  if (!top) return `**Bid $${b.suggested}** — little competition expected, so no need to overpay.`;
+  if (b.toWin !== null && b.toWin > b.ceiling) {
+    return `**Bid $${b.suggested}** (your max) — ${top.teamName} needs this player more and may bid ~$${top.estimate}, so you may lose this one. Don't chase past $${b.ceiling}.`;
+  }
+  return `**Bid $${b.suggested}** — enough to beat ${top.teamName}'s likely ~$${top.estimate}${
+    b.competitors.length > 1 ? ` (${b.competitors.length} teams interested)` : ""
+  }; cap it at $${b.ceiling}.`;
 }

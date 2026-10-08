@@ -37,6 +37,8 @@ Every player gets two scores.
 
 **Waiver order:** shows your waiver priority (rolling or reverse standings) or FAAB budget left. Every team that claims before you (or has more FAAB to spend) is scored with the same model to guess which free agents they'd want. The app then simulates the waiver run in order, marks each of your claims as *likely gone*, *contested* or *likely available*, and suggests backup targets that are likely to still be there at your turn.
 
+**FAAB bids:** in FAAB leagues every other team is modeled too. A player's worth is a share of your remaining budget based on how much they'd add over your lineup (≈5 pts/game ≈ a quarter of your budget, capped at 35%). Each interested team's likely bid is estimated the same way from their own need and budget. The suggestion bids just over the likeliest competitor without going past 1.6× the player's worth to you, and bids low when nobody else needs the player.
+
 The lineup optimizer fills the most restrictive slots first (QB, K, DEF, then FLEX, then SUPER_FLEX). It respects your league's `roster_positions`, skips players on IR/taxi, and won't suggest dropping below one QB per QB/superflex slot or your only player at a required position. K and DEF are treated as weekly streamers.
 
 IDP slots aren't modeled: whoever is in them now stays put.

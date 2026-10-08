@@ -114,6 +114,21 @@ export interface WaiverTarget {
   contestedBy: string[];
   /** Team projected to claim this player before your turn, if any. */
   likelyClaimedBy: string | null;
+  /** FAAB leagues only. */
+  bid: BidSuggestion | null;
+}
+
+export interface BidSuggestion {
+  /** What we'd bid. */
+  suggested: number;
+  /** What the player is worth to you alone, ignoring competition. */
+  value: number;
+  /** Rough amount needed to beat the most likely competing bid, if anyone else bids. */
+  toWin: number | null;
+  /** Don't go above this. */
+  ceiling: number;
+  /** Other teams likely to bid, with a guess at their bid. */
+  competitors: { teamName: string; budgetLeft: number; estimate: number }[];
 }
 
 export type WaiverType = "rolling" | "reverse" | "faab";
@@ -126,6 +141,16 @@ export interface WaiverInfo {
   /** FAAB budget for the season, and how much of it you have left. */
   budget: number | null;
   budgetLeft: number | null;
+}
+
+interface TeamModel {
+  roster: Roster;
+  teamName: string;
+  avatar: string | null;
+  players: PlayerAnalysis[];
+  lineup: LineupSlot[];
+  /** Free agents who'd improve this team's lineup, with the gain. */
+  interest: Map<string, { gain: number; over: PlayerAnalysis | null }>;
 }
 
 export interface Rival {
@@ -791,7 +816,7 @@ export async function analyzeLeague(opts: {
           : `${dropFor.name} is your most expendable bench player`,
       );
     }
-    waivers.push({ player: target, dropFor, reason: capitalize(parts.join("; ")) + ".", contestedBy: [], likelyClaimedBy: null });
+    waivers.push({ player: target, dropFor, reason: capitalize(parts.join("; ")) + ".", contestedBy: [], likelyClaimedBy: null, bid: null });
   }
 
   // --- Waiver order and rivals ---
@@ -811,44 +836,92 @@ export async function analyzeLeague(opts: {
     return left > myBudget || (left === myBudget && pos < myPos);
   };
 
-  // Score each team ahead of you the same way as yours to guess what they'd
-  // claim: free agents who would crack their starting lineup.
+  // Model every other team the same way as yours: their players, best
+  // lineup, and which free agents would crack it. Used to predict waiver
+  // claims, FAAB competition and trades.
   const contestPool = freeAgents
     .filter((p) => p.position !== "K" && p.position !== "DEF" && !p.onBye && vor(p) > -2)
     .sort((a, b) => vor(b) - vor(a))
     .slice(0, 40);
-  const rivals: Rival[] = rosters
-    .filter((r) => r.roster_id !== mine.roster_id && r.players?.length && isAhead(r))
+  const others: TeamModel[] = rosters
+    .filter((r) => r.roster_id !== mine.roster_id && r.players?.length)
     .map((r) => {
       const out = new Set([...(r.reserve ?? []), ...(r.taxi ?? [])]);
       const theirIds = (r.players ?? []).filter((id) => id !== "0" && !out.has(id));
-      const theirPlayers = analyzePlayers(theirIds, inputs, new Map());
+      const players = [...analyzePlayers(theirIds, inputs, new Map()).values()];
+      const byId = new Map(players.map((p) => [p.id, p]));
       const theirCurrent = starterSlots.map((slot, i) => {
         const id = r.starters?.[i];
-        return { slot, player: id && id !== "0" ? theirPlayers.get(id) ?? null : null };
+        return { slot, player: id && id !== "0" ? byId.get(id) ?? null : null };
       });
-      const theirLineup = optimizeLineup(league.roster_positions, [...theirPlayers.values()], theirCurrent);
-      const targets = contestPool
-        .map((p) => ({ p, up: lineupUpgrade(p, theirLineup) }))
-        .filter((x) => x.up.gain >= 1)
-        .sort((a, b) => vor(b.p) + b.up.gain - (vor(a.p) + a.up.gain))
-        .slice(0, 5)
-        .map((x) => ({ player: x.p, over: x.up.over }));
+      const lineup = optimizeLineup(league.roster_positions, players, theirCurrent);
+      const interest = new Map<string, { gain: number; over: PlayerAnalysis | null }>();
+      for (const p of contestPool) {
+        const up = lineupUpgrade(p, lineup);
+        if (up.gain >= 1) interest.set(p.id, up);
+      }
       return {
-        rosterId: r.roster_id,
+        roster: r,
         teamName: teamNameOf(r.owner_id),
         avatar: users.find((u) => u.user_id === r.owner_id)?.avatar ?? null,
-        waiverPosition: waiverPos(r),
-        budgetLeft: budgetLeft(r),
-        targets,
-        projectedClaim: null as PlayerAnalysis | null,
+        players,
+        lineup,
+        interest,
       };
-    })
+    });
+
+  const rivals: Rival[] = others
+    .filter((t) => isAhead(t.roster))
+    .map((t) => ({
+      rosterId: t.roster.roster_id,
+      teamName: t.teamName,
+      avatar: t.avatar,
+      waiverPosition: waiverPos(t.roster),
+      budgetLeft: budgetLeft(t.roster),
+      targets: contestPool
+        .filter((p) => t.interest.has(p.id))
+        .sort((x, y) => vor(y) + t.interest.get(y.id)!.gain - (vor(x) + t.interest.get(x.id)!.gain))
+        .slice(0, 5)
+        .map((p) => ({ player: p, over: t.interest.get(p.id)!.over })),
+      projectedClaim: null as PlayerAnalysis | null,
+    }))
     .sort((a, b) =>
       waiverType === "faab"
         ? (b.budgetLeft ?? 0) - (a.budgetLeft ?? 0) || (a.waiverPosition ?? 99) - (b.waiverPosition ?? 99)
         : (a.waiverPosition ?? 99) - (b.waiverPosition ?? 99),
     );
+  // FAAB: what a player is worth as a share of the budget left. A free agent
+  // who adds ~5 pts/game over your lineup is worth about a quarter of it
+  // (capped at 35%); a marginal upgrade a few percent. Everyone else is estimated the same way
+  // from their own need and budget, and you bid just over the likeliest
+  // competitor — but never far past what the player is worth to you.
+  const minBid = Number(league.settings.waiver_bid_min ?? 0);
+  const budgetShare = (value: number) => Math.min(0.35, Math.max(0.02, value / 20));
+  const suggestBid = (w: WaiverTarget): BidSuggestion => {
+    const p = w.player;
+    if (p.position === "K" || p.position === "DEF") {
+      const amount = Math.min(myBudget, Math.max(minBid, 1));
+      return { suggested: amount, value: amount, toWin: null, ceiling: amount, competitors: [] };
+    }
+    const value = Math.max(minBid, Math.round(myBudget * budgetShare(claimValue(p))));
+    const ceiling = Math.min(myBudget, Math.max(value, Math.round(value * 1.6)));
+    const competitors = others
+      .filter((t) => t.interest.has(p.id))
+      .map((t) => {
+        const left = budgetLeft(t.roster) ?? 0;
+        const estimate = Math.min(left, Math.round(left * budgetShare(vor(p) + t.interest.get(p.id)!.gain)));
+        return { teamName: t.teamName, budgetLeft: left, estimate };
+      })
+      .filter((c) => c.estimate > 0)
+      .sort((a, b) => b.estimate - a.estimate);
+    const toWin = competitors.length ? Math.min(myBudget, competitors[0].estimate + 1) : null;
+    const suggested =
+      toWin === null
+        ? Math.max(minBid, Math.round(value * 0.6)) // nobody else needs this player: save money
+        : Math.min(ceiling, Math.max(value, toWin));
+    return { suggested, value, toWin, ceiling, competitors: competitors.slice(0, 4) };
+  };
+
   // Simulate the waiver run up to your turn: each team ahead takes its top
   // target that hasn't gone yet. A rough guess (teams can put in several
   // claims), but it shows which of your targets are realistic.
@@ -863,6 +936,14 @@ export async function analyzeLeague(opts: {
   for (const w of waivers) {
     w.contestedBy = rivals.filter((r) => r.targets.some((t) => t.player.id === w.player.id)).map((r) => r.teamName);
     w.likelyClaimedBy = claimedBy.get(w.player.id) ?? null;
+    if (waiverType === "faab") {
+      // Blind bidding: everyone with interest competes, regardless of order.
+      const bid = suggestBid(w);
+      w.bid = bid;
+      w.contestedBy = bid.competitors.map((c) => c.teamName);
+      const top = bid.competitors[0];
+      w.likelyClaimedBy = top && top.estimate >= bid.suggested ? top.teamName : null;
+    }
   }
   const recommended = new Set(waivers.map((w) => w.player.id));
   const backupTargets: PlayerAnalysis[] = [];
