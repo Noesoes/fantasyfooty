@@ -39,7 +39,7 @@ IDP slots aren't modeled: whoever is in them now stays put.
 ### Web app on GitHub Pages
 
 1. **Settings → Pages → Build and deployment → Source: GitHub Actions**
-2. Push to `main` (or run the *Deploy to GitHub Pages* workflow). The site is published at `https://<you>.github.io/sleeper-lineup-advisor/`.
+2. Push to `main` (or run the *Deploy to GitHub Pages* workflow). The site is published at `https://noesoes.github.io/fantasyfooty/`.
 
 ### Weekly report
 
