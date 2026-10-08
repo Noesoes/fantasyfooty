@@ -1,0 +1,46 @@
+name: Weekly lineup report
+
+# Every Tuesday morning (after Monday Night Football, before Sleeper's default
+# Wednesday waiver run), post next week's recommendations as a GitHub issue.
+# GitHub emails you about new issues on your own repos.
+on:
+  schedule:
+    - cron: "0 14 * * 2" # Tuesdays 14:00 UTC (7am PT / 10am ET)
+  workflow_dispatch:
+    inputs:
+      week:
+        description: "Week to analyze (blank = upcoming week)"
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Generate report
+        env:
+          SLEEPER_USERNAME: ${{ vars.SLEEPER_USERNAME }}
+          SLEEPER_LEAGUE_ID: ${{ vars.SLEEPER_LEAGUE_ID }}
+          WEEK: ${{ inputs.week }}
+        run: |
+          if [ -z "$SLEEPER_USERNAME" ]; then
+            echo "::error::Set the SLEEPER_USERNAME repository variable (Settings → Secrets and variables → Actions → Variables)."
+            exit 1
+          fi
+          npm run --silent report > report.md
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Post as issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="$(head -n1 report.md | sed 's/^# //')"
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "${title:-Weekly lineup report}" --body-file report.md
