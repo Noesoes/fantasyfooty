@@ -232,9 +232,12 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
   const seasonById = new Map(seasonStats.map((r) => [r.player_id, r]));
   const recentById = recentStats.map((week) => new Map(week.map((r) => [r.player_id, r])));
   const trendById = new Map(trending.map((t) => [t.player_id, t.count]));
-  const teamsPlaying = new Set(
-    projections.filter((r) => r.opponent && r.team).map((r) => r.team as string),
+  // Team -> this week's opponent. Players Sleeper doesn't project (often
+  // injured starters) come without an opponent, so look it up by team.
+  const opponentByTeam = new Map(
+    projections.filter((r) => r.opponent && r.team).map((r) => [r.team as string, r.opponent as string]),
   );
+  const teamsPlaying = new Set(opponentByTeam.keys());
   const matchupFor = buildDefenseTable(seasonStats);
 
   const result = new Map<string, PlayerAnalysis>();
@@ -263,7 +266,8 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
       ? recentPoints.reduce((a, b) => a + b, 0) / recentPoints.length
       : null;
 
-    const matchup = proj?.opponent ? matchupFor(proj.opponent, position) : null;
+    const opponent = proj?.opponent ?? (team ? opponentByTeam.get(team) : undefined);
+    const matchup = opponent ? matchupFor(opponent, position) : null;
 
     // --- This week's expected points ---
     let weekScore = projection > 0 ? projection : (recentAvg ?? seasonAvg ?? 0) * 0.8;
@@ -272,6 +276,9 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
       // Projections already bake in the matchup, so only lean on it lightly.
       const nudge = Math.min(1.12, Math.max(0.88, 1 + (matchup.ratio - 1) * 0.5));
       weekScore *= nudge;
+    }
+    if (projection === 0 && team && !onBye && !(injury && OUT_STATUSES.has(injury))) {
+      notes.push("No Sleeper projection yet — estimated from recent games");
     }
     if (!team) {
       weekScore = 0;
