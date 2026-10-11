@@ -7,12 +7,23 @@ import { describeMatchup, type Analysis, type PlayerAnalysis } from "@/lib/advis
 import { avatarUrl } from "@/lib/sleeper";
 import { evaluateTrade, findTrades, type TradeVerdict } from "@/lib/trades";
 import { buildPlan, type Plan } from "@/lib/planner";
+import { buildPlayoffOdds, type PlayoffOdds, type PlayoffTeam } from "@/lib/playoffs";
 import { buildInjuryReport, type InjuryReport, type InjuryRow, type Verdict } from "@/lib/injuries";
 import { buildTrackRecord, type TrackRecord } from "@/lib/backtest";
 import { fetchLive, type LivePlayer, type LiveSide, type LiveState } from "@/lib/live";
 import { Card, Empty, Headshot, MatchupChip, PlayerLine, Points, PosBadge, SlotBadge } from "./ui";
 
-type Tab = "live" | "plan" | "lineup" | "injuries" | "waivers" | "trades" | "planner" | "record" | "roster";
+type Tab =
+  | "live"
+  | "plan"
+  | "lineup"
+  | "injuries"
+  | "waivers"
+  | "trades"
+  | "planner"
+  | "playoffs"
+  | "record"
+  | "roster";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "plan", label: "Game plan" },
@@ -21,6 +32,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "waivers", label: "Waivers" },
   { id: "trades", label: "Trades" },
   { id: "planner", label: "Season" },
+  { id: "playoffs", label: "Playoffs" },
   { id: "record", label: "Record" },
   { id: "roster", label: "Roster" },
 ];
@@ -101,6 +113,7 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
       {tab === "waivers" && <Waivers a={a} onRefresh={onRefresh} refreshing={refreshing} />}
       {tab === "trades" && <Trades a={a} />}
       {tab === "planner" && <Planner a={a} />}
+      {tab === "playoffs" && <Playoffs a={a} />}
       {tab === "record" && <Record a={a} />}
       {tab === "roster" && <Roster a={a} />}
     </div>
@@ -1465,6 +1478,230 @@ function Planner({ a }: { a: Analysis }) {
         <p className="mt-3 text-xs text-ink-400">
           Bold = in your best lineup that week. Darker green = more points. Future weeks use Sleeper&apos;s projections,
           which update as the season goes.
+        </p>
+      </Card>
+    </div>
+  );
+}
+
+// --- Playoff odds ---------------------------------------------------------
+
+function TeamMark({ t, size = 28 }: { t: Pick<PlayoffTeam, "avatar" | "teamName">; size?: number }) {
+  return t.avatar ? (
+    <img src={avatarUrl(t.avatar)} alt="" className="shrink-0 rounded-full" style={{ width: size, height: size }} />
+  ) : (
+    <span
+      className="flex shrink-0 items-center justify-center rounded-full bg-ink-700 text-xs font-bold"
+      style={{ width: size, height: size }}
+    >
+      {t.teamName.charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
+function oddsTone(p: number) {
+  return p >= 75 ? "text-mint-400" : p >= 40 ? "text-amber-300" : "text-rose-300";
+}
+
+const record = (t: PlayoffTeam) => `${t.wins}-${t.losses}${t.ties ? `-${t.ties}` : ""}`;
+
+function Playoffs({ a }: { a: Analysis }) {
+  const { data: odds, error } = useAsync<PlayoffOdds>(() => buildPlayoffOdds(a), [a]);
+  if (error) return <Empty>Couldn&apos;t simulate the season: {error}</Empty>;
+  if (!odds) {
+    return (
+      <div className="flex flex-col gap-3" aria-busy="true">
+        <div className="skeleton h-40 rounded-2xl" />
+        <div className="skeleton h-80 rounded-2xl" />
+      </div>
+    );
+  }
+  const me = odds.me;
+  const likelySeed = me.seedPct.indexOf(Math.max(...me.seedPct)) + 1;
+  const leverage = [...odds.mustWin].sort((x, y) => y.ifWin - y.ifLose - (x.ifWin - x.ifLose));
+  const topSwing = new Set(leverage.slice(0, 3).map((w) => w.week));
+  const safe = odds.winsOutlook.find((w) => w.playoffPct >= 80 && w.chance > 0);
+  const over = odds.remainingWeeks.length === 0;
+  return (
+    <div className="flex flex-col gap-5">
+      <Card title="Your playoff odds">
+        <div className="grid gap-4 sm:grid-cols-[auto_1fr] sm:items-center">
+          <div className="flex items-end gap-2">
+            <span className={`glow font-mono text-7xl leading-none font-black tabular-nums ${oddsTone(me.playoffPct)}`}>
+              {me.playoffPct >= 99.95
+                ? "100"
+                : me.playoffPct < 0.05
+                  ? "0"
+                  : me.playoffPct.toFixed(me.playoffPct < 10 ? 1 : 0)}
+            </span>
+            <span className="display pb-1 text-2xl font-bold text-ink-400">%</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              { label: "Record", value: record(me) },
+              { label: "Proj. wins", value: me.projectedWins.toFixed(1) },
+              { label: "Likely seed", value: `#${likelySeed}` },
+              odds.byes > 0
+                ? { label: `Bye (top ${odds.byes})`, value: `${me.byePct.toFixed(0)}%` }
+                : { label: "Points for", value: me.pointsFor.toFixed(0) },
+            ].map((s) => (
+              <div key={s.label} className="border border-ink-700 bg-ink-850 px-3 py-2">
+                <div className="text-[10px] font-bold tracking-wider text-ink-400 uppercase">{s.label}</div>
+                <div className="font-mono text-xl font-bold tabular-nums">{s.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <p className="mt-4 text-xs leading-relaxed text-ink-400">
+          {over
+            ? "The regular season is over — these are the final standings."
+            : `${(10000).toLocaleString()} simulations of weeks ${odds.remainingWeeks[0]}–${odds.remainingWeeks.at(-1)} using the real schedule, each team's projected lineup strength and actual points so far. Top ${odds.playoffTeams} make it; ties broken on points for${odds.divisions ? ", division winners seeded first" : ""}${odds.medianGames ? "; includes the weekly game vs. the league median" : ""}.`}
+          {safe && !over && (
+            <>
+              {" "}
+              <b className="text-ink-200">
+                {safe.wins} wins gets you in {safe.playoffPct.toFixed(0)}% of the time.
+              </b>
+            </>
+          )}
+        </p>
+      </Card>
+
+      {!over && odds.mustWin.length > 0 && (
+        <Card
+          title="Biggest games left"
+          action={<span className="text-xs text-ink-400">playoff odds if you win / lose</span>}
+        >
+          <ul className="flex flex-col gap-2">
+            {odds.mustWin.map((w) => {
+              const swing = w.ifWin - w.ifLose;
+              const hot = topSwing.has(w.week) && swing >= 5;
+              return (
+                <li
+                  key={w.week}
+                  className={`flex flex-wrap items-center gap-x-4 gap-y-1 border px-3 py-2.5 text-sm ${
+                    hot ? "border-hot/40 border-l-4 border-l-hot bg-hot/10" : "border-ink-700 bg-ink-850"
+                  }`}
+                >
+                  <span className="display w-16 shrink-0 font-bold text-ink-300">Wk {w.week}</span>
+                  <span className="min-w-0 flex-1 basis-[calc(100%-5rem)] truncate sm:basis-auto">
+                    vs <b>{w.opponent ?? "TBD"}</b>
+                    <span className="ml-2 text-xs text-ink-400">{w.winProbability.toFixed(0)}% to win</span>
+                  </span>
+                  <span className="ml-20 font-mono text-xs tabular-nums sm:ml-0">
+                    <span className="text-mint-400">{w.ifWin.toFixed(0)}%</span>
+                    <span className="text-ink-500"> / </span>
+                    <span className="text-rose-300">{w.ifLose.toFixed(0)}%</span>
+                  </span>
+                  <span
+                    className={`ml-auto w-20 shrink-0 text-right font-mono text-xs font-bold tabular-nums sm:ml-0 ${hot ? "text-hot" : "text-ink-400"}`}
+                  >
+                    {hot ? "MUST WIN" : `${swing.toFixed(0)}% swing`}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
+
+      {!over && odds.winsOutlook.length > 1 && (
+        <Card title="Wins you need">
+          <div className="flex items-end gap-1.5 overflow-x-auto pb-1">
+            {odds.winsOutlook
+              .filter((w) => w.chance >= 0.5)
+              .map((w) => (
+                <div key={w.wins} className="flex w-12 shrink-0 flex-col items-center gap-1">
+                  <span className={`font-mono text-xs font-bold tabular-nums ${oddsTone(w.playoffPct)}`}>
+                    {w.playoffPct.toFixed(0)}%
+                  </span>
+                  <div className="flex h-24 w-full items-end bg-ink-850">
+                    <div
+                      className={`w-full ${w.playoffPct >= 75 ? "bg-mint-400" : w.playoffPct >= 40 ? "bg-amber-300" : "bg-rose-400/70"}`}
+                      style={{ height: `${Math.max(3, w.playoffPct)}%` }}
+                    />
+                  </div>
+                  <span className="display text-sm font-bold">{w.wins}W</span>
+                  <span className="text-[10px] text-ink-400">{w.chance.toFixed(0)}% likely</span>
+                </div>
+              ))}
+          </div>
+          <p className="mt-3 text-xs text-ink-400">
+            Bar height = your playoff chance if you finish with that many wins. Below: how likely each finish is.
+          </p>
+        </Card>
+      )}
+
+      <Card title="League outlook">
+        <div className="-mx-4 overflow-x-auto sm:-mx-5">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-[10px] tracking-wider text-ink-400 uppercase">
+                <th className="py-2 pr-2 pl-4 text-left font-semibold sm:pl-5">Team</th>
+                <th className="px-2 py-2 text-right font-semibold">Rec</th>
+                <th className="hidden px-2 py-2 text-right font-semibold sm:table-cell">PF</th>
+                <th className="hidden px-2 py-2 text-right font-semibold sm:table-cell">Pts/wk</th>
+                <th className="px-2 py-2 text-right font-semibold">Proj W</th>
+                {odds.byes > 0 && <th className="px-2 py-2 text-right font-semibold">Bye</th>}
+                <th className="py-2 pr-4 pl-2 text-right font-semibold sm:pr-5">Playoffs</th>
+              </tr>
+            </thead>
+            <tbody>
+              {odds.teams.map((t, i) => (
+                <tr
+                  key={t.rosterId}
+                  className={`border-t ${i === odds.playoffTeams ? "border-t-2 border-dashed border-t-hot/60" : "border-ink-700/60"} ${
+                    t.rosterId === me.rosterId ? "bg-mint-400/10" : ""
+                  }`}
+                >
+                  <td className="py-2 pr-2 pl-4 sm:pl-5">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <TeamMark t={t} size={24} />
+                      <span className={`truncate ${t.rosterId === me.rosterId ? "font-bold text-mint-400" : ""}`}>
+                        {t.teamName}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-2 py-2 text-right font-mono tabular-nums">{record(t)}</td>
+                  <td className="hidden px-2 py-2 text-right font-mono text-ink-300 tabular-nums sm:table-cell">
+                    {t.pointsFor.toFixed(0)}
+                  </td>
+                  <td className="hidden px-2 py-2 text-right font-mono text-ink-300 tabular-nums sm:table-cell">
+                    {t.strength.toFixed(0)}
+                  </td>
+                  <td className="px-2 py-2 text-right font-mono tabular-nums">{t.projectedWins.toFixed(1)}</td>
+                  {odds.byes > 0 && (
+                    <td className="px-2 py-2 text-right font-mono text-ink-300 tabular-nums">{t.byePct.toFixed(0)}%</td>
+                  )}
+                  <td className="py-2 pr-4 pl-2 sm:pr-5">
+                    <div className="flex items-center justify-end gap-2">
+                      <div className="hidden h-1.5 w-16 overflow-hidden bg-ink-700 sm:block">
+                        <div
+                          className={
+                            t.playoffPct >= 75
+                              ? "h-full bg-mint-400"
+                              : t.playoffPct >= 40
+                                ? "h-full bg-amber-300"
+                                : "h-full bg-rose-400/70"
+                          }
+                          style={{ width: `${t.playoffPct}%` }}
+                        />
+                      </div>
+                      <span className={`w-12 text-right font-mono font-bold tabular-nums ${oddsTone(t.playoffPct)}`}>
+                        {t.playoffPct >= 99.95
+                          ? "100"
+                          : t.playoffPct.toFixed(t.playoffPct < 10 && t.playoffPct > 0 ? 1 : 0)}
+                        %
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-xs text-ink-400">
+          Dashed line = playoff cut. Pts/wk is each team&apos;s projected weekly score for the rest of the season.
         </p>
       </Card>
     </div>

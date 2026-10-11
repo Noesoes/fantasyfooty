@@ -45,6 +45,8 @@ Every player gets two scores.
 
 **Season planner (Season tab):** pulls Sleeper's projection for every remaining week for each of your players, builds your best lineup each week, and flags weeks where byes leave you with no one to start (holes) or no backup (thin), so you can plan pickups a week early. It also shows each player's projected points across your league's fantasy playoff weeks.
 
+**Playoff odds (Playoffs tab):** simulates the rest of the regular season 10,000 times using the current standings, Sleeper's real remaining schedule, and each team's strength. Strength is its best lineup's projected points, blended with its actual points per week as the season goes on, and allows for the chance that our read on a team is off. If this week's games are underway, each simulation starts from the live scores. Seeding follows your league's settings: number of playoff teams, ties broken on points for, division winners first, and an extra weekly game vs. the league median. It shows your playoff and first-round-bye chances, your most likely seed, every team's odds, the remaining games with your playoff chances if you win vs. lose (the biggest swings are flagged as must-wins), and your chances at each final win total.
+
 **Track record (Record tab):** replays every completed week from Sleeper's matchup history (each week's roster, starters and actual points). It compares the lineup you started, the lineup the advisor would have picked from that week's pre-game projections, and the best lineup in hindsight. It also grades each start/sit call where the advisor disagreed with you. The weekly report opens with last week's result. Nothing needs to be stored, so it works for any league.
 
 **Live mode (Live tab):** once the week's games kick off, the scoreboard switches to live scoring and a Live tab opens. It shows both lineups with real points from Sleeper, each player's game status and clock, and "still to come" points (projection × share of the game left, using ESPN's game clock). It also shows a live win probability (assuming player scores vary by about ±60% of projection) and late-swap tips: a bench player or free agent whose game hasn't started and would beat a starter who won't play or is projected lower. It refreshes every minute while games are on.
@@ -117,10 +119,11 @@ lib/gameday.ts             pre-kickoff inactive check
 lib/injuries.ts            injury report and chance-to-play estimates
 lib/scoreboard.ts          NFL games: clock, score, Vegas lines, weather
 lib/live.ts                live scoring, win probability, late swaps
+lib/playoffs.ts            playoff odds simulation
 scripts/fetch-snapshots.mjs ESPN injury + scoreboard snapshots used by the deploy workflow
 scripts/weekly-report.ts   CLI entry point used by the weekly GitHub Action
 scripts/gameday-alert.ts   CLI entry point used by the gameday GitHub Action
 app/page.tsx               landing page, league/week controls
-app/results.tsx            the tabs (live, game plan, lineup, injuries, waivers, trades, season, record, roster)
+app/results.tsx            the tabs (live, game plan, lineup, injuries, waivers, trades, season, playoffs, record, roster)
 app/ui.tsx                 shared UI pieces
 ```
