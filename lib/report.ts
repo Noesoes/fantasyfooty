@@ -71,16 +71,28 @@ export function renderMarkdown(a: Analysis, record?: TrackRecord | null, injurie
   }
 
   lines.push("### Recommended lineup");
-  lines.push("| Slot | Player | Proj | Matchup | Notes |");
-  lines.push("| --- | --- | ---: | --- | --- |");
+  lines.push("| Slot | Player | Proj | Matchup | Vegas / weather | Notes |");
+  lines.push("| --- | --- | ---: | --- | --- | --- |");
   for (const s of a.optimalLineup) {
     const p = s.player;
     if (!p) {
-      lines.push(`| ${s.slot} | _empty_ | | | |`);
+      lines.push(`| ${s.slot} | _empty_ | | | | |`);
       continue;
     }
     const matchup = p.matchup ? describeMatchup(p.matchup, p.position) : p.onBye ? "BYE" : "";
-    lines.push(`| ${s.slot} | ${p.name} (${p.team ?? "FA"}) | ${p.weekScore} | ${matchup} | ${p.notes.join("; ")} |`);
+    const g = p.game;
+    const vegas = g
+      ? [
+          g.implied !== null && `${g.implied} implied`,
+          g.spread !== null && (g.spread === 0 ? "PK" : g.spread < 0 ? `${g.spread}` : `+${g.spread}`),
+          g.indoor ? "indoors" : g.weather,
+        ]
+          .filter(Boolean)
+          .join(", ")
+      : "";
+    lines.push(
+      `| ${s.slot} | ${p.name} (${p.team ?? "FA"}) | ${p.weekScore} | ${matchup} | ${vegas} | ${p.notes.join("; ")} |`,
+    );
   }
   lines.push("");
 

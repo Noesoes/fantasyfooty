@@ -187,3 +187,102 @@ export async function getWeekGames(season: string, week: number): Promise<WeekGa
   }
   return { byTeam, source: "sleeper", asOf: Date.now() };
 }
+
+export interface GameOutlook {
+  opponent: string;
+  /** Points Vegas expects this player's team to score. */
+  implied: number | null;
+  /** Team's line: negative = favored by that many. */
+  spread: number | null;
+  overUnder: number | null;
+  /** e.g. "Snow, 28°F"; null indoors or unknown. */
+  weather: string | null;
+  indoor: boolean;
+  /** Multiplier applied to this week's projection. */
+  factor: number;
+  /** Plain-English reason when the factor moved the projection. */
+  note: string | null;
+}
+
+const AVG_IMPLIED = 22.5;
+const PASSING = new Set(["QB", "WR", "TE"]);
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+
+/**
+ * Small start/sit nudges from the betting line and the forecast. Sleeper's
+ * projections already lean on Vegas, so these stay light: a few percent for
+ * a shootout or a slog, more for snow and wind that hurt passing and kicking.
+ */
+export function gameOutlook(game: Game | undefined, team: string | null, position: string): GameOutlook | null {
+  if (!game || !team) return null;
+  const opponent = game.home === team ? game.away : game.home;
+  const implied = impliedTotal(game, team);
+  const spread = game.spread ? (game.spread.team === team ? -game.spread.points : game.spread.points) : null;
+  const reasons: string[] = [];
+  let factor = 1;
+
+  if (implied !== null && game.overUnder !== null) {
+    if (position === "DEF") {
+      const against = game.overUnder - implied;
+      const f = 1 + clamp(((AVG_IMPLIED - against) / AVG_IMPLIED) * 0.4, -0.08, 0.08);
+      factor *= f;
+      if (Math.abs(f - 1) >= 0.03) reasons.push(`${opponent} implied for ${against.toFixed(1)} pts`);
+    } else {
+      const f = 1 + clamp(((implied - AVG_IMPLIED) / AVG_IMPLIED) * 0.3, -0.07, 0.07);
+      factor *= f;
+      if (Math.abs(f - 1) >= 0.03) reasons.push(`${team} implied for ${implied.toFixed(1)} pts`);
+    }
+    if (spread !== null && position === "RB") {
+      if (spread <= -7) {
+        factor *= 1.02;
+        reasons.push(`favored by ${-spread} (run-heavy script)`);
+      } else if (spread >= 7) {
+        factor *= 0.98;
+        reasons.push(`${spread}-pt underdog`);
+      }
+    }
+  }
+
+  let weather: string | null = null;
+  if (!game.indoor && game.weather) {
+    const c = game.weather.condition.toLowerCase();
+    const temp = game.weather.temp;
+    weather = [game.weather.condition, temp !== null ? `${temp}°F` : null].filter(Boolean).join(", ") || null;
+    const before = factor;
+    if (/snow|blizzard|flurr/.test(c)) {
+      if (PASSING.has(position)) factor *= 0.93;
+      else if (position === "K") factor *= 0.9;
+      else if (position === "RB") factor *= 1.02;
+      else if (position === "DEF") factor *= 1.05;
+    } else if (/rain|shower|storm|thunder|drizzle/.test(c)) {
+      if (PASSING.has(position)) factor *= 0.97;
+      else if (position === "K") factor *= 0.95;
+      else if (position === "DEF") factor *= 1.02;
+    }
+    if (/wind|breez|gust/.test(c)) {
+      if (PASSING.has(position)) factor *= 0.94;
+      else if (position === "K") factor *= 0.88;
+    }
+    if (temp !== null && temp <= 20) {
+      if (PASSING.has(position)) factor *= 0.97;
+      else if (position === "K") factor *= 0.95;
+    }
+    if (Math.abs(factor / before - 1) >= 0.02 && weather) reasons.push(weather);
+  }
+
+  factor = clamp(factor, 0.85, 1.1);
+  const pctMove = Math.round((factor - 1) * 100);
+  return {
+    opponent,
+    implied,
+    spread,
+    overUnder: game.overUnder,
+    weather,
+    indoor: game.indoor,
+    factor,
+    note:
+      Math.abs(pctMove) >= 3 && reasons.length
+        ? `${pctMove > 0 ? "Boost" : "Downgrade"} ${pctMove > 0 ? "+" : ""}${pctMove}%: ${reasons.join(", ")}`
+        : null,
+  };
+}

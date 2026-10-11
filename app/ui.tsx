@@ -135,6 +135,46 @@ export function MatchupChip({ p, compact }: { p: PlayerAnalysis; compact?: boole
         ))}
       </span>
       {!compact && <span className="text-[11px] text-ink-400">{g.label}</span>}
+      <GameChip p={p} />
+    </span>
+  );
+}
+
+function weatherGlyph(condition: string): string | null {
+  const c = condition.toLowerCase();
+  if (/snow|blizzard|flurr/.test(c)) return "❄";
+  if (/wind|breez|gust/.test(c)) return "💨";
+  if (/rain|shower|storm|thunder|drizzle/.test(c)) return "☂";
+  return null;
+}
+
+/** Vegas implied team total (and a glyph for bad weather) for this week's game. */
+export function GameChip({ p }: { p: PlayerAnalysis }) {
+  const g = p.game;
+  if (!g || p.onBye || (g.implied === null && !g.weather)) return null;
+  const glyph = g.weather ? weatherGlyph(g.weather) : null;
+  const tone =
+    g.implied === null
+      ? "text-ink-400"
+      : g.implied >= 26
+        ? "text-mint-400"
+        : g.implied <= 19
+          ? "text-rose-300"
+          : "text-ink-400";
+  const title = [
+    g.implied !== null && `${p.team} implied for ${g.implied} pts`,
+    g.spread !== null &&
+      (g.spread === 0 ? "pick'em" : g.spread < 0 ? `favored by ${-g.spread}` : `${g.spread}-pt underdog`),
+    g.overUnder !== null && `O/U ${g.overUnder}`,
+    g.indoor ? "indoors" : g.weather,
+    g.note,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <span title={title} className="inline-flex items-center gap-1 font-mono text-[11px] tabular-nums">
+      {g.implied !== null && <span className={tone}>{g.implied.toFixed(1)}</span>}
+      {glyph && <span aria-label={g.weather ?? ""}>{glyph}</span>}
     </span>
   );
 }

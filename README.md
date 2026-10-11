@@ -25,6 +25,7 @@ Every player gets two scores.
 - Nudged up or down by the **opponent's points allowed to that position** this season (shrunk toward neutral early in the season, when samples are small)
 - **QB depth chart:** Sleeper only projects pass attempts for the QB it expects to start, so backups score 0, and a usual starter who isn't projected to start (e.g. Lamar with Huntley projected to start) is flagged
 - Zeroed for **byes** and players ruled Out/IR/Suspended. Questionable ×0.85, Doubtful ×0.3
+- **Vegas and weather:** a few percent up or down for the team's implied total (half the over/under ± half the spread, vs. a ~22.5-pt average; for defenses, the opponent's), a small game-script nudge for RBs who are big favorites or underdogs, and down for passing games and kickers in snow, rain, wind or bitter cold (outdoor games only). Each player shows their team's implied total and a weather icon, and the Lineup tab has a *Vegas & weather* card for your starters. Lines and forecasts come from ESPN's scoreboard (snapshotted by the deploy workflow for the browser).
 
 **Rest-of-season value** (`rosValue`), used for drops and waivers:
 
@@ -117,7 +118,7 @@ lib/planner.ts             rest-of-season projections, byes and playoff weeks
 lib/backtest.ts            track record from past weeks' actual scores
 lib/gameday.ts             pre-kickoff inactive check
 lib/injuries.ts            injury report and chance-to-play estimates
-lib/scoreboard.ts          NFL games: clock, score, Vegas lines, weather
+lib/scoreboard.ts          NFL games: clock, score, Vegas lines, weather, and the start/sit nudges from them
 lib/live.ts                live scoring, win probability, late swaps
 lib/playoffs.ts            playoff odds simulation
 scripts/fetch-snapshots.mjs ESPN injury + scoreboard snapshots used by the deploy workflow

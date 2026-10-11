@@ -25,6 +25,7 @@ import {
   type StatRow,
   type TrendingPlayer,
 } from "./sleeper";
+import { gameOutlook, getWeekGames, type Game, type GameOutlook } from "./scoreboard";
 
 const RECENT_WEEKS = 3;
 // The Nth-best free agent at a position defines "replacement level".
@@ -84,6 +85,8 @@ export interface PlayerAnalysis {
   trendingAdds: number;
   weekScore: number;
   rosValue: number;
+  /** Vegas line and weather for this week's game, when known. */
+  game: GameOutlook | null;
   notes: string[];
 }
 
@@ -230,8 +233,7 @@ function scoringLabel(scoring: Record<string, number>): string {
 /** Fantasy points for a stat line under the league's scoring settings. */
 export function points(stats: Record<string, number>, scoring: Record<string, number>, position: string): number {
   const label = scoringLabel(scoring);
-  const preset =
-    label === "PPR" ? stats.pts_ppr : label === "Half PPR" ? stats.pts_half_ppr : stats.pts_std;
+  const preset = label === "PPR" ? stats.pts_ppr : label === "Half PPR" ? stats.pts_half_ppr : stats.pts_std;
   // Kickers and defenses score through yardage/points-allowed tiers that the
   // projection rows don't break out, so trust Sleeper's precomputed total.
   if (position === "K" || position === "DEF") return preset ?? 0;
@@ -279,9 +281,7 @@ function buildDefenseTable(seasonStats: StatRow[]) {
   return (opponent: string, position: string): Matchup | null => {
     const mine = perTeam.get(opponent)?.[position];
     if (mine === undefined) return null;
-    const all = [...perTeam.values()]
-      .map((t) => t[position])
-      .filter((v): v is number => typeof v === "number");
+    const all = [...perTeam.values()].map((t) => t[position]).filter((v): v is number => typeof v === "number");
     if (all.length < 2) return null;
     const avg = all.reduce((a, b) => a + b, 0) / all.length;
     const rank = all.filter((v) => v < mine).length + 1;
@@ -320,6 +320,7 @@ interface Inputs {
   seasonStats: StatRow[];
   recentStats: StatRow[][];
   trending: TrendingPlayer[];
+  games: Map<string, Game> | null;
 }
 
 /** Blend an observed per-game total with a prior, weighting the prior like `k` extra games. */
@@ -367,7 +368,7 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
     const proj = projById.get(id);
     const info: Partial<PlayerInfo> | undefined = proj?.player ?? extraInfo.get(id) ?? seasonById.get(id)?.player;
     const position = info?.position ?? (/^[A-Z]{2,3}$/.test(id) ? "DEF" : "?");
-    const team = (position === "DEF" ? id : proj?.team ?? info?.team) ?? null;
+    const team = (position === "DEF" ? id : (proj?.team ?? info?.team)) ?? null;
     const injury = info?.injury_status ?? null;
     const isOut = Boolean(injury && OUT_STATUSES.has(injury));
     const notes: string[] = [];
@@ -403,8 +404,7 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
     // role; a healthy player on a team that plays but gets no projection
     // probably isn't expected to play, so the prior is zero. Byes and
     // injuries say nothing about role, so fall back to the raw averages.
-    const prior =
-      projection > 0 ? projection : onBye || isOut || injury ? (recentAvg ?? seasonAvg ?? 0) : 0;
+    const prior = projection > 0 ? projection : onBye || isOut || injury ? (recentAvg ?? seasonAvg ?? 0) : 0;
     // A single spot start shouldn't read as "27 pts/game": observed averages
     // are shrunk toward the prior until there's a real sample.
     const seasonForm = shrink(seasonPts, gamesPlayed, prior, 2);
@@ -455,6 +455,11 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
       // Projections already bake in the matchup, so only lean on it lightly.
       weekScore *= Math.min(1.12, Math.max(0.88, 1 + (matchup.ratio - 1) * 0.5));
     }
+    const game = onBye ? null : gameOutlook(team ? inputs.games?.get(team) : undefined, team, position);
+    if (game && weekScore > 0) {
+      weekScore *= game.factor;
+      if (game.note) notes.push(game.note);
+    }
     if (!team) {
       weekScore = 0;
       notes.push("Not on an NFL roster");
@@ -500,6 +505,7 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
       trendingAdds: adds,
       weekScore: round1(weekScore),
       rosValue: round1(rosValue),
+      game,
       notes,
     });
   }
@@ -631,21 +637,21 @@ export async function analyzeLeague(opts: {
   const { leagueId, userId, season, week } = opts;
   const recentWeeks = Array.from({ length: RECENT_WEEKS }, (_, i) => week - 1 - i).filter((w) => w >= 1);
 
-  const [league, rosters, users, matchups, projections, seasonStats, trending, ...recentStats] = await Promise.all([
-    getLeague(leagueId),
-    getRosters(leagueId),
-    getLeagueUsers(leagueId),
-    getMatchups(leagueId, week).catch(() => []),
-    getWeekProjections(season, week),
-    getSeasonStats(season).catch(() => [] as StatRow[]),
-    getTrendingAdds().catch(() => [] as TrendingPlayer[]),
-    ...recentWeeks.map((w) => getWeekStats(season, w).catch(() => [] as StatRow[])),
-  ]);
+  const [league, rosters, users, matchups, projections, seasonStats, trending, weekGames, ...recentStats] =
+    await Promise.all([
+      getLeague(leagueId),
+      getRosters(leagueId),
+      getLeagueUsers(leagueId),
+      getMatchups(leagueId, week).catch(() => []),
+      getWeekProjections(season, week),
+      getSeasonStats(season).catch(() => [] as StatRow[]),
+      getTrendingAdds().catch(() => [] as TrendingPlayer[]),
+      getWeekGames(season, week).catch(() => null),
+      ...recentWeeks.map((w) => getWeekStats(season, w).catch(() => [] as StatRow[])),
+    ]);
   if (!league) throw new Error("League not found.");
 
-  const mine = rosters.find(
-    (r: Roster) => r.owner_id === userId || (r.co_owners ?? []).includes(userId),
-  );
+  const mine = rosters.find((r: Roster) => r.owner_id === userId || (r.co_owners ?? []).includes(userId));
   if (!mine) throw new Error("You don't have a team in this league.");
   if (!mine.players?.length) {
     throw new Error("Your roster is empty — has the draft happened yet?");
@@ -654,12 +660,20 @@ export async function analyzeLeague(opts: {
   const bestBall = league.settings.best_ball === 1;
   const teamNameOf = (ownerId: string | null) => {
     const u = users.find((x) => x.user_id === ownerId);
-    return ((u as unknown as { metadata?: { team_name?: string } })?.metadata?.team_name) || u?.display_name || "Team";
+    return (u as unknown as { metadata?: { team_name?: string } })?.metadata?.team_name || u?.display_name || "Team";
   };
   const owner = users.find((u) => u.user_id === userId);
   const teamName = teamNameOf(userId);
 
-  const inputs: Inputs = { league, week, projections, seasonStats, recentStats, trending };
+  const inputs: Inputs = {
+    league,
+    week,
+    projections,
+    seasonStats,
+    recentStats: recentStats as StatRow[][],
+    trending,
+    games: weekGames?.byTeam ?? null,
+  };
 
   // Players on IR/taxi aren't on the active roster and can't be started.
   const reserved = new Set([...(mine.reserve ?? []), ...(mine.taxi ?? [])]);
@@ -685,7 +699,7 @@ export async function analyzeLeague(opts: {
   const starterSlots = league.roster_positions.filter((s) => s !== "BN" && s !== "IR" && s !== "TAXI");
   const currentLineup: LineupSlot[] = starterSlots.map((slot, i) => {
     const id = mine.starters?.[i];
-    return { slot, player: id && id !== "0" ? myPlayers.get(id) ?? null : null };
+    return { slot, player: id && id !== "0" ? (myPlayers.get(id) ?? null) : null };
   });
   const optimalLineup = optimizeLineup(league.roster_positions, active, currentLineup);
   const total = (l: LineupSlot[]) => round1(l.reduce((sum, s) => sum + (s.player?.weekScore ?? 0), 0));
@@ -694,15 +708,15 @@ export async function analyzeLeague(opts: {
   for (const s of currentLineup) {
     if (!s.player) warnings.push(`Your ${slotName(s.slot)} slot is empty.`);
     else if (s.player.weekScore === 0) {
-      warnings.push(`${s.player.name} is in your ${slotName(s.slot)} slot: ${s.player.notes[0] ?? "not projected to score"}.`);
+      warnings.push(
+        `${s.player.name} is in your ${slotName(s.slot)} slot: ${s.player.notes[0] ?? "not projected to score"}.`,
+      );
     }
   }
 
   // --- Waiver wire ---
   const rostered = new Set(rosters.flatMap((r) => [...(r.players ?? []), ...(r.reserve ?? []), ...(r.taxi ?? [])]));
-  const usedPositions = new Set(
-    league.roster_positions.flatMap((slot) => SLOT_ELIGIBILITY[slot] ?? []),
-  );
+  const usedPositions = new Set(league.roster_positions.flatMap((slot) => SLOT_ELIGIBILITY[slot] ?? []));
   const freeAgentIds = projections
     .filter((r) => !rostered.has(r.player_id) && usedPositions.has(r.player?.position ?? ""))
     .map((r) => r.player_id);
@@ -716,8 +730,7 @@ export async function analyzeLeague(opts: {
       (p.projection > 0 || p.onBye),
   );
   // Rank by rest-of-season value, but streaming K/DEF lean on this week only.
-  const waiverRank = (p: PlayerAnalysis) =>
-    p.position === "K" || p.position === "DEF" ? p.weekScore : p.rosValue;
+  const waiverRank = (p: PlayerAnalysis) => (p.position === "K" || p.position === "DEF" ? p.weekScore : p.rosValue);
 
   const waiversByPosition: Record<string, PlayerAnalysis[]> = {};
   // Best free agents for THIS week only (gameday fill-ins).
@@ -756,16 +769,19 @@ export async function analyzeLeague(opts: {
 
   const dropPool = benchPlayers.filter((p) => canDrop(p)).sort((a, b) => vor(a) - vor(b));
   // Only flag players at or below what the waiver wire offers at their spot.
-  const drops: DropCandidate[] = dropPool.filter((p) => vor(p) < 1).slice(0, 3).map((p) => {
-    const reasons: string[] = [];
-    if (p.injury === "IR" || p.injury === "PUP") reasons.push(`on ${p.injury}`);
-    if (!p.team) reasons.push("no longer on an NFL roster");
-    if (p.seasonAvg !== null) reasons.push(`${p.seasonAvg} pts/game this season`);
-    const form = formText(p);
-    if (form) reasons.push(form);
-    if (p.seasonAvg === null && p.recentAvg === null) reasons.push(`projects ${p.projection} pts this week`);
-    return { player: p, reason: `Lowest rest-of-season value on your bench: ${reasons.join(", ")}.` };
-  });
+  const drops: DropCandidate[] = dropPool
+    .filter((p) => vor(p) < 1)
+    .slice(0, 3)
+    .map((p) => {
+      const reasons: string[] = [];
+      if (p.injury === "IR" || p.injury === "PUP") reasons.push(`on ${p.injury}`);
+      if (!p.team) reasons.push("no longer on an NFL roster");
+      if (p.seasonAvg !== null) reasons.push(`${p.seasonAvg} pts/game this season`);
+      const form = formText(p);
+      if (form) reasons.push(form);
+      if (p.seasonAvg === null && p.recentAvg === null) reasons.push(`projects ${p.projection} pts this week`);
+      return { player: p, reason: `Lowest rest-of-season value on your bench: ${reasons.join(", ")}.` };
+    });
 
   // --- Waiver targets paired with a drop ---
   const rosterSize = league.roster_positions.filter((s) => s !== "IR" && s !== "TAXI").length;
@@ -809,8 +825,7 @@ export async function analyzeLeague(opts: {
       const value = claimValue(target);
       if (value <= 0.5) continue;
       if (rosterFull) {
-        dropFor =
-          dropPool.find((p) => !takenDrops.has(p.id) && canDrop(p, target) && vor(p) + 1 < value) ?? null;
+        dropFor = dropPool.find((p) => !takenDrops.has(p.id) && canDrop(p, target) && vor(p) + 1 < value) ?? null;
         if (!dropFor) continue;
       }
     }
@@ -819,11 +834,15 @@ export async function analyzeLeague(opts: {
 
     const parts: string[] = [];
     if (!streamer && upgrade.over && upgrade.gain > 0) parts.push(`would start over ${upgrade.over.name}`);
-    if (target.trendingAdds > 0) parts.push(`${target.trendingAdds.toLocaleString()} adds across Sleeper in the last 72h`);
+    if (target.trendingAdds > 0)
+      parts.push(`${target.trendingAdds.toLocaleString()} adds across Sleeper in the last 72h`);
     const form = formText(target);
     if (form) parts.push(form);
     if (target.onBye) parts.push(`on bye in week ${week}`);
-    else parts.push(`projects ${target.weekScore} pts in week ${week}${target.matchup ? ` ${describeMatchup(target.matchup, target.position)}` : ""}`);
+    else
+      parts.push(
+        `projects ${target.weekScore} pts in week ${week}${target.matchup ? ` ${describeMatchup(target.matchup, target.position)}` : ""}`,
+      );
     if (dropFor) {
       parts.push(
         streamer
@@ -831,14 +850,22 @@ export async function analyzeLeague(opts: {
           : `${dropFor.name} is your most expendable bench player`,
       );
     }
-    waivers.push({ player: target, dropFor, reason: capitalize(parts.join("; ")) + ".", contestedBy: [], likelyClaimedBy: null, bid: null });
+    waivers.push({
+      player: target,
+      dropFor,
+      reason: capitalize(parts.join("; ")) + ".",
+      contestedBy: [],
+      likelyClaimedBy: null,
+      bid: null,
+    });
   }
 
   // --- Waiver order and rivals ---
   const waiverType: WaiverType =
     league.settings.waiver_type === 2 ? "faab" : league.settings.waiver_type === 1 ? "reverse" : "rolling";
   const budget = waiverType === "faab" ? Number(league.settings.waiver_budget ?? 100) : null;
-  const waiverPos = (r: Roster) => (typeof r.settings?.waiver_position === "number" ? r.settings.waiver_position : null);
+  const waiverPos = (r: Roster) =>
+    typeof r.settings?.waiver_position === "number" ? r.settings.waiver_position : null;
   const budgetLeft = (r: Roster) => (budget === null ? null : budget - Number(r.settings?.waiver_budget_used ?? 0));
   const myPos = waiverPos(mine) ?? Infinity;
   const myBudget = budgetLeft(mine) ?? 0;
@@ -867,7 +894,7 @@ export async function analyzeLeague(opts: {
       const byId = new Map(players.map((p) => [p.id, p]));
       const theirCurrent = starterSlots.map((slot, i) => {
         const id = r.starters?.[i];
-        return { slot, player: id && id !== "0" ? byId.get(id) ?? null : null };
+        return { slot, player: id && id !== "0" ? (byId.get(id) ?? null) : null };
       });
       const lineup = optimizeLineup(league.roster_positions, players, theirCurrent);
       const interest = new Map<string, { gain: number; over: PlayerAnalysis | null }>();
