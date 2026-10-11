@@ -420,7 +420,7 @@ function Controls({
           <div className="skew-x-12">
             <div className="text-xl leading-tight font-extrabold">Week {week}</div>
             {week === currentWeek && (
-              <div className="text-[10px] leading-tight font-bold tracking-[0.18em]">Upcoming</div>
+              <div className="text-[10px] leading-tight font-bold tracking-[0.18em]">This week</div>
             )}
           </div>
         </div>

@@ -27,8 +27,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Snapshot ESPN injury report
-        run: node scripts/fetch-injuries.mjs
+      - name: Snapshot ESPN injuries and scoreboard
+        run: node scripts/fetch-snapshots.mjs
         continue-on-error: true
       - run: npm run build
         env:

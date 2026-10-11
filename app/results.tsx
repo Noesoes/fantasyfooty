@@ -9,9 +9,10 @@ import { findTrades } from "@/lib/trades";
 import { buildPlan, type Plan } from "@/lib/planner";
 import { buildInjuryReport, type InjuryReport, type InjuryRow, type Verdict } from "@/lib/injuries";
 import { buildTrackRecord, type TrackRecord } from "@/lib/backtest";
+import { fetchLive, type LivePlayer, type LiveSide, type LiveState } from "@/lib/live";
 import { Card, Empty, Headshot, MatchupChip, PlayerLine, Points, PosBadge, SlotBadge } from "./ui";
 
-type Tab = "plan" | "lineup" | "injuries" | "waivers" | "trades" | "planner" | "record" | "roster";
+type Tab = "live" | "plan" | "lineup" | "injuries" | "waivers" | "trades" | "planner" | "record" | "roster";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "plan", label: "Game plan" },
@@ -24,15 +25,54 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "roster", label: "Roster" },
 ];
 
+/** Live scores for this week, refreshed every minute while games are on. */
+function useLive(a: Analysis) {
+  const [live, setLive] = useState<LiveState | null>(null);
+  useEffect(() => {
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = async () => {
+      try {
+        const next = await fetchLive(a);
+        if (!alive) return;
+        setLive(next);
+        // Keep polling while anything is still to be played today.
+        if (next.started && !next.allDone) timer = setTimeout(load, next.inProgress ? 60_000 : 5 * 60_000);
+      } catch {
+        if (alive) timer = setTimeout(load, 2 * 60_000);
+      }
+    };
+    void load();
+    return () => {
+      alive = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [a]);
+  return live;
+}
+
 export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => void; refreshing: boolean }) {
   const [tab, setTab] = useState<Tab>("plan");
+  const live = useLive(a);
+  const isLive = Boolean(live?.started && !live.allDone);
+  const showLive = Boolean(live?.started);
+  // Jump to the Live tab the first time we see games underway.
+  const [autoSwitched, setAutoSwitched] = useState(false);
+  useEffect(() => {
+    if (isLive && !autoSwitched) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time switch when games start
+      setTab("live");
+      setAutoSwitched(true);
+    }
+  }, [isLive, autoSwitched]);
+  const tabs = showLive ? [{ id: "live" as Tab, label: isLive ? "● Live" : "Final" }, ...TABS] : TABS;
   return (
     <div className="mt-6 flex flex-col gap-5">
       <Ticker a={a} />
-      <Scoreboard a={a} />
+      {live && showLive ? <LiveScoreboard a={a} live={live} /> : <Scoreboard a={a} />}
       <nav className="sticky top-0 z-20 -mx-4 bg-ink-950/90 px-4 py-2 backdrop-blur sm:mx-0 sm:px-1">
         <div className="no-scrollbar flex gap-1 overflow-x-auto px-2">
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
@@ -54,6 +94,7 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
           ))}
         </div>
       </nav>
+      {tab === "live" && live && <LiveTab live={live} />}
       {tab === "plan" && <GamePlan a={a} goTo={setTab} />}
       {tab === "lineup" && <Lineup a={a} />}
       {tab === "injuries" && <Injuries a={a} />}
@@ -167,6 +208,190 @@ function Scoreboard({ a }: { a: Analysis }) {
         </>
       )}
     </section>
+  );
+}
+
+// --- Live -----------------------------------------------------------------
+
+function LiveScoreboard({ a, live }: { a: Analysis; live: LiveState }) {
+  const me = live.me;
+  const opp = live.opponent;
+  const win = live.winProbability;
+  return (
+    <section className="overflow-hidden border border-ink-700/80 bg-gradient-to-b from-ink-800 to-ink-900 shadow-[0_0_48px_rgb(255_46_136/0.12)]">
+      <div className="grid sm:grid-cols-[1fr_150px_1fr]">
+        <div className="flex items-center gap-4 p-5">
+          <Avatar id={a.avatar} name={me.teamName} />
+          <div className="min-w-0">
+            <div className="display truncate text-2xl leading-tight font-extrabold">{me.teamName}</div>
+            <div className="text-xs text-ink-400">
+              {me.remaining > 0 ? `+${me.remaining} still to come · ` : ""}proj final {me.projectedFinal.toFixed(1)}
+            </div>
+          </div>
+          <div className="glow ml-auto font-mono text-6xl leading-none font-black text-ink-100 tabular-nums sm:text-7xl">
+            {me.score.toFixed(1)}
+          </div>
+        </div>
+        {opp ? (
+          <>
+            <div className="prime-gradient display flex items-center justify-center gap-3 py-2 text-ink-950 sm:flex-col sm:gap-0 sm:py-0 sm:[clip-path:polygon(14%_0,100%_0,86%_100%,0_100%)]">
+              <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.14em]">
+                {!live.allDone && <span className="h-2 w-2 animate-pulse rounded-full bg-hot" />}
+                {live.allDone ? "Final" : "Live"}
+              </span>
+              <span className="font-mono text-3xl leading-none font-black sm:text-4xl">
+                {win === null ? "—" : `${Math.round(win * 100)}%`}
+              </span>
+              <span className="text-[11px] font-bold tracking-[0.14em]">{live.allDone ? "Result" : "Win prob"}</span>
+            </div>
+            <div className="flex items-center gap-4 p-5 sm:flex-row-reverse sm:text-right">
+              <Avatar id={opp.avatar} name={opp.teamName} ring="ring-hot" />
+              <div className="min-w-0">
+                <div className="display truncate text-2xl leading-tight font-extrabold">{opp.teamName}</div>
+                <div className="text-xs text-ink-400">
+                  {opp.remaining > 0 ? `+${opp.remaining} still to come · ` : ""}proj final{" "}
+                  {opp.projectedFinal.toFixed(1)}
+                </div>
+              </div>
+              <div className="glow-hot ml-auto font-mono text-6xl leading-none font-black text-rose-300 tabular-nums sm:mr-auto sm:ml-0 sm:text-7xl">
+                {opp.score.toFixed(1)}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center p-5 text-sm text-ink-400 sm:col-span-2 sm:justify-end">
+            No head-to-head matchup this week.
+          </div>
+        )}
+      </div>
+      {opp && win !== null && (
+        <>
+          <div className="flex h-2">
+            <div className="prime-gradient shadow-[0_0_12px_rgb(25_227_255/0.6)]" style={{ width: `${win * 100}%` }} />
+            <div className="flex-1 bg-hot" />
+          </div>
+          <div className="flex flex-wrap justify-between gap-2 px-5 py-2.5 text-xs text-ink-400">
+            <span>
+              You: {me.playing} playing · {me.yetToPlay} yet to play — {opp.teamName}: {opp.playing} playing ·{" "}
+              {opp.yetToPlay} yet to play
+            </span>
+            <span>
+              Updated {new Date(live.asOf).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+              {live.inProgress ? " · refreshes every minute" : ""}
+            </span>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function LiveTab({ live }: { live: LiveState }) {
+  return (
+    <div className="flex flex-col gap-5">
+      {live.lateSwaps.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {live.lateSwaps.map((s) => (
+            <div
+              key={s.out.id + s.in.id}
+              className="flex flex-wrap items-center gap-3 bg-gradient-to-r from-hot to-[#b5179e] px-4 py-3 text-sm font-semibold text-white"
+            >
+              <span className="display shrink-0 bg-ink-950 px-2 py-0.5 text-base font-black text-white">Late swap</span>
+              <span>
+                {s.freeAgent ? "Add free agent " : "Start "}
+                <b>{s.in.name}</b> ({s.in.position}, {s.in.team}) {s.freeAgent ? "and start them " : ""}over{" "}
+                <b>{s.out.name}</b> at {s.slot} — +{s.gain} projected. {s.reason}.
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="grid gap-5 lg:grid-cols-2">
+        <LiveRoster title="Your lineup" side={live.me} accent="mint" />
+        {live.opponent && <LiveRoster title={live.opponent.teamName} side={live.opponent} accent="hot" />}
+      </div>
+      <p className="text-xs text-ink-400">
+        Points are Sleeper&apos;s live scoring. &quot;Still to come&quot; is each player&apos;s projection times the
+        share of their game left; win probability assumes a typical player&apos;s score swings about ±60% of projection.
+        Game clocks from{" "}
+        {live.games.source === "espn"
+          ? "ESPN"
+          : live.games.source === "snapshot"
+            ? "ESPN (saved copy)"
+            : "Sleeper's schedule"}
+        .
+      </p>
+    </div>
+  );
+}
+
+function gameLabel(p: LivePlayer) {
+  if (p.status === "bye") return "BYE";
+  const g = p.game;
+  if (!g) return "—";
+  const opp = p.player?.team === g.home ? g.away : g.home;
+  if (g.state === "pre") {
+    const when = new Date(g.kickoff).toLocaleString(
+      [],
+      g.kickoffKnown ? { weekday: "short", hour: "numeric", minute: "2-digit" } : { weekday: "short" },
+    );
+    return `${when} vs ${opp}`;
+  }
+  const mine = p.player?.team === g.home ? g.homeScore : g.awayScore;
+  const theirs = p.player?.team === g.home ? g.awayScore : g.homeScore;
+  const score = mine !== null && theirs !== null ? ` · ${mine}-${theirs}` : "";
+  return `${g.state === "post" ? "Final" : g.detail}${score} vs ${opp}`;
+}
+
+function LiveRoster({ title, side, accent }: { title: string; side: LiveSide; accent: "mint" | "hot" }) {
+  const max = Math.max(1, ...side.players.map((p) => p.points + p.remaining));
+  return (
+    <Card
+      title={title}
+      action={
+        <span
+          className={`font-mono text-xl font-black tabular-nums ${accent === "mint" ? "text-mint-400" : "text-rose-300"}`}
+        >
+          {side.score.toFixed(1)}
+        </span>
+      }
+    >
+      <ul className="flex flex-col divide-y divide-ink-700/60">
+        {side.players.map((p, i) => (
+          <li key={p.id + i} className="flex items-center gap-3 py-2.5">
+            <SlotBadge slot={p.slot === "Superflex" ? "SUPER_FLEX" : p.slot === "Flex" ? "FLEX" : p.slot} />
+            {p.player ? (
+              <div className="min-w-0 flex-1">
+                <PlayerLine p={p.player} size={34} />
+                <div
+                  className={`mt-1 ml-[46px] flex items-center gap-1.5 text-[11px] font-semibold ${
+                    p.status === "in" ? "text-hot" : "text-ink-400"
+                  }`}
+                >
+                  {p.status === "in" && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-hot" />}
+                  {gameLabel(p)}
+                </div>
+              </div>
+            ) : (
+              <span className="flex-1 text-sm text-ink-400 italic">{p.name}</span>
+            )}
+            <div className="w-20 shrink-0 text-right">
+              <div className="font-mono text-2xl leading-none font-black tabular-nums">{p.points.toFixed(1)}</div>
+              {p.remaining > 0 && (
+                <div className="font-mono text-[11px] text-ink-400 tabular-nums">+{p.remaining.toFixed(1)} to come</div>
+              )}
+              <div className="mt-1 flex h-1 bg-ink-700">
+                <div
+                  className={accent === "mint" ? "bg-mint-400" : "bg-hot"}
+                  style={{ width: `${(p.points / max) * 100}%` }}
+                />
+                <div className="bg-ink-400/40" style={{ width: `${(p.remaining / max) * 100}%` }} />
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 

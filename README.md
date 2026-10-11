@@ -45,6 +45,8 @@ Every player gets two scores.
 
 **Track record (Record tab):** replays every completed week from Sleeper's matchup history (each week's roster, starters and actual points). It compares the lineup you started, the lineup the advisor would have picked from that week's pre-game projections, and the best lineup in hindsight. It also grades each start/sit call where the advisor disagreed with you. The weekly report opens with last week's result. Nothing needs to be stored, so it works for any league.
 
+**Live mode (Live tab):** once the week's games kick off, the scoreboard switches to live scoring and a Live tab opens. It shows both lineups with real points from Sleeper, each player's game status and clock, and "still to come" points (projection × share of the game left, using ESPN's game clock). It also shows a live win probability (assuming player scores vary by about ±60% of projection) and late-swap tips: a bench player or free agent whose game hasn't started and would beat a starter who won't play or is projected lower. It refreshes every minute while games are on.
+
 **Injury report (Injuries tab):** for everyone on your roster and your opponent's starters, it estimates the chance each player plays this week and labels it Playing, Likely, Toss-up, Unlikely or Out. The estimate combines:
 - the official designation (Sleeper and ESPN's league-wide injury report)
 - this week's practice participation (DNP / limited / full), parsed sentence by sentence from Sleeper's player news feed and ESPN's notes, ignoring recaps of earlier weeks and hedged "if he practices…" sentences
@@ -111,7 +113,7 @@ lib/planner.ts             rest-of-season projections, byes and playoff weeks
 lib/backtest.ts            track record from past weeks' actual scores
 lib/gameday.ts             pre-kickoff inactive check
 lib/injuries.ts            injury report and chance-to-play estimates
-scripts/fetch-injuries.mjs ESPN injury snapshot used by the deploy workflow
+scripts/fetch-snapshots.mjs ESPN injury + scoreboard snapshots used by the deploy workflow
 scripts/weekly-report.ts   CLI entry point used by the weekly GitHub Action
 scripts/gameday-alert.ts   CLI entry point used by the gameday GitHub Action
 app/page.tsx               landing page, league/week controls
