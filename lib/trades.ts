@@ -94,6 +94,153 @@ function positionValues(slots: string[][], players: PlayerAnalysis[]) {
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
+/**
+ * What other managers will think players are worth: value over the last
+ * starter-caliber player at the position league-wide (so QBs count for more
+ * in superflex). Trades must be roughly even on this scale — otherwise you
+ * either get fleeced or the offer gets laughed off.
+ */
+function buildMarket(a: Analysis, everyone: PlayerAnalysis[], teams: number) {
+  const count = (slot: string) => a.league.roster_positions.filter((s) => s === slot).length;
+  const startersAt: Record<string, number> = {
+    QB: count("QB") + count("SUPER_FLEX") * 0.9,
+    RB: count("RB") + count("FLEX") * 0.45 + count("WRRB_FLEX") * 0.5 + count("SUPER_FLEX") * 0.05,
+    WR:
+      count("WR") +
+      count("FLEX") * 0.45 +
+      count("WRRB_FLEX") * 0.5 +
+      count("REC_FLEX") * 0.7 +
+      count("SUPER_FLEX") * 0.05,
+    TE: count("TE") + count("FLEX") * 0.1 + count("REC_FLEX") * 0.3,
+  };
+  const replacement: Record<string, number> = {};
+  for (const pos of CORE_POSITIONS) {
+    const vals = everyone
+      .filter((p) => p.position === pos)
+      .map((p) => p.rosValue)
+      .sort((x, y) => y - x);
+    replacement[pos] = vals[Math.max(0, Math.round((startersAt[pos] ?? 1) * teams) - 1)] ?? 0;
+  }
+  return (ps: PlayerAnalysis[]) =>
+    ps.reduce((sum, p) => sum + Math.max(0, p.rosValue - (replacement[p.position] ?? 0)), 0);
+}
+
+/** Your rank (1 = best) at each core position, given your roster. */
+function ranksFor(slots: string[][], mine: PlayerAnalysis[], others: PlayerAnalysis[][]) {
+  const all = [mine, ...others].map((ps) => positionValues(slots, ps));
+  const out: Record<string, number> = {};
+  for (const pos of CORE_POSITIONS) {
+    const sorted = all.map((v) => v[pos]).sort((x, y) => y - x);
+    out[pos] = sorted.indexOf(all[0][pos]) + 1;
+  }
+  return out;
+}
+
+export type TradeVerdict = "Accept" | "Lean accept" | "Counter" | "Decline";
+
+export interface TradeEvaluation {
+  verdict: TradeVerdict;
+  summary: string;
+  /** Rest-of-season lineup value change, pts/week. */
+  yourGain: number;
+  theirGain: number;
+  /** Value over replacement of each side (what the market thinks). */
+  marketGive: number;
+  marketGet: number;
+  /** Your positional ranks before → after. */
+  ranks: { position: string; before: number; after: number }[];
+  /** Ask for this player too and the deal flips in your favor (if one exists). */
+  counter: { add: PlayerAnalysis; yourGain: number; theirGain: number } | null;
+  teams: number;
+}
+
+/** Grade a specific offer: you give `give` to team `rosterId` and get `get`. */
+export function evaluateTrade(
+  a: Analysis,
+  rosterId: number,
+  give: PlayerAnalysis[],
+  get: PlayerAnalysis[],
+): TradeEvaluation {
+  const slots = lineupSlots(a.league.roster_positions);
+  const team = a.otherTeams.find((t) => t.rosterId === rosterId);
+  if (!team) throw new Error("Unknown team");
+  const mine = [...a.activeRoster].sort(byValue);
+  const theirs = [...team.players].sort(byValue);
+  const allPlayers = [...mine, ...a.otherTeams.flatMap((t) => t.players)];
+  const market = buildMarket(a, allPlayers, a.otherTeams.length + 1);
+
+  const myAfter = swap(mine, give, get);
+  const theirAfter = swap(theirs, get, give);
+  const yourGain = teamValue(slots, myAfter) - teamValue(slots, mine);
+  const theirGain = teamValue(slots, theirAfter) - teamValue(slots, theirs);
+  const marketGive = market(give);
+  const marketGet = market(get);
+  const ratio = marketGive < 0.5 ? (marketGet >= marketGive ? 2 : 1) : marketGet / marketGive;
+
+  const others = a.otherTeams.filter((t) => t.rosterId !== rosterId).map((t) => t.players);
+  const before = ranksFor(slots, mine, [theirs, ...others]);
+  const after = ranksFor(slots, myAfter, [theirAfter, ...others]);
+  const ranks = CORE_POSITIONS.filter(
+    (pos) => before[pos] !== after[pos] || [...give, ...get].some((p) => p.position === pos),
+  ).map((pos) => ({ position: pos, before: before[pos], after: after[pos] }));
+
+  // Counter: the cheapest extra player from their roster that makes it a clear win for you.
+  let counter: TradeEvaluation["counter"] = null;
+  if (yourGain < 1) {
+    const extras = theirs
+      .filter((p) => !get.some((g) => g.id === p.id) && p.position !== "K" && p.position !== "DEF" && p.rosValue > 1)
+      .map((p) => {
+        const getPlus = [...get, p];
+        return {
+          add: p,
+          yourGain: teamValue(slots, swap(mine, give, getPlus)) - teamValue(slots, mine),
+          theirGain: teamValue(slots, swap(theirs, getPlus, give)) - teamValue(slots, theirs),
+          cost: market([p]),
+        };
+      })
+      // Only counters they could plausibly accept (not much worse off for them).
+      .filter((x) => x.yourGain >= 1 && x.yourGain > yourGain + 0.5 && x.theirGain >= -1.5)
+      .sort((x, y) => x.cost - y.cost || y.yourGain - x.yourGain);
+    if (extras[0])
+      counter = { add: extras[0].add, yourGain: round1(extras[0].yourGain), theirGain: round1(extras[0].theirGain) };
+  }
+
+  let verdict: TradeVerdict;
+  if (yourGain >= 0.3 && ratio >= 0.85) verdict = "Accept";
+  else if ((yourGain >= 0.3 && ratio >= 0.65) || (yourGain > -0.3 && ratio >= 1.2)) verdict = "Lean accept";
+  else if (counter || (yourGain > -1 && ratio >= 0.8)) verdict = "Counter";
+  else verdict = "Decline";
+
+  const lineup =
+    Math.abs(yourGain) < 0.3
+      ? "barely changes your lineup"
+      : yourGain > 0
+        ? `improves your best lineup by ${round1(yourGain)} pts/week`
+        : `costs your best lineup ${round1(-yourGain)} pts/week`;
+  const value =
+    ratio >= 1.15
+      ? "and you get more value than you give"
+      : ratio >= 0.85
+        ? "and the value is roughly even"
+        : "but you give up more value than you get back";
+  const summary =
+    verdict === "Counter" && counter
+      ? `It ${lineup} ${value}. Ask for ${counter.add.name} as well and it becomes a clear win (+${counter.yourGain}/wk).`
+      : `It ${lineup} ${value}.`;
+
+  return {
+    verdict,
+    summary: summary.charAt(0).toUpperCase() + summary.slice(1),
+    yourGain: round1(yourGain),
+    theirGain: round1(theirGain),
+    marketGive: round1(marketGive),
+    marketGet: round1(marketGet),
+    ranks,
+    counter,
+    teams: a.otherTeams.length + 1,
+  };
+}
+
 export function findTrades(a: Analysis): TradeReport {
   const slots = lineupSlots(a.league.roster_positions);
   const tradeable = (p: PlayerAnalysis) => p.position !== "K" && p.position !== "DEF" && p.rosValue > 1;
@@ -105,45 +252,24 @@ export function findTrades(a: Analysis): TradeReport {
   // --- Positional strength vs. the league ---
   const allTeams = [{ id: -1, players: mine }, ...a.otherTeams.map((t) => ({ id: t.rosterId, players: t.players }))];
   const values = allTeams.map((t) => ({ id: t.id, v: positionValues(slots, t.players) }));
-  const strengths: PositionStrength[] = CORE_POSITIONS.filter((pos) => values.some((t) => t.v[pos] > 0)).map(
-    (pos) => {
-      const sorted = values.map((t) => t.v[pos]).sort((x, y) => y - x);
-      const value = values[0].v[pos];
-      return {
-        position: pos,
-        value: round1(value),
-        leagueAverage: round1(sorted.reduce((s, x) => s + x, 0) / sorted.length),
-        rank: sorted.indexOf(value) + 1,
-        teams: sorted.length,
-      };
-    },
-  );
+  const strengths: PositionStrength[] = CORE_POSITIONS.filter((pos) => values.some((t) => t.v[pos] > 0)).map((pos) => {
+    const sorted = values.map((t) => t.v[pos]).sort((x, y) => y - x);
+    const value = values[0].v[pos];
+    return {
+      position: pos,
+      value: round1(value),
+      leagueAverage: round1(sorted.reduce((s, x) => s + x, 0) / sorted.length),
+      rank: sorted.indexOf(value) + 1,
+      teams: sorted.length,
+    };
+  });
   const myRank = Object.fromEntries(strengths.map((s) => [s.position, s.rank]));
 
-  // --- Market value ---
-  // What other managers will think a player is worth: value over the last
-  // starter-caliber player at the position league-wide (so QBs count for more
-  // in superflex). Trades must be roughly even on this scale — otherwise you
-  // either get fleeced or the offer gets laughed off.
-  const teams = allTeams.length;
-  const flex = (slot: string) => a.league.roster_positions.filter((s) => s === slot).length;
-  const startersAt: Record<string, number> = {
-    QB: flex("QB") + flex("SUPER_FLEX") * 0.9,
-    RB: flex("RB") + flex("FLEX") * 0.45 + flex("WRRB_FLEX") * 0.5 + flex("SUPER_FLEX") * 0.05,
-    WR: flex("WR") + flex("FLEX") * 0.45 + flex("WRRB_FLEX") * 0.5 + flex("REC_FLEX") * 0.7 + flex("SUPER_FLEX") * 0.05,
-    TE: flex("TE") + flex("FLEX") * 0.1 + flex("REC_FLEX") * 0.3,
-  };
-  const everyone = allTeams.flatMap((t) => t.players);
-  const replacement: Record<string, number> = {};
-  for (const pos of CORE_POSITIONS) {
-    const vals = everyone
-      .filter((p) => p.position === pos)
-      .map((p) => p.rosValue)
-      .sort((x, y) => y - x);
-    replacement[pos] = vals[Math.max(0, Math.round((startersAt[pos] ?? 1) * teams) - 1)] ?? 0;
-  }
-  const market = (ps: PlayerAnalysis[]) =>
-    ps.reduce((sum, p) => sum + Math.max(0, p.rosValue - (replacement[p.position] ?? 0)), 0);
+  const market = buildMarket(
+    a,
+    allTeams.flatMap((t) => t.players),
+    allTeams.length,
+  );
   const fair = (give: PlayerAnalysis[], get: PlayerAnalysis[]) => {
     const g = market(give);
     const r = market(get);
@@ -199,7 +325,10 @@ export function findTrades(a: Analysis): TradeReport {
     const givePos = [...new Set(t.give.map((p) => p.position))];
     const weak = getPos.filter((pos) => (myRank[pos] ?? 0) > (strengths[0]?.teams ?? 12) / 2);
     const parts: string[] = [];
-    if (weak.length) parts.push(`shores up your ${weak.join("/")} (ranked ${weak.map((p) => `#${myRank[p]}`).join("/")} in the league)`);
+    if (weak.length)
+      parts.push(
+        `shores up your ${weak.join("/")} (ranked ${weak.map((p) => `#${myRank[p]}`).join("/")} in the league)`,
+      );
     else parts.push(`upgrades your ${getPos.join("/")}`);
     if (t.give.length > t.get.length) parts.push("consolidates depth into a better starter");
     if (t.get.length > t.give.length) parts.push("adds depth");
