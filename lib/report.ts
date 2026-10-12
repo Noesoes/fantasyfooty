@@ -4,6 +4,7 @@ import { describeMatchup, type Analysis, type PlayerAnalysis } from "./advisor";
 import { findTrades } from "./trades";
 import type { TrackRecord } from "./backtest";
 import type { InjuryReport } from "./injuries";
+import type { Scouting } from "./scouting";
 
 function tag(p: PlayerAnalysis): string {
   const bits = [`${p.position}${p.team ? `, ${p.team}` : ""}`];
@@ -12,7 +13,12 @@ function tag(p: PlayerAnalysis): string {
   return `**${p.name}** (${bits.join(", ")})`;
 }
 
-export function renderMarkdown(a: Analysis, record?: TrackRecord | null, injuries?: InjuryReport | null): string {
+export function renderMarkdown(
+  a: Analysis,
+  record?: TrackRecord | null,
+  injuries?: InjuryReport | null,
+  scouting?: Scouting | null,
+): string {
   const lines: string[] = [];
   lines.push(`# Week ${a.week} game plan — ${a.teamName}`);
   lines.push("");
@@ -23,6 +29,17 @@ export function renderMarkdown(a: Analysis, record?: TrackRecord | null, injurie
       `**Matchup:** you (${a.optimalTotal} projected with these moves) vs ${a.opponent.teamName} (${a.opponent.projected} projected)`,
     );
     lines.push("");
+    if (scouting?.talk.length) {
+      lines.push(`**Scouting ${scouting.teamName}:**`);
+      for (const t of scouting.talk) lines.push(`- ${t}`);
+      const swaps = scouting.moves.filter((m) => m.kind === "swap");
+      if (scouting.theirBest - scouting.theirProjected >= 3 && swaps.length) {
+        lines.push(
+          `- Expect them to start ${swaps.map((m) => m.in.name).join(", ")} (best lineup ${scouting.theirBest} projected).`,
+        );
+      }
+      lines.push("");
+    }
   }
 
   const last = record?.weeks.at(-1);

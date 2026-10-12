@@ -107,18 +107,13 @@ export const getUser = (usernameOrId: string) =>
   get<SleeperUser | null>(`/v1/user/${encodeURIComponent(usernameOrId.trim())}`);
 
 export const getUserLeagues = (userId: string, season: string) =>
-  get<League[] | null>(`/v1/user/${userId}/leagues/nfl/${season}`).then(
-    (l) => l ?? [],
-  );
+  get<League[] | null>(`/v1/user/${userId}/leagues/nfl/${season}`).then((l) => l ?? []);
 
-export const getLeague = (leagueId: string) =>
-  get<League | null>(`/v1/league/${leagueId}`);
+export const getLeague = (leagueId: string) => get<League | null>(`/v1/league/${leagueId}`);
 
-export const getRosters = (leagueId: string) =>
-  get<Roster[]>(`/v1/league/${leagueId}/rosters`, true);
+export const getRosters = (leagueId: string) => get<Roster[]>(`/v1/league/${leagueId}/rosters`, true);
 
-export const getLeagueUsers = (leagueId: string) =>
-  get<SleeperUser[]>(`/v1/league/${leagueId}/users`);
+export const getLeagueUsers = (leagueId: string) => get<SleeperUser[]>(`/v1/league/${leagueId}/users`);
 
 export interface MatchupRow {
   roster_id: number;
@@ -129,6 +124,20 @@ export interface MatchupRow {
   players?: string[] | null;
   players_points?: Record<string, number> | null;
 }
+
+export interface Transaction {
+  type: "waiver" | "free_agent" | "trade" | "commissioner";
+  status: string;
+  roster_ids: number[];
+  adds: Record<string, number> | null;
+  drops: Record<string, number> | null;
+  created: number;
+  settings?: { waiver_bid?: number } | null;
+}
+
+/** Completed and failed adds, drops and trades for one week ("round"). */
+export const getTransactions = (leagueId: string, week: number) =>
+  get<Transaction[] | null>(`/v1/league/${leagueId}/transactions/${week}`, true).then((t) => t ?? []);
 
 export const getMatchups = (leagueId: string, week: number) =>
   get<MatchupRow[] | null>(`/v1/league/${leagueId}/matchups/${week}`, true).then((m) => m ?? []);
@@ -143,8 +152,7 @@ export interface ScheduledGame {
   status: string;
 }
 
-export const getSchedule = (season: string) =>
-  get<ScheduledGame[]>(`/schedule/nfl/regular/${season}`, true);
+export const getSchedule = (season: string) => get<ScheduledGame[]>(`/schedule/nfl/regular/${season}`, true);
 
 /** One player's projection for every week of the season (null on byes / when unprojected). */
 export const getPlayerWeeklyProjections = (season: string, playerId: string) =>
@@ -164,29 +172,20 @@ export const getPlayerNews = (playerId: string) =>
   get<NewsItem[] | null>(`/players/nfl/${playerId}/news`).then((n) => n ?? []);
 
 export const getTrendingAdds = (lookbackHours = 72, limit = 200) =>
-  get<TrendingPlayer[]>(
-    `/v1/players/nfl/trending/add?lookback_hours=${lookbackHours}&limit=${limit}`,
-  );
+  get<TrendingPlayer[]>(`/v1/players/nfl/trending/add?lookback_hours=${lookbackHours}&limit=${limit}`);
 
 /** Weekly projections; each row also carries the player's bio, injury status and opponent. */
 export const getWeekProjections = (season: string, week: number) =>
-  get<StatRow[]>(
-    `/projections/nfl/${season}/${week}?season_type=regular&${positionQuery(OFFENSE_POSITIONS)}`,
-  );
+  get<StatRow[]>(`/projections/nfl/${season}/${week}?season_type=regular&${positionQuery(OFFENSE_POSITIONS)}`);
 
 export const getWeekStats = (season: string, week: number) =>
-  get<StatRow[]>(
-    `/stats/nfl/${season}/${week}?season_type=regular&${positionQuery(OFFENSE_POSITIONS)}`,
-  );
+  get<StatRow[]>(`/stats/nfl/${season}/${week}?season_type=regular&${positionQuery(OFFENSE_POSITIONS)}`);
 
 export const getSeasonStats = (season: string) =>
-  get<StatRow[]>(
-    `/stats/nfl/${season}?season_type=regular&${positionQuery(OFFENSE_POSITIONS)}`,
-  );
+  get<StatRow[]>(`/stats/nfl/${season}?season_type=regular&${positionQuery(OFFENSE_POSITIONS)}`);
 
 /** The full player database (~5 MB). Only fetched when a rostered player is missing from projections. */
-export const getAllPlayers = () =>
-  get<Record<string, PlayerInfo>>("/v1/players/nfl");
+export const getAllPlayers = () => get<Record<string, PlayerInfo>>("/v1/players/nfl");
 
 /**
  * The week whose lineup decisions matter right now. Sleeper's own `week`

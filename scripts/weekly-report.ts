@@ -10,6 +10,7 @@ import { analyzeLeague } from "../lib/advisor";
 import { renderMarkdown } from "../lib/report";
 import { buildTrackRecord } from "../lib/backtest";
 import { buildInjuryReport } from "../lib/injuries";
+import { buildScouting } from "../lib/scouting";
 import { getNflState, getUser, getUserLeagues, upcomingWeek } from "../lib/sleeper";
 
 async function main() {
@@ -40,11 +41,12 @@ async function main() {
   for (const leagueId of leagueIds) {
     try {
       const analysis = await analyzeLeague({ leagueId, userId: user.user_id, season, week });
-      const [record, injuries] = await Promise.all([
+      const [record, injuries, scouting] = await Promise.all([
         buildTrackRecord(analysis).catch(() => null),
         buildInjuryReport(analysis).catch(() => null),
+        buildScouting(analysis).catch(() => null),
       ]);
-      sections.push(renderMarkdown(analysis, record, injuries));
+      sections.push(renderMarkdown(analysis, record, injuries, scouting));
     } catch (err) {
       sections.push(`# League ${leagueId}\n\nCouldn't analyze: ${(err as Error).message}`);
     }

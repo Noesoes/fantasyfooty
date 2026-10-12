@@ -177,6 +177,7 @@ export interface Rival {
 }
 
 export interface Opponent {
+  rosterId: number;
   teamName: string;
   avatar: string | null;
   /** Their current starters' expected points this week. */
@@ -524,7 +525,11 @@ export const slotName = (slot: string) => SLOT_NAMES[slot] ?? slot;
 const isStarterSlot = (slot: string) => slot in SLOT_ELIGIBILITY;
 
 /** Greedy lineup fill: most restrictive slots first, best available player each time. */
-function optimizeLineup(rosterPositions: string[], players: PlayerAnalysis[], current: LineupSlot[]): LineupSlot[] {
+export function optimizeLineup(
+  rosterPositions: string[],
+  players: PlayerAnalysis[],
+  current: LineupSlot[],
+): LineupSlot[] {
   const starterSlots = rosterPositions.filter((s) => s !== "BN" && s !== "IR" && s !== "TAXI");
   const order = starterSlots
     .map((slot, index) => ({ slot, index }))
@@ -1019,6 +1024,7 @@ export async function analyzeLeague(opts: {
     const scored = analyzePlayers(starters, inputs, new Map());
     const ownerId = theirRoster?.owner_id ?? null;
     opponent = {
+      rosterId: theirs.roster_id,
       teamName: teamNameOf(ownerId),
       avatar: users.find((u) => u.user_id === ownerId)?.avatar ?? null,
       projected: total(starters.map((id) => ({ slot: "", player: scored.get(id) ?? null }))),

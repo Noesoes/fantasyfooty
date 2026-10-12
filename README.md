@@ -52,6 +52,13 @@ Every player gets two scores.
 
 **Live mode (Live tab):** once the week's games kick off, the scoreboard switches to live scoring and a Live tab opens. It shows both lineups with real points from Sleeper, each player's game status and clock, and "still to come" points (projection × share of the game left, using ESPN's game clock). It also shows a live win probability (assuming player scores vary by about ±60% of projection) and late-swap tips: a bench player or free agent whose game hasn't started and would beat a starter who won't play or is projected lower. It refreshes every minute while games are on.
 
+**Opponent scouting (Scout tab):** a report on this week's opponent:
+- **Tale of the tape:** your best lineup against the lineup they've set, slot by slot, with who has the edge. If they haven't set their best lineup yet, it says how much better it could be.
+- **Weak spots:** starters who are out, on bye, questionable or not projected, plus empty slots.
+- **Moves to expect:** bench players they should swap in and free agents who'd upgrade them.
+- **Manager tendencies:** points left on their bench per week, zero-point starts, pickups, trades and FAAB spent, from Sleeper's weekly results and transaction log. Also lists earlier meetings this season.
+- **Intel:** a few true, slightly pointed stats for the group chat. The weekly report includes them too.
+
 **Injury report (Injuries tab):** for everyone on your roster and your opponent's starters, it estimates the chance each player plays this week and labels it Playing, Likely, Toss-up, Unlikely or Out. The estimate combines:
 - the official designation (Sleeper and ESPN's league-wide injury report)
 - this week's practice participation (DNP / limited / full), parsed sentence by sentence from Sleeper's player news feed and ESPN's notes, ignoring recaps of earlier weeks and hedged "if he practices…" sentences
@@ -121,10 +128,11 @@ lib/injuries.ts            injury report and chance-to-play estimates
 lib/scoreboard.ts          NFL games: clock, score, Vegas lines, weather, and the start/sit nudges from them
 lib/live.ts                live scoring, win probability, late swaps
 lib/playoffs.ts            playoff odds simulation
+lib/scouting.ts            opponent scouting report
 scripts/fetch-snapshots.mjs ESPN injury + scoreboard snapshots used by the deploy workflow
 scripts/weekly-report.ts   CLI entry point used by the weekly GitHub Action
 scripts/gameday-alert.ts   CLI entry point used by the gameday GitHub Action
 app/page.tsx               landing page, league/week controls
-app/results.tsx            the tabs (live, game plan, lineup, injuries, waivers, trades, season, playoffs, record, roster)
+app/results.tsx            the tabs (live, game plan, lineup, scout, injuries, waivers, trades, season, playoffs, record, roster)
 app/ui.tsx                 shared UI pieces
 ```
