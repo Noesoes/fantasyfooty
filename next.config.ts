@@ -8,6 +8,8 @@ const nextConfig: NextConfig = {
   output: "export",
   basePath,
   images: { unoptimized: true },
+  // The browser needs the subpath to register the service worker.
+  env: { NEXT_PUBLIC_BASE_PATH: basePath },
 };
 
 export default nextConfig;

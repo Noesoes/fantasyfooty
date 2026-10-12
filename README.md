@@ -14,6 +14,14 @@ It runs two ways:
 1. **Web app**: enter your Sleeper username and get a game plan for each of your leagues: a to-do checklist, your projected score vs. this week's opponent, a recommended lineup, waiver claims with who to drop, and your full roster with snap shares. It's a static site with no backend; your browser talks to Sleeper's public API directly.
 2. **Weekly report**: a scheduled GitHub Action runs every **Tuesday morning** (after Monday Night Football, before Sleeper's default Wednesday waiver run) and posts next week's recommendations as a GitHub issue. GitHub emails you when it's created.
 
+### Install it on your phone
+
+No App Store needed. Open the site on your phone, then:
+- **iPhone (Safari):** tap Share → **Add to Home Screen** → Add. The **Get app** button at the top shows these steps.
+- **Android (Chrome):** tap **Get app** (or ⋮ → **Install app**).
+
+It gets its own home-screen icon and opens full screen like a regular app. A service worker keeps the app's own files on the phone so it opens instantly, even on bad stadium Wi-Fi. Sleeper and ESPN data is never cached and always loads fresh. Updates arrive automatically whenever the site is redeployed.
+
 ## How the recommendations work
 
 Every player gets two scores.
@@ -135,4 +143,7 @@ scripts/gameday-alert.ts   CLI entry point used by the gameday GitHub Action
 app/page.tsx               landing page, league/week controls
 app/results.tsx            the tabs (live, game plan, lineup, scout, injuries, waivers, trades, season, playoffs, record, roster)
 app/ui.tsx                 shared UI pieces
+app/install.tsx            "Get app" install button / iPhone instructions
+app/manifest.ts            web app manifest (name, icons, colors)
+public/sw.js               service worker: offline-friendly app shell
 ```

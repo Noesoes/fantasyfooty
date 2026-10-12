@@ -15,6 +15,7 @@ import {
   type SleeperUser,
 } from "@/lib/sleeper";
 import { Results } from "./results";
+import { InstallButton } from "./install";
 
 const STORAGE_KEY = "sleeper-advisor";
 
@@ -188,7 +189,7 @@ export default function Home() {
 function Logo() {
   return (
     <div className="display flex items-baseline gap-3 leading-none">
-      <span className="text-[34px] font-black italic tracking-tight">
+      <span className="text-[27px] font-black italic tracking-tight min-[400px]:text-[34px]">
         Prime<span className="text-mint-400">time</span>
       </span>
       <span className="hidden text-sm font-semibold tracking-[0.22em] text-ink-400 sm:inline">Lineup advisor</span>
@@ -207,6 +208,10 @@ function ThemeToggle() {
     const next = theme === "light" ? "dark" : "light";
     setTheme(next);
     document.documentElement.setAttribute("data-theme", next);
+    // Match the phone's status bar to the theme.
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", next === "light" ? "#eef1fb" : "#070a24");
     try {
       localStorage.setItem("theme", next);
     } catch {
@@ -249,6 +254,7 @@ function TopBar({ user, onSignOut }: { user: SleeperUser | null; onSignOut: () =
     <header className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 py-5">
       <Logo />
       <div className="flex items-center gap-2">
+        <InstallButton />
         <ThemeToggle />
         {user && (
           <div className="display flex h-9 -skew-x-12 items-center gap-2 bg-ink-800 pr-1 pl-1.5 font-semibold">
@@ -259,7 +265,7 @@ function TopBar({ user, onSignOut }: { user: SleeperUser | null; onSignOut: () =
                 {user.display_name.charAt(0).toUpperCase()}
               </span>
             )}
-            <span className="max-w-[120px] skew-x-12 truncate text-sm">{user.display_name}</span>
+            <span className="hidden max-w-[120px] skew-x-12 truncate text-sm sm:inline">{user.display_name}</span>
             <button
               onClick={onSignOut}
               className="px-2.5 py-1 text-xs text-ink-400 hover:bg-ink-700 hover:text-ink-100"
