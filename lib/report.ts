@@ -81,7 +81,7 @@ export function renderMarkdown(
         .map((n) => `${n.day.slice(0, 3)} ${n.level === "Limited" ? "LP" : n.level === "Full" ? "FP" : "DNP"}`)
         .join(" → ");
       lines.push(
-        `| ${r.starter ? "**" : ""}${r.player.name}${r.starter ? "**" : ""} (${r.player.position}) | ${r.designation ?? "—"} | ${practice || "—"} | ${Math.round(r.probability * 100)}% · ${r.verdict} | ${(r.headline?.text ?? "").replace(/\|/g, "/")} |`,
+        `| ${r.starter ? "**" : ""}${r.player.name}${r.starter ? "**" : ""} (${r.player.position}) | ${r.designation ?? "—"} | ${practice || "—"} | ${Math.round(r.probability * 100)}% · ${r.verdict} | ${r.article.kind === "search" ? "" : `[${r.article.title.replace(/[|[\]]/g, "/")}](${r.article.url}) (${r.article.source})`} |`,
       );
     }
     lines.push("");

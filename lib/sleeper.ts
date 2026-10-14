@@ -61,6 +61,7 @@ export interface PlayerInfo {
   injury_status: string | null;
   injury_body_part?: string | null;
   status?: string | null;
+  rotowire_id?: number | null;
 }
 
 export interface StatRow {
@@ -168,8 +169,8 @@ export interface NewsItem {
 }
 
 /** Latest news blurbs for one player (Rotowire, RotoBaller, …), newest first. */
-export const getPlayerNews = (playerId: string) =>
-  get<NewsItem[] | null>(`/players/nfl/${playerId}/news`).then((n) => n ?? []);
+export const getPlayerNews = (playerId: string, limit = 15) =>
+  get<NewsItem[] | null>(`/players/nfl/${playerId}/news?limit=${limit}`).then((n) => n ?? []);
 
 export const getTrendingAdds = (lookbackHours = 72, limit = 200) =>
   get<TrendingPlayer[]>(`/v1/players/nfl/trending/add?lookback_hours=${lookbackHours}&limit=${limit}`);

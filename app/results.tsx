@@ -2250,6 +2250,46 @@ function Injuries({ a }: { a: Analysis }) {
   );
 }
 
+function ArticleBox({ article: x }: { article: InjuryRow["article"] }) {
+  const cta =
+    x.kind === "article"
+      ? `Read the full story on ${x.source}`
+      : x.kind === "player-page"
+        ? `Read it on ${x.source}`
+        : "Search Google News";
+  return (
+    <a
+      href={x.url}
+      target="_blank"
+      rel="noreferrer"
+      className="group mt-3 block border-l-4 border-mint-400 bg-ink-900/70 px-3 py-2.5 transition hover:bg-ink-800"
+    >
+      <div className="flex items-center justify-between gap-3 text-[10px] font-bold tracking-wider text-ink-400 uppercase">
+        <span>
+          {x.kind === "search" ? (
+            "No recent article"
+          ) : (
+            <>
+              Latest update · {x.source}
+              {x.published !== null && (
+                <span className={x.stale ? "text-amber-300" : ""}> · {timeAgo(x.published)}</span>
+              )}
+            </>
+          )}
+        </span>
+        <span className="text-mint-400" aria-hidden>
+          ↗
+        </span>
+      </div>
+      {x.kind !== "search" && (
+        <div className="mt-1 text-sm leading-snug font-semibold text-ink-100 group-hover:text-mint-300">{x.title}</div>
+      )}
+      {x.summary && <p className="mt-1 line-clamp-3 text-xs leading-relaxed text-ink-300">{x.summary}</p>}
+      <div className="mt-1.5 text-[11px] font-bold text-mint-400 group-hover:underline">{cta} →</div>
+    </a>
+  );
+}
+
 function InjurySection({
   title,
   rows,
@@ -2316,23 +2356,7 @@ function InjurySection({
                   )}
                 </div>
                 {r.reasons.length > 0 && <p className="mt-2 text-xs text-ink-300">{r.reasons.join(" · ")}</p>}
-                {r.headline && (
-                  <p className="mt-2 border-l-2 border-ink-600 pl-3 text-xs text-ink-400">
-                    {r.headline.url ? (
-                      <a
-                        href={r.headline.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-ink-100 hover:text-mint-400"
-                      >
-                        {r.headline.text}
-                      </a>
-                    ) : (
-                      <span className="text-ink-100">{r.headline.text}</span>
-                    )}{" "}
-                    — {r.headline.source}, {timeAgo(r.headline.published)}
-                  </p>
-                )}
+                <ArticleBox article={r.article} />
                 {backup && (
                   <p className="mt-2 text-xs font-semibold text-mint-300">
                     {r.verdict === "Out"

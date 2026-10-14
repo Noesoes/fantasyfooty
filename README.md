@@ -73,7 +73,9 @@ Every player gets two scores.
 - reports that a player was ruled out or is expected to play
 - whether Sleeper still projects the player, and QB depth charts
 
-Each card shows the practice trend, the latest headline, ESPN's estimated return date, and a backup plan for at-risk starters (a bench player, or a free agent if you have none). The weekly report includes the same table. The deploy workflow snapshots ESPN's report into `injuries.json` every 3 hours, so the browser reads it from the site's own address.
+Each card shows the practice trend, ESPN's estimated return date, and a backup plan for at-risk starters (a bench player, or a free agent if you have none).
+
+Each card also has a **Latest update** box: the newest news item about the injury, with a link to read it. Headlines about the injury come first; stories that only mention it in passing (dynasty outlooks, waiver columns) come after. FantasyPros and RotoBaller items link straight to the article. RotoWire blurbs come without a URL, so they link to the player's RotoWire news page, which carries the same update (the deploy workflow snapshots the RotoWire IDs into `player-links.json`). If nothing recent turns up, the box falls back to the latest linked story, with its age shown, or as a last resort a news search. The weekly report links the same articles. The weekly report includes the same table. The deploy workflow snapshots ESPN's report into `injuries.json` every 3 hours, so the browser reads it from the site's own address.
 
 The lineup optimizer fills the most restrictive slots first (QB, K, DEF, then FLEX, then SUPER_FLEX). It respects your league's `roster_positions`, skips players on IR/taxi, and won't suggest dropping below one QB per QB/superflex slot or your only player at a required position. K and DEF are treated as weekly streamers.
 

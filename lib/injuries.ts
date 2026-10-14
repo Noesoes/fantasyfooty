@@ -14,7 +14,7 @@
 // a trained model.
 
 import { OUT_STATUSES, type Analysis, type PlayerAnalysis } from "./advisor";
-import { getPlayerNews, getSchedule, type NewsItem } from "./sleeper";
+import { getAllPlayers, getPlayerNews, getSchedule, type NewsItem } from "./sleeper";
 
 export type PracticeLevel = "DNP" | "Limited" | "Full";
 export type Verdict = "Playing" | "Likely" | "Toss-up" | "Unlikely" | "Out" | "Bye";
@@ -33,11 +33,25 @@ export interface InjuryRow {
   practice: PracticeNote[];
   returnDate: string | null;
   headline: { text: string; source: string; published: number; url?: string } | null;
+  /** The latest update on this player's injury, with a link to read more. */
+  article: InjuryArticle;
   probability: number;
   verdict: Verdict;
   reasons: string[];
   /** Their game has already kicked off — the lineup spot is locked. */
   locked: boolean;
+}
+
+export interface InjuryArticle {
+  title: string;
+  summary: string | null;
+  url: string;
+  source: string;
+  published: number | null;
+  /** "article": the story itself. "player-page": the source's page for the player, which carries this update. "search": no article found — a news search. */
+  kind: "article" | "player-page" | "search";
+  /** Over two weeks old. */
+  stale: boolean;
 }
 
 export interface InjuryReport {
@@ -167,6 +181,98 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R
   return out;
 }
 
+// --- Article for each injured player -------------------------------------
+
+const SOURCE_NAME: Record<string, string> = {
+  fantasy_pros: "FantasyPros",
+  rotoballer: "RotoBaller",
+  rotowire: "RotoWire",
+};
+const sourceName = (s: string) => SOURCE_NAME[s] ?? s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+const INJURY_NEWS =
+  /injur|\b(ankle|knee|hamstring|groin|calf|foot|toe|shoulder|concussion|protocol|neck|hip|quad|achilles|wrist|hand|finger|thumb|elbow|ribs?|chest|illness|back|oblique|pectoral|abdomen|hernia|turf toe)\b|\bIR\b|reserve|practice|questionable|doubtful|ruled out|\bout\b|sidelined|return|activated|limited|\bDNP\b|status|miss(es|ed)?\b|surgery|\bMRI\b|week-to-week|day-to-day|game-time|\bPUP\b|inactive|suit up|available/i;
+
+/** Sleeper id -> RotoWire id, for linking RotoWire updates (which come without a URL). */
+let rotowireIds: Promise<Map<string, number>> | null = null;
+function getRotowireIds(): Promise<Map<string, number>> {
+  rotowireIds ??= (async () => {
+    if (typeof window !== "undefined") {
+      const res = await fetch("player-links.json");
+      if (!res.ok) return new Map<string, number>();
+      const snap = (await res.json()) as { rw: Record<string, number> };
+      return new Map(Object.entries(snap.rw));
+    }
+    const all = await getAllPlayers();
+    const map = new Map<string, number>();
+    for (const [id, p] of Object.entries(all)) if (p.rotowire_id) map.set(id, p.rotowire_id);
+    return map;
+  })().catch(() => new Map<string, number>());
+  return rotowireIds;
+}
+
+function clip(text: string | undefined, max = 240): string | null {
+  const t = (text ?? "").replace(/\s+/g, " ").trim();
+  if (!t) return null;
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(". ") + 1, cut.lastIndexOf(" ")))}…`;
+}
+
+/**
+ * The newest news item about this player's injury, linked: the story itself
+ * when the source gives a URL, RotoWire's player page for RotoWire blurbs, an
+ * older linked story if that's all there is, and a news search as a last resort.
+ */
+function pickArticle(
+  p: PlayerAnalysis,
+  news: NewsItem[],
+  designation: string | null,
+  rw: Map<string, number>,
+): InjuryArticle {
+  const longTerm = designation === "IR" || designation === "PUP" || designation === "NFI";
+  const maxAge = (longTerm ? 60 : 21) * 86_400_000;
+  const body = p.injuryBodyPart ? new RegExp(`\\b${p.injuryBodyPart.replace(/[^a-z]/gi, "")}`, "i") : null;
+  const about = (text: string | undefined) => INJURY_NEWS.test(text ?? "") || (body?.test(text ?? "") ?? false);
+  const relevant = (n: NewsItem) => about(n.metadata.title) || about(n.metadata.description);
+  const sorted = [...news].sort((x, y) => y.published - x.published);
+  // Headlines about the injury first; stories that only mention it in passing
+  // (dynasty outlooks, waiver columns) after.
+  const fresh = sorted.filter((n) => Date.now() - n.published <= maxAge);
+  const recent = [
+    ...fresh.filter((n) => about(n.metadata.title)),
+    ...fresh.filter((n) => !about(n.metadata.title) && about(n.metadata.description)),
+  ];
+  const toArticle = (n: NewsItem, url: string, kind: InjuryArticle["kind"]): InjuryArticle => ({
+    title: (n.metadata.title ?? clip(n.metadata.description, 90) ?? "Latest update").trim(),
+    summary: clip(n.metadata.description),
+    url,
+    source: sourceName(n.source),
+    published: n.published,
+    kind,
+    stale: Date.now() - n.published > 14 * 86_400_000,
+  });
+  for (const n of recent) {
+    if (n.metadata.url) return toArticle(n, n.metadata.url, "article");
+    const rwId = n.source === "rotowire" ? rw.get(p.id) : undefined;
+    if (rwId) return toArticle(n, `https://www.rotowire.com/football/player.php?id=${rwId}`, "player-page");
+  }
+  const older =
+    sorted.find((n) => n.metadata.url && about(n.metadata.title)) ??
+    sorted.find((n) => n.metadata.url && relevant(n)) ??
+    sorted.find((n) => n.metadata.url);
+  if (older?.metadata.url) return toArticle(older, older.metadata.url, "article");
+  return {
+    title: `Search the latest news on ${p.name}`,
+    summary: null,
+    url: `https://news.google.com/search?q=${encodeURIComponent(`"${p.name}" ${p.injuryBodyPart ?? "injury"}`)}`,
+    source: "Google News",
+    published: null,
+    kind: "search",
+    stale: false,
+  };
+}
+
 const verdictFor = (p: number): Verdict =>
   p >= 0.85 ? "Playing" : p >= 0.6 ? "Likely" : p >= 0.4 ? "Toss-up" : p >= 0.1 ? "Unlikely" : "Out";
 
@@ -177,10 +283,11 @@ export async function buildInjuryReport(a: Analysis): Promise<InjuryReport> {
     ...(a.opponent?.starters ?? []).map((p) => ({ player: p, side: "opponent" as const, starter: true })),
   ].filter((c) => c.player.position !== "DEF");
 
-  const [espnResult, schedule, news] = await Promise.all([
+  const [espnResult, schedule, news, rw] = await Promise.all([
     fetchEspn().catch(() => null),
     getSchedule(a.season).catch(() => []),
     mapLimit(candidates, 6, (c) => getPlayerNews(c.player.id).catch(() => [] as NewsItem[])),
+    getRotowireIds(),
   ]);
   const espn = espnResult?.map ?? null;
 
@@ -317,6 +424,7 @@ export async function buildInjuryReport(a: Analysis): Promise<InjuryReport> {
       headline: top
         ? { text: top.title.trim(), source: top.source, published: top.when.getTime(), url: top.url }
         : null,
+      article: pickArticle(p, news[i], designation, rw),
       probability: Math.round(prob * 100) / 100,
       verdict: verdict ?? verdictFor(prob),
       reasons,
