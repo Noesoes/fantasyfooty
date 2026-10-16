@@ -48,7 +48,7 @@ export interface FieldMove {
   down: string | null;
   offense: string;
   defense: string;
-  result: "gain" | "loss" | "td" | "turnover" | "incomplete" | "kick" | "miss";
+  result: "gain" | "loss" | "td" | "turnover" | "incomplete" | "kick" | "miss" | "penalty";
 }
 
 export interface DrivePlay {
@@ -284,7 +284,7 @@ function describe(
 
 // --- field position ---------------------------------------------------------------
 
-const NOT_A_PLAY = /Kickoff|Timeout|End Period|End of|Two-minute|Coin Toss|Penalty/i;
+const NOT_A_PLAY = /Kickoff|Timeout|End Period|End of|Two-minute|Coin Toss/i;
 const clamp = (n: number) => Math.max(0, Math.min(100, n));
 const teamIdOf = (ref?: string) => ref?.match(/teams\/(\d+)/)?.[1] ?? null;
 
@@ -292,6 +292,20 @@ function fieldMove(play: EspnPlay, offense: string, defense: string): FieldMove 
   const st = play.start;
   const type = play.type.text;
   const text = play.text ?? "";
+  if (/Penalty/i.test(type)) {
+    // Accepted penalties move the ball too (e.g. pass interference); show them as their own snap.
+    if (st?.yardsToEndzone == null) return null;
+    const from = clamp(100 - st.yardsToEndzone);
+    return {
+      from,
+      to: clamp(from + (play.statYardage ?? 0)),
+      firstDown: st.down && st.distance ? clamp(from + st.distance) : null,
+      down: st.shortDownDistanceText ?? null,
+      offense,
+      defense,
+      result: "penalty",
+    };
+  }
   if (/No Play/i.test(text) || (NOT_A_PLAY.test(type) && !/Field Goal/i.test(type))) return null;
   if (st?.yardsToEndzone == null || (!st.down && !/Field Goal|Punt/i.test(type))) return null;
   const from = clamp(100 - st.yardsToEndzone);
@@ -336,6 +350,7 @@ function genericLabel(play: EspnPlay, m: FieldMove): string {
   if (m.result === "miss") return "FG missed";
   if (m.result === "turnover") return /Interception/i.test(type) ? "Interception" : "Fumble lost";
   if (m.result === "incomplete") return "Incomplete";
+  if (m.result === "penalty") return `Penalty ${y >= 0 ? "+" : ""}${y}`;
   if (/Sack/i.test(type)) return `Sack ${y}`;
   const kind = /Pass|Reception/i.test(type) ? "Pass" : "Run";
   return `${kind} ${y >= 0 ? "+" : ""}${y}`;
@@ -376,7 +391,8 @@ export function buildDrive(
   }
   if (!out.length) return null;
   const end = out.at(-1)!.move;
-  const lastPlay = drivePlays.at(-1)!;
+  // The latest real snap (timeouts and other admin entries carry stale down-and-distance).
+  const lastPlay = drivePlays.find((p) => p.id === out.at(-1)!.key) ?? drivePlays.at(-1)!;
   const ended = ["td", "kick", "miss", "turnover"].includes(end.result);
   const after = lastPlay.end;
   const sameSide = abbr(teamIdOf(after?.team?.$ref)) === offense;

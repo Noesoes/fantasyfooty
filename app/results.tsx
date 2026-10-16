@@ -705,6 +705,9 @@ function OnTheField({ drives }: { drives: DriveView[] }) {
         <span className="flex items-center gap-1.5">
           <span className="h-1 w-4 bg-rose-300" /> Loss / turnover
         </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-1 w-4 bg-[#fbbf24]" /> Penalty
+        </span>
         <span className="font-bold text-mint-300">Bold = your player</span>
       </div>
     </Card>

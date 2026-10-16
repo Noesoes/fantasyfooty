@@ -15,6 +15,7 @@ const RESULT_COLOR: Record<FieldMove["result"], string> = {
   incomplete: "var(--color-ink-400)",
   kick: "#fde047",
   miss: "var(--color-rose-300)",
+  penalty: "#fbbf24",
 };
 const FIRST_DOWN = "#facc15";
 const hex = (c: string | null, fallback: string) => (c ? `#${c}` : fallback);
@@ -156,8 +157,9 @@ export function DriveChart({ d }: { d: DriveView }) {
         const x1 = x(m.from);
         const x2 = x(m.to);
         const labelRight = Math.max(x1, x2) < 760;
-        const labelX =
-          (m.result === "incomplete" || m.result === "turnover" ? x1 : Math.max(x1, x2)) + (labelRight ? 14 : -14);
+        // Right of the arrowhead, or (near the far end zone) left of where the play started.
+        const point = m.result === "incomplete" || m.result === "turnover";
+        const labelX = labelRight ? (point ? x1 : Math.max(x1, x2)) + 30 : (point ? x1 : Math.min(x1, x2)) - 18;
         return (
           <g key={p.key}>
             {m.result === "incomplete" ? (
