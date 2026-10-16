@@ -8,11 +8,14 @@
 
 import { getSchedule } from "./sleeper";
 
-const ESPN = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
+// site.web.api allows browser requests; site.api is blocked for other origins.
+const ESPN = "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
 const TEAM_FIX: Record<string, string> = { WSH: "WAS" };
 const fix = (abbr: string) => TEAM_FIX[abbr] ?? abbr;
 
 export interface Game {
+  /** ESPN event id (for play-by-play); null when only Sleeper's schedule is available. */
+  id: string | null;
   home: string;
   away: string;
   kickoff: number;
@@ -40,6 +43,7 @@ export interface WeekGames {
 }
 
 interface EspnEvent {
+  id?: string;
   date: string;
   weather?: { displayValue?: string; temperature?: number };
   status: { period?: number; displayClock?: string; type: { state: string; shortDetail: string; completed?: boolean } };
@@ -78,6 +82,7 @@ export function gamesFromEspn(events: EspnEvent[]): Map<string, Game> {
     const odds = c.odds?.[0];
     const state = (e.status.type.state as Game["state"]) ?? "pre";
     const game: Game = {
+      id: e.id ?? null,
       home: fix(home.team.abbreviation),
       away: fix(away.team.abbreviation),
       kickoff: Date.parse(e.date),
@@ -168,6 +173,7 @@ export async function getWeekGames(season: string, week: number): Promise<WeekGa
   for (const g of schedule.filter((x) => x.week === week && x.status !== "canceled")) {
     const state: Game["state"] = g.status === "complete" ? "post" : g.status === "in_game" ? "in" : "pre";
     const game: Game = {
+      id: null,
       home: g.home,
       away: g.away,
       kickoff: Date.parse(`${g.date}T12:00:00Z`),

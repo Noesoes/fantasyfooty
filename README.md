@@ -80,6 +80,13 @@ Every player gets two scores.
 - **Manager tendencies:** points left on their bench per week, zero-point starts, pickups, trades and FAAB spent, from Sleeper's weekly results and transaction log. Also lists earlier meetings this season.
 - **Intel:** a few true, slightly pointed stats for the group chat. The weekly report includes them too.
 
+**Play-by-play (Live tab):** a running feed of every play involving your starters (switch to *Opponent* or *All* to watch theirs). Each play gets:
+- a short label ("23-yd catch", "12-yd rushing TD", "INTERCEPTED", "48-yd FG good")
+- roughly what it was worth under your league's scoring (receptions, yardage, TDs, interceptions, lost fumbles, 2-point conversions, kicks)
+- the game clock and ESPN's description
+
+Touchdowns are highlighted, plays since the last refresh get a **NEW** tag, and each player's latest play also shows in the live lineup cards. It refreshes every 30 seconds while games are on. Plays come from ESPN's live play-by-play feed. Players are matched by ESPN id from Sleeper's player database, or by name in the game's box score for players Sleeper hasn't mapped (often rookies). Penalties that wipe out a play are skipped, and the per-play points add up to Sleeper's totals (Sleeper's numbers stay the official score).
+
 **Injury report (Injuries tab):** for everyone on your roster and your opponent's starters, it estimates the chance each player plays this week and labels it Playing, Likely, Toss-up, Unlikely or Out. The estimate combines:
 - the official designation (Sleeper and ESPN's league-wide injury report)
 - this week's practice participation (DNP / limited / full), parsed sentence by sentence from Sleeper's player news feed and ESPN's notes, ignoring recaps of earlier weeks and hedged "if he practices…" sentences
@@ -150,6 +157,7 @@ lib/gameday.ts             pre-kickoff inactive check
 lib/injuries.ts            injury report and chance-to-play estimates
 lib/scoreboard.ts          NFL games: clock, score, Vegas lines, weather, and the start/sit nudges from them
 lib/live.ts                live scoring, win probability, late swaps
+lib/playbyplay.ts          live play-by-play for your players, with points per play
 lib/playoffs.ts            playoff odds simulation
 lib/scouting.ts            opponent scouting report
 scripts/fetch-snapshots.mjs ESPN injury + scoreboard snapshots used by the deploy workflow

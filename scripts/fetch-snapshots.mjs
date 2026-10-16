@@ -3,9 +3,10 @@
 //  - public/injuries.json:   league-wide injury report
 //  - public/scoreboard.json: this week's and next week's games (kickoff,
 //    Vegas line, weather; clocks go stale, so the app re-derives live state)
-//  - public/player-links.json: Sleeper id -> RotoWire id, so the injury tab
-//    can link RotoWire updates (Sleeper's feed has no URL for those) to the
-//    player's RotoWire news page. From Sleeper's ~10 MB player database.
+//  - public/player-links.json: Sleeper id -> RotoWire id (so the injury tab
+//    can link RotoWire updates, which come without a URL, to the player's
+//    RotoWire page) and -> ESPN id (to find players in ESPN play-by-play).
+//    From Sleeper's ~10 MB player database.
 import { mkdirSync, writeFileSync } from "node:fs";
 
 const BASE = "https://site.api.espn.com/apis/site/v2/sports/football/nfl";
@@ -47,6 +48,7 @@ try {
   }
   // Trim each event to the fields lib/scoreboard.ts reads.
   const trim = (e) => ({
+    id: e.id,
     date: e.date,
     weather: e.weather ? { displayValue: e.weather.displayValue, temperature: e.weather.temperature } : undefined,
     status: { period: e.status?.period, displayClock: e.status?.displayClock, type: e.status?.type },
@@ -72,13 +74,15 @@ try {
   if (!res.ok) throw new Error(`Sleeper ${res.status}`);
   const players = await res.json();
   const rw = {};
+  const espn = {};
   for (const [id, p] of Object.entries(players)) {
-    if (!p.rotowire_id || !["QB", "RB", "WR", "TE", "K"].includes(p.position)) continue;
+    if (!["QB", "RB", "WR", "TE", "K"].includes(p.position)) continue;
     if (!p.team && !p.injury_status) continue;
-    rw[id] = p.rotowire_id;
+    if (p.rotowire_id) rw[id] = p.rotowire_id;
+    if (p.espn_id) espn[id] = Number(p.espn_id);
   }
-  writeFileSync("public/player-links.json", JSON.stringify({ fetchedAt, rw }));
-  console.log(`Saved RotoWire ids for ${Object.keys(rw).length} players`);
+  writeFileSync("public/player-links.json", JSON.stringify({ fetchedAt, rw, espn }));
+  console.log(`Saved RotoWire ids for ${Object.keys(rw).length} players, ESPN ids for ${Object.keys(espn).length}`);
 } catch (err) {
   console.error(`Player links: ${err.message}`);
 }

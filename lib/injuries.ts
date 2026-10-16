@@ -64,7 +64,7 @@ export interface InjuryReport {
   espnAsOf: number | null;
 }
 
-const ESPN_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries";
+const ESPN_URL = "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/injuries";
 const ESPN_TEAM: Record<string, string> = { WSH: "WAS" };
 const ESPN_STATUS: Record<string, string> = { "Injured Reserve": "IR" };
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];

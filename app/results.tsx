@@ -12,6 +12,7 @@ import { buildPlayoffOdds, type PlayoffOdds, type PlayoffTeam } from "@/lib/play
 import { buildInjuryReport, type InjuryReport, type InjuryRow, type Verdict } from "@/lib/injuries";
 import { buildTrackRecord, type TrackRecord } from "@/lib/backtest";
 import { fetchLive, type LivePlayer, type LiveSide, type LiveState } from "@/lib/live";
+import { fetchPlayByPlay, type PlayByPlay, type PlayEvent } from "@/lib/playbyplay";
 import { Card, Empty, Headshot, MatchupChip, PlayerLine, Points, PosBadge, SlotBadge } from "./ui";
 
 type Tab =
@@ -241,7 +242,7 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
           ))}
         </div>
       </nav>
-      {tab === "live" && live && <LiveTab live={live} />}
+      {tab === "live" && live && <LiveTab a={a} live={live} />}
       {tab === "plan" && <GamePlan a={a} goTo={setTab} />}
       {tab === "lineup" && <Lineup a={a} />}
       {tab === "injuries" && <Injuries a={a} />}
@@ -469,7 +470,170 @@ function LiveScoreboard({ a, live }: { a: Analysis; live: LiveState }) {
   );
 }
 
-function LiveTab({ live }: { live: LiveState }) {
+/** Plays involving your (and your opponent's) starters, refreshed every 30s while games are on. */
+function usePlayByPlay(a: Analysis, live: LiveState) {
+  const [pbp, setPbp] = useState<PlayByPlay | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [fresh, setFresh] = useState<Set<string>>(new Set());
+  const seen = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = async () => {
+      try {
+        const next = await fetchPlayByPlay(a, live);
+        if (!alive) return;
+        // Plays that arrived since the last refresh get a NEW tag (none on first load).
+        const before = seen.current;
+        setFresh(new Set(before ? next.events.filter((e) => !before.has(e.key)).map((e) => e.key) : []));
+        seen.current = new Set(next.events.map((e) => e.key));
+        setPbp(next);
+        setFailed(false);
+      } catch {
+        if (alive) setFailed(true);
+      }
+      if (alive && live.inProgress) timer = setTimeout(load, 30_000);
+    };
+    void load();
+    return () => {
+      alive = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [a, live]);
+  return { pbp, failed, fresh };
+}
+
+const PLAY_CHIP: Record<PlayEvent["kind"], string> = {
+  td: "bg-hot text-white",
+  turnover: "bg-rose-500/20 text-rose-300",
+  miss: "bg-rose-500/15 text-rose-300",
+  big: "bg-mint-400/15 text-mint-300",
+  normal: "bg-ink-700 text-ink-300",
+};
+
+function PlayFeed({
+  pbp,
+  failed,
+  fresh,
+  hasOpponent,
+}: {
+  pbp: PlayByPlay | null;
+  failed: boolean;
+  fresh: Set<string>;
+  hasOpponent: boolean;
+}) {
+  const [filter, setFilter] = useState<"mine" | "opponent" | "all">("mine");
+  const [showAll, setShowAll] = useState(false);
+  const events = (pbp?.events ?? []).filter((e) => filter === "all" || e.side === filter);
+  const shown = showAll ? events : events.slice(0, 25);
+  return (
+    <Card
+      title="Play-by-play"
+      action={
+        hasOpponent ? (
+          <div className="flex text-xs font-bold">
+            {(
+              [
+                ["mine", "Yours"],
+                ["opponent", "Opponent"],
+                ["all", "All"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setFilter(id)}
+                className={`display px-2.5 py-1 transition ${filter === id ? "bg-mint-400 text-ink-950" : "bg-ink-800 text-ink-400 hover:text-ink-100"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : undefined
+      }
+    >
+      {!pbp ? (
+        failed ? (
+          <Empty>Couldn&apos;t reach ESPN&apos;s play-by-play. It&apos;ll retry shortly.</Empty>
+        ) : (
+          <div className="flex flex-col gap-2" aria-busy="true">
+            <div className="skeleton h-12" />
+            <div className="skeleton h-12" />
+            <div className="skeleton h-12" />
+          </div>
+        )
+      ) : events.length === 0 ? (
+        <Empty>
+          {filter === "opponent"
+            ? "No plays from their starters yet."
+            : "No plays yet — they'll show up here as soon as your players touch the ball."}
+        </Empty>
+      ) : (
+        <>
+          <ul className="flex flex-col divide-y divide-ink-700/60">
+            {shown.map((e) => (
+              <li
+                key={e.key}
+                className={`flex items-start gap-3 py-2.5 ${
+                  e.kind === "td"
+                    ? "-mx-4 border-l-4 border-hot bg-gradient-to-r from-hot/15 to-transparent px-3 sm:-mx-5 sm:px-4"
+                    : ""
+                }`}
+              >
+                <Headshot p={e.player} size={34} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="text-sm font-semibold">{e.player.name}</span>
+                    {e.side === "opponent" && (
+                      <span className="display bg-rose-500/15 px-1.5 text-[10px] font-bold text-rose-300">OPP</span>
+                    )}
+                    <span className={`display px-2 py-0.5 text-[11px] font-extrabold uppercase ${PLAY_CHIP[e.kind]}`}>
+                      {e.label}
+                    </span>
+                    {fresh.has(e.key) && (
+                      <span className="animate-pulse text-[10px] font-black tracking-wider text-hot">NEW</span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 line-clamp-2 text-xs text-ink-400">{e.text}</p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div
+                    className={`font-mono text-lg leading-none font-black tabular-nums ${
+                      e.points > 0 ? "text-mint-400" : e.points < 0 ? "text-rose-300" : "text-ink-500"
+                    }`}
+                  >
+                    {e.points > 0 ? "+" : ""}
+                    {e.points.toFixed(1)}
+                  </div>
+                  <div className="mt-1 text-[10px] font-semibold whitespace-nowrap text-ink-400">{e.clock}</div>
+                  <div className="text-[10px] whitespace-nowrap text-ink-500">{e.matchup}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {events.length > shown.length && (
+            <button
+              onClick={() => setShowAll(true)}
+              className="display mt-3 w-full bg-ink-800 py-2 text-sm font-bold text-ink-300 hover:bg-ink-700"
+            >
+              Show all {events.length} plays
+            </button>
+          )}
+        </>
+      )}
+      <p className="mt-3 text-xs text-ink-400">
+        From ESPN&apos;s live play-by-play, refreshed every 30 seconds while games are on. Points per play are estimated
+        with your league&apos;s scoring; the totals above are Sleeper&apos;s official numbers.
+        {pbp && pbp.unmatched.length > 0 && ` Couldn't find ${pbp.unmatched.join(", ")} in ESPN's data.`}
+      </p>
+    </Card>
+  );
+}
+
+function LiveTab({ a, live }: { a: Analysis; live: LiveState }) {
+  const { pbp, failed, fresh } = usePlayByPlay(a, live);
+  // Each player's most recent play, for the lineup cards.
+  const lastPlay = new Map<string, PlayEvent>();
+  for (const e of pbp?.events ?? []) if (!lastPlay.has(e.player.id)) lastPlay.set(e.player.id, e);
   return (
     <div className="flex flex-col gap-5">
       {live.lateSwaps.length > 0 && (
@@ -490,9 +654,12 @@ function LiveTab({ live }: { live: LiveState }) {
         </div>
       )}
       <div className="grid gap-5 lg:grid-cols-2">
-        <LiveRoster title="Your lineup" side={live.me} accent="mint" />
-        {live.opponent && <LiveRoster title={live.opponent.teamName} side={live.opponent} accent="hot" />}
+        <LiveRoster title="Your lineup" side={live.me} accent="mint" lastPlay={lastPlay} />
+        {live.opponent && (
+          <LiveRoster title={live.opponent.teamName} side={live.opponent} accent="hot" lastPlay={lastPlay} />
+        )}
       </div>
+      <PlayFeed pbp={pbp} failed={failed} fresh={fresh} hasOpponent={Boolean(live.opponent)} />
       <p className="text-xs text-ink-400">
         Points are Sleeper&apos;s live scoring. &quot;Still to come&quot; is each player&apos;s projection times the
         share of their game left; win probability assumes a typical player&apos;s score swings about ±60% of projection.
@@ -526,7 +693,17 @@ function gameLabel(p: LivePlayer) {
   return `${g.state === "post" ? "Final" : g.detail}${score} vs ${opp}`;
 }
 
-function LiveRoster({ title, side, accent }: { title: string; side: LiveSide; accent: "mint" | "hot" }) {
+function LiveRoster({
+  title,
+  side,
+  accent,
+  lastPlay,
+}: {
+  title: string;
+  side: LiveSide;
+  accent: "mint" | "hot";
+  lastPlay: Map<string, PlayEvent>;
+}) {
   const max = Math.max(1, ...side.players.map((p) => p.points + p.remaining));
   return (
     <Card
@@ -554,6 +731,12 @@ function LiveRoster({ title, side, accent }: { title: string; side: LiveSide; ac
                   {p.status === "in" && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-hot" />}
                   {gameLabel(p)}
                 </div>
+                {p.player && lastPlay.has(p.player.id) && (
+                  <div className="mt-0.5 ml-[46px] truncate text-[11px] text-ink-300">
+                    Last: {lastPlay.get(p.player.id)!.label}{" "}
+                    <span className="text-ink-500">({lastPlay.get(p.player.id)!.clock})</span>
+                  </div>
+                )}
               </div>
             ) : (
               <span className="flex-1 text-sm text-ink-400 italic">{p.name}</span>
@@ -910,7 +1093,10 @@ function GameLines({ a }: { a: Analysis }) {
                   <span className="block text-[9px] tracking-wider text-ink-400 uppercase">O/U</span>
                   {g.overUnder ?? "—"}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-left font-sans text-ink-300 sm:w-32 sm:flex-none" title={g.weather ?? ""}>
+                <span
+                  className="min-w-0 flex-1 truncate text-left font-sans text-ink-300 sm:w-32 sm:flex-none"
+                  title={g.weather ?? ""}
+                >
                   <span className="block font-mono text-[9px] tracking-wider text-ink-400 uppercase">Forecast</span>
                   {g.indoor ? "Indoors" : (g.weather ?? "—")}
                 </span>
