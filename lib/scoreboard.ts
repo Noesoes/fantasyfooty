@@ -18,6 +18,11 @@ export interface Game {
   id: string | null;
   home: string;
   away: string;
+  /** ESPN team ids and colors (hex, no #), when known. */
+  homeId: string | null;
+  awayId: string | null;
+  homeColor: string | null;
+  awayColor: string | null;
   kickoff: number;
   /** False when only the date is known (Sleeper-schedule fallback). */
   kickoffKnown: boolean;
@@ -49,7 +54,11 @@ interface EspnEvent {
   status: { period?: number; displayClock?: string; type: { state: string; shortDetail: string; completed?: boolean } };
   competitions: {
     venue?: { indoor?: boolean };
-    competitors: { homeAway: "home" | "away"; score?: string; team: { abbreviation: string } }[];
+    competitors: {
+      homeAway: "home" | "away";
+      score?: string;
+      team: { abbreviation: string; id?: string; color?: string; alternateColor?: string };
+    }[];
     odds?: { details?: string; overUnder?: number; spread?: number }[];
   }[];
 }
@@ -72,6 +81,20 @@ function parseSpread(details: string | undefined): Game["spread"] {
   return { team: fix(m[1]), points: Number(m[2]) };
 }
 
+/** A team color that shows up on the dark field: the primary, or the alternate if the primary is near-black. */
+function visibleColor(primary?: string, alternate?: string): string | null {
+  const lum = (h: string) => {
+    const [r, g, b] = [0, 2, 4].map((i) => {
+      const c = parseInt(h.slice(i, i + 2), 16) / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b; // WCAG relative luminance
+  };
+  if (primary && /^[0-9a-f]{6}$/i.test(primary) && lum(primary) >= 0.06) return primary;
+  if (alternate && /^[0-9a-f]{6}$/i.test(alternate) && lum(alternate) >= 0.06) return alternate;
+  return primary ?? alternate ?? null;
+}
+
 export function gamesFromEspn(events: EspnEvent[]): Map<string, Game> {
   const byTeam = new Map<string, Game>();
   for (const e of events) {
@@ -85,6 +108,10 @@ export function gamesFromEspn(events: EspnEvent[]): Map<string, Game> {
       id: e.id ?? null,
       home: fix(home.team.abbreviation),
       away: fix(away.team.abbreviation),
+      homeId: home.team.id ?? null,
+      awayId: away.team.id ?? null,
+      homeColor: visibleColor(home.team.color, home.team.alternateColor),
+      awayColor: visibleColor(away.team.color, away.team.alternateColor),
       kickoff: Date.parse(e.date),
       kickoffKnown: true,
       state,
@@ -176,6 +203,10 @@ export async function getWeekGames(season: string, week: number): Promise<WeekGa
       id: null,
       home: g.home,
       away: g.away,
+      homeId: null,
+      awayId: null,
+      homeColor: null,
+      awayColor: null,
       kickoff: Date.parse(`${g.date}T12:00:00Z`),
       kickoffKnown: false,
       state,

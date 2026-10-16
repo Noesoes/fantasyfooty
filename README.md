@@ -87,6 +87,8 @@ Every player gets two scores.
 
 Touchdowns are highlighted, plays since the last refresh get a **NEW** tag, and each player's latest play also shows in the live lineup cards. It refreshes every 30 seconds while games are on. Plays come from ESPN's live play-by-play feed. Players are matched by ESPN id from Sleeper's player database, or by name in the game's box score for players Sleeper hasn't mapped (often rookies). Penalties that wipe out a play are skipped, and the per-play points add up to Sleeper's totals (Sleeper's numbers stay the official score).
 
+**On the field (Live tab):** a drawn field in team colors for each game your players are in. It charts the current drive (or the last one once the game ends) the way a TV drive chart does. Every snap is an arrow from where it started to where it ended: runs and catches, incompletions as a dashed ring, turnovers as an ✕, and kicks as an arc. It also shows the line of scrimmage, the yellow line to gain, the ball, and down & distance, and your players' plays are labeled with what they were worth. Each play in the play-by-play feed also gets a mini field strip showing how far it moved the ball.
+
 **Injury report (Injuries tab):** for everyone on your roster and your opponent's starters, it estimates the chance each player plays this week and labels it Playing, Likely, Toss-up, Unlikely or Out. The estimate combines:
 - the official designation (Sleeper and ESPN's league-wide injury report)
 - this week's practice participation (DNP / limited / full), parsed sentence by sentence from Sleeper's player news feed and ESPN's notes, ignoring recaps of earlier weeks and hedged "if he practices…" sentences
@@ -157,7 +159,8 @@ lib/gameday.ts             pre-kickoff inactive check
 lib/injuries.ts            injury report and chance-to-play estimates
 lib/scoreboard.ts          NFL games: clock, score, Vegas lines, weather, and the start/sit nudges from them
 lib/live.ts                live scoring, win probability, late swaps
-lib/playbyplay.ts          live play-by-play for your players, with points per play
+lib/playbyplay.ts          live play-by-play for your players, with points per play and drive charts
+app/field.tsx              football field graphics (drive chart, per-play strip)
 lib/playoffs.ts            playoff odds simulation
 lib/scouting.ts            opponent scouting report
 scripts/fetch-snapshots.mjs ESPN injury + scoreboard snapshots used by the deploy workflow

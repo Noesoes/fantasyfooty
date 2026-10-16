@@ -12,7 +12,8 @@ import { buildPlayoffOdds, type PlayoffOdds, type PlayoffTeam } from "@/lib/play
 import { buildInjuryReport, type InjuryReport, type InjuryRow, type Verdict } from "@/lib/injuries";
 import { buildTrackRecord, type TrackRecord } from "@/lib/backtest";
 import { fetchLive, type LivePlayer, type LiveSide, type LiveState } from "@/lib/live";
-import { fetchPlayByPlay, type PlayByPlay, type PlayEvent } from "@/lib/playbyplay";
+import { fetchPlayByPlay, type DriveView, type PlayByPlay, type PlayEvent } from "@/lib/playbyplay";
+import { DriveChart, FieldStrip } from "./field";
 import { Card, Empty, Headshot, MatchupChip, PlayerLine, Points, PosBadge, SlotBadge } from "./ui";
 
 type Tab =
@@ -594,6 +595,7 @@ function PlayFeed({
                     )}
                   </div>
                   <p className="mt-0.5 line-clamp-2 text-xs text-ink-400">{e.text}</p>
+                  {e.field && <FieldStrip m={e.field} />}
                 </div>
                 <div className="shrink-0 text-right">
                   <div
@@ -629,6 +631,82 @@ function PlayFeed({
   );
 }
 
+function OnTheField({ drives }: { drives: DriveView[] }) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const d = drives.find((x) => x.gameId === selected) ?? drives[0];
+  const lastName = (n: string) => n.split(" ").slice(-1)[0];
+  return (
+    <Card
+      title="On the field"
+      action={<span className="text-xs text-ink-400">{d.live ? "current drive" : "last drive · final"}</span>}
+    >
+      {drives.length > 1 && (
+        <div className="no-scrollbar -mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1">
+          {drives.map((x) => (
+            <button
+              key={x.gameId}
+              onClick={() => setSelected(x.gameId)}
+              className={`display flex shrink-0 -skew-x-12 items-center gap-1.5 px-3 py-1.5 text-sm font-bold transition ${
+                x.gameId === d.gameId ? "prime-gradient text-ink-950" : "bg-ink-800 text-ink-300 hover:bg-ink-700"
+              }`}
+            >
+              <span className="flex skew-x-12 items-center gap-1.5">
+                {x.live && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-hot" />}
+                {x.score.replace(/ \d+/g, "").replace(" – ", " @ ")}
+                <span className="font-semibold opacity-75">
+                  {x.players
+                    .filter((p) => p.side === "mine")
+                    .map((p) => lastName(p.name))
+                    .join(", ")}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
+        <div>
+          <div className="flex items-center gap-2">
+            <span
+              className="h-3.5 w-3.5 shrink-0 rounded-sm"
+              style={{ backgroundColor: d.offenseColor ? `#${d.offenseColor}` : undefined }}
+            />
+            <span className="display text-2xl leading-none font-black">{d.offense} ball</span>
+          </div>
+          <div className="mt-1 text-sm font-semibold text-ink-100">
+            {d.situation} <span className="font-normal text-ink-400">· {d.clock}</span>
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="font-mono text-lg font-black tabular-nums">{d.score}</div>
+          <div className="text-xs text-ink-400">Drive: {d.summary}</div>
+        </div>
+      </div>
+      <div className="-mx-4 overflow-hidden border-y border-ink-700 sm:mx-0 sm:border">
+        <DriveChart d={d} />
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-400">
+        <span className="flex items-center gap-1.5">
+          <span className="h-3 w-1 bg-mint-400" /> Line of scrimmage
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-3 w-1 bg-[#facc15]" /> Line to gain
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-1 w-4 bg-mint-400" /> Gain
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-1 w-4 bg-hot" /> Touchdown
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-1 w-4 bg-rose-300" /> Loss / turnover
+        </span>
+        <span className="font-bold text-mint-300">Bold = your player</span>
+      </div>
+    </Card>
+  );
+}
+
 function LiveTab({ a, live }: { a: Analysis; live: LiveState }) {
   const { pbp, failed, fresh } = usePlayByPlay(a, live);
   // Each player's most recent play, for the lineup cards.
@@ -653,6 +731,7 @@ function LiveTab({ a, live }: { a: Analysis; live: LiveState }) {
           ))}
         </div>
       )}
+      {pbp && pbp.drives.length > 0 && <OnTheField drives={pbp.drives} />}
       <div className="grid gap-5 lg:grid-cols-2">
         <LiveRoster title="Your lineup" side={live.me} accent="mint" lastPlay={lastPlay} />
         {live.opponent && (

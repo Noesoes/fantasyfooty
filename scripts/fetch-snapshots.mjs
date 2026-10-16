@@ -57,7 +57,12 @@ try {
       competitors: c.competitors.map((t) => ({
         homeAway: t.homeAway,
         score: t.score,
-        team: { abbreviation: t.team.abbreviation },
+        team: {
+          abbreviation: t.team.abbreviation,
+          id: t.team.id,
+          color: t.team.color,
+          alternateColor: t.team.alternateColor,
+        },
       })),
       odds: (c.odds ?? []).slice(0, 1).map((o) => ({ details: o.details, overUnder: o.overUnder, spread: o.spread })),
     })),
