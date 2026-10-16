@@ -1,6 +1,7 @@
-// Live play-by-play for your starters (and your opponent's): every play
-// ESPN logs that involves one of them, with a short label ("23-yd catch")
-// and roughly what it was worth under your league's scoring.
+// Drive charts for live games: the current drive's snaps from ESPN's play
+// feed (start and end spot, down and distance, result), with snaps involving
+// your players (or your opponent's) labeled with what they were worth under
+// your league's scoring.
 //
 // ESPN's play feed names players only by ESPN id, so we map Sleeper players
 // to ESPN ids via Sleeper's player database (snapshotted into
@@ -8,7 +9,6 @@
 // in the game's box score for players Sleeper hasn't mapped (often rookies).
 
 import type { Analysis, PlayerAnalysis } from "./advisor";
-import type { LivePlayer, LiveState } from "./live";
 import type { Game } from "./scoreboard";
 
 const CORE = "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl";
@@ -81,15 +81,6 @@ export interface DriveView {
   live: boolean;
   /** Your (and your opponent's) players in this game. */
   players: { name: string; side: PlayEvent["side"] }[];
-}
-
-export interface PlayByPlay {
-  events: PlayEvent[];
-  /** One per game with your (or your opponent's) players in it, live games first. */
-  drives: DriveView[];
-  /** Tracked players we couldn't find in ESPN's data (no plays shown for them). */
-  unmatched: string[];
-  asOf: number;
 }
 
 interface EspnPlay {
@@ -452,74 +443,69 @@ const TRACKED_ROLES = new Set([
   "scorer",
 ]);
 
-export async function fetchPlayByPlay(a: Analysis, live: LiveState): Promise<PlayByPlay> {
-  const tracked: { lp: LivePlayer; side: PlayEvent["side"] }[] = [
-    ...live.me.players.map((lp) => ({ lp, side: "mine" as const })),
-    ...(live.opponent?.players ?? []).map((lp) => ({ lp, side: "opponent" as const })),
-  ].filter(({ lp }) => lp.player && lp.game?.id && lp.status !== "pre" && lp.status !== "bye");
+export interface TrackedPlayer {
+  player: PlayerAnalysis;
+  side: PlayEvent["side"];
+}
 
+/** The current drive in each live game (keyed by ESPN event id), with tracked players' snaps labeled. */
+export async function fetchDrives(
+  a: Analysis,
+  games: { game: Game; players: TrackedPlayer[] }[],
+): Promise<Map<string, DriveView>> {
   const ids = await espnIds();
-  const byGame = new Map<string, typeof tracked>();
-  for (const t of tracked) byGame.set(t.lp.game!.id!, [...(byGame.get(t.lp.game!.id!) ?? []), t]);
-
-  const events: PlayEvent[] = [];
-  const drives: DriveView[] = [];
-  const unmatched: string[] = [];
+  const drives = new Map<string, DriveView>();
   await Promise.all(
-    [...byGame.entries()].map(async ([eventId, players]) => {
-      const game = players[0].lp.game!;
-      const plays = await getPlays(eventId, game.state === "post").catch(() => [] as EspnPlay[]);
-      // Map each tracked player to an ESPN id.
-      const want = new Map<string, (typeof players)[number]>();
-      let box: Map<string, string> | null = null;
-      for (const t of players) {
-        const p = t.lp.player!;
-        let espn = ids.get(p.id);
-        if (!espn) {
-          box ??= await getBoxNames(eventId);
-          espn = box.get(`${normName(p.name)}|${p.team ?? ""}`);
+    games
+      .filter(({ game }) => game.state === "in" && game.id)
+      .map(async ({ game, players }) => {
+        const eventId = game.id!;
+        const plays = await getPlays(eventId, false).catch(() => [] as EspnPlay[]);
+        // Map each tracked player to an ESPN id.
+        const want = new Map<string, TrackedPlayer>();
+        let box: Map<string, string> | null = null;
+        for (const t of players) {
+          let espn = ids.get(t.player.id);
+          if (!espn) {
+            box ??= await getBoxNames(eventId);
+            espn = box.get(`${normName(t.player.name)}|${t.player.team ?? ""}`);
+          }
+          if (espn) want.set(espn, t);
         }
-        if (espn) want.set(espn, t);
-        else if (t.lp.points !== 0) unmatched.push(p.name); // no box-score line usually means they didn't play
-      }
-      const mineByPlay = new Map<string, PlayEvent>();
-      for (const play of plays) {
-        const roles = new Map<string, Set<string>>();
-        for (const part of play.participants ?? []) {
-          if (!TRACKED_ROLES.has(part.type)) continue;
-          const id = part.athlete.$ref.match(/athletes\/(\d+)/)?.[1];
-          if (!id || !want.has(id)) continue;
-          roles.set(id, (roles.get(id) ?? new Set()).add(part.type));
+        const mineByPlay = new Map<string, PlayEvent>();
+        for (const play of plays) {
+          const roles = new Map<string, Set<string>>();
+          for (const part of play.participants ?? []) {
+            if (!TRACKED_ROLES.has(part.type)) continue;
+            const id = part.athlete.$ref.match(/athletes\/(\d+)/)?.[1];
+            if (!id || !want.has(id)) continue;
+            roles.set(id, (roles.get(id) ?? new Set()).add(part.type));
+          }
+          for (const [id, r] of roles) {
+            const t = want.get(id)!;
+            const d = describe(play, r, t.player, a.league.scoring_settings);
+            if (!d) continue;
+            if (mineByPlay.has(play.id) && t.side !== "mine") continue;
+            const opp = t.player.team === game.home ? game.away : game.home;
+            mineByPlay.set(play.id, {
+              key: `${play.id}:${t.player.id}`,
+              player: t.player,
+              side: t.side,
+              ...d,
+              text: tidy(play.text ?? ""),
+              clock: `${play.period.number > 4 ? "OT" : `Q${play.period.number}`} ${play.clock.displayValue}`,
+              matchup: `${t.player.team} vs ${opp}`,
+              at: play.wallclock ? Date.parse(play.wallclock) : Number(play.sequenceNumber ?? 0),
+              field: fieldMove(play, t.player.team ?? "", opp),
+            });
+          }
         }
-        for (const [id, r] of roles) {
-          const t = want.get(id)!;
-          const p = t.lp.player!;
-          const d = describe(play, r, p, a.league.scoring_settings);
-          if (!d) continue;
-          const opp = p.team === game.home ? game.away : game.home;
-          const ev: PlayEvent = {
-            key: `${play.id}:${p.id}`,
-            player: p,
-            side: t.side,
-            ...d,
-            text: tidy(play.text ?? ""),
-            clock: `${play.period.number > 4 ? "OT" : `Q${play.period.number}`} ${play.clock.displayValue}`,
-            matchup: `${p.team} vs ${opp}`,
-            at: play.wallclock ? Date.parse(play.wallclock) : Number(play.sequenceNumber ?? 0),
-            field: fieldMove(play, p.team ?? "", opp),
-          };
-          events.push(ev);
-          if (!mineByPlay.has(play.id) || t.side === "mine") mineByPlay.set(play.id, ev);
+        const drive = buildDrive(eventId, game, plays, mineByPlay);
+        if (drive) {
+          drive.players = players.map((t) => ({ name: t.player.name, side: t.side }));
+          drives.set(eventId, drive);
         }
-      }
-      const drive = buildDrive(eventId, game, plays, mineByPlay);
-      if (drive) {
-        drive.players = players.map((t) => ({ name: t.lp.player!.name, side: t.side }));
-        drives.push(drive);
-      }
-    }),
+      }),
   );
-  drives.sort((x, y) => Number(y.live) - Number(x.live));
-  events.sort((x, y) => y.at - x.at);
-  return { events, drives, unmatched, asOf: Date.now() };
+  return drives;
 }

@@ -1,9 +1,8 @@
 "use client";
 
-// Football field graphics for live games: a drive chart for the current
-// drive (every snap as an arrow, line of scrimmage, line to gain, ball), and
-// a mini strip for single plays in the play-by-play feed. The offense always
-// attacks to the right.
+// Football field graphic for live games: a drive chart for the current drive
+// (every snap as an arrow, line of scrimmage, line to gain, ball). The offense
+// always attacks to the right.
 
 import type { DriveView, FieldMove } from "@/lib/playbyplay";
 
@@ -24,13 +23,6 @@ function textOn(c: string | null): string {
   if (!c || !/^[0-9a-f]{6}$/i.test(c)) return "#ffffff";
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(c.slice(i, i + 2), 16));
   return 0.299 * r + 0.587 * g + 0.114 * b > 186 ? "#0e1338" : "#ffffff";
-}
-/** "Own 34" / "SEA 34" / "Goal". */
-function spotText(yard: number, defense: string) {
-  const y = Math.round(yard);
-  if (y >= 100) return "End zone";
-  if (y === 50) return "Midfield";
-  return y < 50 ? `Own ${y}` : `${defense} ${100 - y}`;
 }
 
 // --- Drive chart ---------------------------------------------------------------
@@ -218,53 +210,6 @@ export function DriveChart({ d }: { d: DriveView }) {
           <line key={t} x1={t} x2={t} y1={-3} y2={3} stroke="white" strokeWidth={1.5} />
         ))}
       </g>
-    </svg>
-  );
-}
-
-// --- Mini strip for one play ----------------------------------------------------
-
-export function FieldStrip({ m }: { m: FieldMove }) {
-  const x = (yard: number) => 10 + yard; // 0..120 with 10-unit end zones
-  const c = RESULT_COLOR[m.result];
-  const x1 = x(m.from);
-  const x2 = x(m.to);
-  return (
-    <svg
-      viewBox="0 0 120 10"
-      className="mt-1.5 block h-3 w-full max-w-[260px]"
-      role="img"
-      aria-label={`${m.down ?? ""} from ${spotText(m.from, m.defense)} to ${spotText(m.to, m.defense)}`}
-    >
-      <title>{`${m.down ? `${m.down} · ` : ""}${spotText(m.from, m.defense)} → ${spotText(m.to, m.defense)}`}</title>
-      <rect x={0} y={0} width={120} height={10} className="fill-ink-800" />
-      <rect x={0} y={0} width={10} height={10} className="fill-ink-700" />
-      <rect x={110} y={0} width={10} height={10} className="fill-ink-700" />
-      {[10, 20, 30, 40, 50, 60, 70, 80, 90].map((yd) => (
-        <line
-          key={yd}
-          x1={x(yd)}
-          x2={x(yd)}
-          y1={0}
-          y2={10}
-          stroke="currentColor"
-          className="text-ink-100"
-          strokeOpacity={yd === 50 ? 0.25 : 0.1}
-          strokeWidth={0.5}
-        />
-      ))}
-      {m.firstDown !== null && m.firstDown < 100 && (
-        <line x1={x(m.firstDown)} x2={x(m.firstDown)} y1={0} y2={10} stroke={FIRST_DOWN} strokeWidth={0.8} />
-      )}
-      <line x1={x1} x2={x1} y1={0} y2={10} stroke="var(--color-ink-100)" strokeOpacity={0.6} strokeWidth={0.6} />
-      {m.result === "incomplete" || m.result === "turnover" ? (
-        <circle cx={x1} cy={5} r={2} fill="none" stroke={c} strokeWidth={0.9} />
-      ) : (
-        <>
-          <line x1={x1} x2={x2} y1={5} y2={5} stroke={c} strokeWidth={2.4} strokeLinecap="round" />
-          <circle cx={x2} cy={5} r={1.8} fill={c} />
-        </>
-      )}
     </svg>
   );
 }

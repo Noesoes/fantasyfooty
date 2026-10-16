@@ -3,6 +3,7 @@
 // points under your league's scoring.
 
 import { points, type Analysis, type PlayerAnalysis } from "./advisor";
+import { fetchDrives, type DriveView } from "./playbyplay";
 import { getWeekGames, type Game, type WeekGames } from "./scoreboard";
 import { getWeekStats, type StatRow } from "./sleeper";
 
@@ -21,6 +22,8 @@ export interface GamePlayer {
 export interface GameCard {
   game: Game;
   players: GamePlayer[];
+  /** The current drive, for live games. */
+  drive: DriveView | null;
 }
 
 export interface GameCenter {
@@ -72,7 +75,7 @@ export async function fetchGameCenter(a: Analysis, starters: Set<string>): Promi
 
   // One card per game (byTeam lists each game twice).
   const cards = new Map<Game, GameCard>();
-  for (const g of new Set(games.byTeam.values())) cards.set(g, { game: g, players: [] });
+  for (const g of new Set(games.byTeam.values())) cards.set(g, { game: g, players: [], drive: null });
   const order = { starter: 0, bench: 1, opponent: 2 };
   for (const { player, role } of people) {
     const g = games.byTeam.get(player.team!);
@@ -89,6 +92,19 @@ export async function fetchGameCenter(a: Analysis, starters: Set<string>): Promi
     });
   }
   for (const c of cards.values()) c.players.sort((x, y) => order[x.role] - order[y.role] || y.points - x.points);
+
+  // Drive charts for every live game, with your (and your opponent's) players' snaps labeled.
+  const drives = await fetchDrives(
+    a,
+    [...cards.values()].map((c) => ({
+      game: c.game,
+      players: c.players.map((p) => ({
+        player: p.player,
+        side: p.role === "opponent" ? ("opponent" as const) : ("mine" as const),
+      })),
+    })),
+  ).catch(() => new Map<string, DriveView>());
+  for (const c of cards.values()) c.drive = c.game.id ? (drives.get(c.game.id) ?? null) : null;
 
   // Live games first (yours before others), then upcoming by kickoff, then finals.
   const rank = (c: GameCard) => {

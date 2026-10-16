@@ -12,8 +12,6 @@ import { buildPlayoffOdds, type PlayoffOdds, type PlayoffTeam } from "@/lib/play
 import { buildInjuryReport, type InjuryReport, type InjuryRow, type Verdict } from "@/lib/injuries";
 import { buildTrackRecord, type TrackRecord } from "@/lib/backtest";
 import { fetchLive, type LivePlayer, type LiveSide, type LiveState } from "@/lib/live";
-import { fetchPlayByPlay, type DriveView, type PlayByPlay, type PlayEvent } from "@/lib/playbyplay";
-import { DriveChart, FieldStrip } from "./field";
 import { GamesTab } from "./games";
 import { Card, Empty, Headshot, MatchupChip, PlayerLine, Points, PosBadge, SlotBadge } from "./ui";
 
@@ -246,7 +244,7 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
           ))}
         </div>
       </nav>
-      {tab === "live" && live && <LiveTab a={a} live={live} />}
+      {tab === "live" && live && <LiveTab live={live} />}
       {tab === "plan" && <GamePlan a={a} goTo={setTab} />}
       {tab === "games" && <GamesTab a={a} />}
       {tab === "lineup" && <Lineup a={a} />}
@@ -475,250 +473,7 @@ function LiveScoreboard({ a, live }: { a: Analysis; live: LiveState }) {
   );
 }
 
-/** Plays involving your (and your opponent's) starters, refreshed every 30s while games are on. */
-function usePlayByPlay(a: Analysis, live: LiveState) {
-  const [pbp, setPbp] = useState<PlayByPlay | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [fresh, setFresh] = useState<Set<string>>(new Set());
-  const seen = useRef<Set<string> | null>(null);
-  useEffect(() => {
-    let alive = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const load = async () => {
-      try {
-        const next = await fetchPlayByPlay(a, live);
-        if (!alive) return;
-        // Plays that arrived since the last refresh get a NEW tag (none on first load).
-        const before = seen.current;
-        setFresh(new Set(before ? next.events.filter((e) => !before.has(e.key)).map((e) => e.key) : []));
-        seen.current = new Set(next.events.map((e) => e.key));
-        setPbp(next);
-        setFailed(false);
-      } catch {
-        if (alive) setFailed(true);
-      }
-      if (alive && live.inProgress) timer = setTimeout(load, 30_000);
-    };
-    void load();
-    return () => {
-      alive = false;
-      if (timer) clearTimeout(timer);
-    };
-  }, [a, live]);
-  return { pbp, failed, fresh };
-}
-
-const PLAY_CHIP: Record<PlayEvent["kind"], string> = {
-  td: "bg-hot text-white",
-  turnover: "bg-rose-500/20 text-rose-300",
-  miss: "bg-rose-500/15 text-rose-300",
-  big: "bg-mint-400/15 text-mint-300",
-  normal: "bg-ink-700 text-ink-300",
-};
-
-function PlayFeed({
-  pbp,
-  failed,
-  fresh,
-  hasOpponent,
-}: {
-  pbp: PlayByPlay | null;
-  failed: boolean;
-  fresh: Set<string>;
-  hasOpponent: boolean;
-}) {
-  const [filter, setFilter] = useState<"mine" | "opponent" | "all">("mine");
-  const [showAll, setShowAll] = useState(false);
-  const events = (pbp?.events ?? []).filter((e) => filter === "all" || e.side === filter);
-  const shown = showAll ? events : events.slice(0, 25);
-  return (
-    <Card
-      title="Play-by-play"
-      action={
-        hasOpponent ? (
-          <div className="flex text-xs font-bold">
-            {(
-              [
-                ["mine", "Yours"],
-                ["opponent", "Opponent"],
-                ["all", "All"],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                onClick={() => setFilter(id)}
-                className={`display px-2.5 py-1 transition ${filter === id ? "bg-mint-400 text-ink-950" : "bg-ink-800 text-ink-400 hover:text-ink-100"}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        ) : undefined
-      }
-    >
-      {!pbp ? (
-        failed ? (
-          <Empty>Couldn&apos;t reach ESPN&apos;s play-by-play. It&apos;ll retry shortly.</Empty>
-        ) : (
-          <div className="flex flex-col gap-2" aria-busy="true">
-            <div className="skeleton h-12" />
-            <div className="skeleton h-12" />
-            <div className="skeleton h-12" />
-          </div>
-        )
-      ) : events.length === 0 ? (
-        <Empty>
-          {filter === "opponent"
-            ? "No plays from their starters yet."
-            : "No plays yet — they'll show up here as soon as your players touch the ball."}
-        </Empty>
-      ) : (
-        <>
-          <ul className="flex flex-col divide-y divide-ink-700/60">
-            {shown.map((e) => (
-              <li
-                key={e.key}
-                className={`flex items-start gap-3 py-2.5 ${
-                  e.kind === "td"
-                    ? "-mx-4 border-l-4 border-hot bg-gradient-to-r from-hot/15 to-transparent px-3 sm:-mx-5 sm:px-4"
-                    : ""
-                }`}
-              >
-                <Headshot p={e.player} size={34} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="text-sm font-semibold">{e.player.name}</span>
-                    {e.side === "opponent" && (
-                      <span className="display bg-rose-500/15 px-1.5 text-[10px] font-bold text-rose-300">OPP</span>
-                    )}
-                    <span className={`display px-2 py-0.5 text-[11px] font-extrabold uppercase ${PLAY_CHIP[e.kind]}`}>
-                      {e.label}
-                    </span>
-                    {fresh.has(e.key) && (
-                      <span className="animate-pulse text-[10px] font-black tracking-wider text-hot">NEW</span>
-                    )}
-                  </div>
-                  <p className="mt-0.5 line-clamp-2 text-xs text-ink-400">{e.text}</p>
-                  {e.field && <FieldStrip m={e.field} />}
-                </div>
-                <div className="shrink-0 text-right">
-                  <div
-                    className={`font-mono text-lg leading-none font-black tabular-nums ${
-                      e.points > 0 ? "text-mint-400" : e.points < 0 ? "text-rose-300" : "text-ink-500"
-                    }`}
-                  >
-                    {e.points > 0 ? "+" : ""}
-                    {e.points.toFixed(1)}
-                  </div>
-                  <div className="mt-1 text-[10px] font-semibold whitespace-nowrap text-ink-400">{e.clock}</div>
-                  <div className="text-[10px] whitespace-nowrap text-ink-500">{e.matchup}</div>
-                </div>
-              </li>
-            ))}
-          </ul>
-          {events.length > shown.length && (
-            <button
-              onClick={() => setShowAll(true)}
-              className="display mt-3 w-full bg-ink-800 py-2 text-sm font-bold text-ink-300 hover:bg-ink-700"
-            >
-              Show all {events.length} plays
-            </button>
-          )}
-        </>
-      )}
-      <p className="mt-3 text-xs text-ink-400">
-        From ESPN&apos;s live play-by-play, refreshed every 30 seconds while games are on. Points per play are estimated
-        with your league&apos;s scoring; the totals above are Sleeper&apos;s official numbers.
-        {pbp && pbp.unmatched.length > 0 && ` Couldn't find ${pbp.unmatched.join(", ")} in ESPN's data.`}
-      </p>
-    </Card>
-  );
-}
-
-function OnTheField({ drives }: { drives: DriveView[] }) {
-  const [selected, setSelected] = useState<string | null>(null);
-  const d = drives.find((x) => x.gameId === selected) ?? drives[0];
-  const lastName = (n: string) => n.split(" ").slice(-1)[0];
-  return (
-    <Card
-      title="On the field"
-      action={<span className="text-xs text-ink-400">{d.live ? "current drive" : "last drive · final"}</span>}
-    >
-      {drives.length > 1 && (
-        <div className="no-scrollbar -mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1">
-          {drives.map((x) => (
-            <button
-              key={x.gameId}
-              onClick={() => setSelected(x.gameId)}
-              className={`display flex shrink-0 -skew-x-12 items-center gap-1.5 px-3 py-1.5 text-sm font-bold transition ${
-                x.gameId === d.gameId ? "prime-gradient text-ink-950" : "bg-ink-800 text-ink-300 hover:bg-ink-700"
-              }`}
-            >
-              <span className="flex skew-x-12 items-center gap-1.5">
-                {x.live && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-hot" />}
-                {x.score.replace(/ \d+/g, "").replace(" – ", " @ ")}
-                <span className="font-semibold opacity-75">
-                  {x.players
-                    .filter((p) => p.side === "mine")
-                    .map((p) => lastName(p.name))
-                    .join(", ")}
-                </span>
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
-        <div>
-          <div className="flex items-center gap-2">
-            <span
-              className="h-3.5 w-3.5 shrink-0 rounded-sm"
-              style={{ backgroundColor: d.offenseColor ? `#${d.offenseColor}` : undefined }}
-            />
-            <span className="display text-2xl leading-none font-black">{d.offense} ball</span>
-          </div>
-          <div className="mt-1 text-sm font-semibold text-ink-100">
-            {d.situation} <span className="font-normal text-ink-400">· {d.clock}</span>
-          </div>
-        </div>
-        <div className="text-right">
-          <div className="font-mono text-lg font-black tabular-nums">{d.score}</div>
-          <div className="text-xs text-ink-400">Drive: {d.summary}</div>
-        </div>
-      </div>
-      <div className="-mx-4 overflow-hidden border-y border-ink-700 sm:mx-0 sm:border">
-        <DriveChart d={d} />
-      </div>
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-400">
-        <span className="flex items-center gap-1.5">
-          <span className="h-3 w-1 bg-mint-400" /> Line of scrimmage
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-3 w-1 bg-[#facc15]" /> Line to gain
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-1 w-4 bg-mint-400" /> Gain
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-1 w-4 bg-hot" /> Touchdown
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-1 w-4 bg-rose-300" /> Loss / turnover
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-1 w-4 bg-[#fbbf24]" /> Penalty
-        </span>
-        <span className="font-bold text-mint-300">Bold = your player</span>
-      </div>
-    </Card>
-  );
-}
-
-function LiveTab({ a, live }: { a: Analysis; live: LiveState }) {
-  const { pbp, failed, fresh } = usePlayByPlay(a, live);
-  // Each player's most recent play, for the lineup cards.
-  const lastPlay = new Map<string, PlayEvent>();
-  for (const e of pbp?.events ?? []) if (!lastPlay.has(e.player.id)) lastPlay.set(e.player.id, e);
+function LiveTab({ live }: { live: LiveState }) {
   return (
     <div className="flex flex-col gap-5">
       {live.lateSwaps.length > 0 && (
@@ -738,14 +493,10 @@ function LiveTab({ a, live }: { a: Analysis; live: LiveState }) {
           ))}
         </div>
       )}
-      {pbp && pbp.drives.length > 0 && <OnTheField drives={pbp.drives} />}
       <div className="grid gap-5 lg:grid-cols-2">
-        <LiveRoster title="Your lineup" side={live.me} accent="mint" lastPlay={lastPlay} />
-        {live.opponent && (
-          <LiveRoster title={live.opponent.teamName} side={live.opponent} accent="hot" lastPlay={lastPlay} />
-        )}
+        <LiveRoster title="Your lineup" side={live.me} accent="mint" />
+        {live.opponent && <LiveRoster title={live.opponent.teamName} side={live.opponent} accent="hot" />}
       </div>
-      <PlayFeed pbp={pbp} failed={failed} fresh={fresh} hasOpponent={Boolean(live.opponent)} />
       <p className="text-xs text-ink-400">
         Points are Sleeper&apos;s live scoring. &quot;Still to come&quot; is each player&apos;s projection times the
         share of their game left; win probability assumes a typical player&apos;s score swings about ±60% of projection.
@@ -779,17 +530,7 @@ function gameLabel(p: LivePlayer) {
   return `${g.state === "post" ? "Final" : g.detail}${score} vs ${opp}`;
 }
 
-function LiveRoster({
-  title,
-  side,
-  accent,
-  lastPlay,
-}: {
-  title: string;
-  side: LiveSide;
-  accent: "mint" | "hot";
-  lastPlay: Map<string, PlayEvent>;
-}) {
+function LiveRoster({ title, side, accent }: { title: string; side: LiveSide; accent: "mint" | "hot" }) {
   const max = Math.max(1, ...side.players.map((p) => p.points + p.remaining));
   return (
     <Card
@@ -817,12 +558,6 @@ function LiveRoster({
                   {p.status === "in" && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-hot" />}
                   {gameLabel(p)}
                 </div>
-                {p.player && lastPlay.has(p.player.id) && (
-                  <div className="mt-0.5 ml-[46px] truncate text-[11px] text-ink-300">
-                    Last: {lastPlay.get(p.player.id)!.label}{" "}
-                    <span className="text-ink-500">({lastPlay.get(p.player.id)!.clock})</span>
-                  </div>
-                )}
               </div>
             ) : (
               <span className="flex-1 text-sm text-ink-400 italic">{p.name}</span>

@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Analysis } from "@/lib/advisor";
 import { fetchGameCenter, type GameCard, type GameCenter, type GamePlayer } from "@/lib/gamecenter";
 import type { Game } from "@/lib/scoreboard";
+import { DriveChart } from "./field";
 import { Card, Empty, Headshot } from "./ui";
 
 /** Live scoreboard + your players' stats, every 30s while games are on (5 min otherwise). */
@@ -206,7 +207,7 @@ function GameTile({ c, gains }: { c: GameCard; gains: Map<string, number> }) {
   return (
     <div
       className={`flex min-w-0 flex-col border bg-ink-850 ${
-        g.state === "in" ? "border-hot/40 shadow-[0_0_24px_rgb(255_46_136/0.12)]" : "border-ink-700"
+        g.state === "in" ? "border-hot/40 shadow-[0_0_24px_rgb(255_46_136/0.12)] sm:col-span-2" : "border-ink-700"
       }`}
     >
       <div className="flex items-center justify-between gap-2 border-b border-ink-700/70 px-3 py-1.5">
@@ -221,7 +222,13 @@ function GameTile({ c, gains }: { c: GameCard; gains: Map<string, number> }) {
         <TeamRow g={g} side="home" />
         {s && (
           <>
-            <GameField g={g} />
+            {c.drive ? (
+              <div className="-mx-3 mt-2 overflow-hidden border-y border-ink-700">
+                <DriveChart d={c.drive} />
+              </div>
+            ) : (
+              <GameField g={g} />
+            )}
             <div className="mt-1.5 flex items-baseline justify-between gap-2 text-xs">
               <span className="font-semibold text-ink-100">{s.text}</span>
             </div>
@@ -308,6 +315,29 @@ export function GamesTab({ a }: { a: Analysis }) {
                 <span className="font-mono text-mint-400 tabular-nums">{p.yards} yds</span>
               </span>
             ))}
+          </div>
+        )}
+        {gc.cards.some((c) => c.drive) && (
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-ink-700/60 pt-3 text-[11px] text-ink-400">
+            <span className="flex items-center gap-1.5">
+              <span className="h-3 w-1 bg-mint-400" /> Line of scrimmage
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-3 w-1 bg-[#facc15]" /> Line to gain
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-1 w-4 bg-mint-400" /> Gain
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-1 w-4 bg-hot" /> Touchdown
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-1 w-4 bg-rose-300" /> Loss / turnover
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-1 w-4 bg-[#fbbf24]" /> Penalty
+            </span>
+            <span className="font-bold text-mint-300">Bold = your player</span>
           </div>
         )}
       </Card>
