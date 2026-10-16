@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element -- remote Sleeper CDN images in a static export */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { describeMatchup, type Analysis, type PlayerAnalysis } from "@/lib/advisor";
 import { avatarUrl } from "@/lib/sleeper";
 import { evaluateTrade, findTrades, type TradeVerdict } from "@/lib/trades";
@@ -27,18 +27,95 @@ type Tab =
   | "record"
   | "roster";
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: "plan", label: "Game plan" },
-  { id: "lineup", label: "Lineup" },
-  { id: "scout", label: "Scout" },
-  { id: "injuries", label: "Injuries" },
-  { id: "waivers", label: "Waivers" },
-  { id: "trades", label: "Trades" },
-  { id: "planner", label: "Season" },
-  { id: "playoffs", label: "Playoffs" },
-  { id: "record", label: "Record" },
-  { id: "roster", label: "Roster" },
+type Section = "week" | "moves" | "season" | "team";
+
+// Four sections, each with a few sub-tabs. New features go into one of
+// these rather than becoming another top-level tab.
+const SECTIONS: { id: Section; label: string; tabs: { id: Tab; label: string }[] }[] = [
+  {
+    id: "week",
+    label: "This Week",
+    tabs: [
+      { id: "plan", label: "Game plan" },
+      { id: "lineup", label: "Lineup" },
+      { id: "injuries", label: "Injuries" },
+      { id: "scout", label: "Opponent" },
+    ],
+  },
+  {
+    id: "moves",
+    label: "Moves",
+    tabs: [
+      { id: "waivers", label: "Waivers" },
+      { id: "trades", label: "Trades" },
+    ],
+  },
+  {
+    id: "season",
+    label: "Season",
+    tabs: [
+      { id: "playoffs", label: "Playoffs" },
+      { id: "planner", label: "Schedule" },
+    ],
+  },
+  {
+    id: "team",
+    label: "My Team",
+    tabs: [
+      { id: "roster", label: "Roster" },
+      { id: "record", label: "Track record" },
+    ],
+  },
 ];
+const sectionOf = (tab: Tab): Section =>
+  tab === "live" ? "week" : (SECTIONS.find((s) => s.tabs.some((t) => t.id === tab))?.id ?? "week");
+const ALL_TABS = new Set<string>(["live", ...SECTIONS.flatMap((s) => s.tabs.map((t) => t.id))]);
+
+function SectionIcon({ id, className = "h-5 w-5" }: { id: Section; className?: string }) {
+  const paths: Record<Section, React.ReactNode> = {
+    week: (
+      <>
+        <rect x="5" y="4" width="14" height="17" rx="2" />
+        <path d="M9 3h6v3H9zM9 13l2 2 4-4" />
+      </>
+    ),
+    moves: <path d="M5 8h13l-3.5-3.5M19 16H6l3.5 3.5" />,
+    season: <path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 21h8M10 17h4" />,
+    team: (
+      <>
+        <circle cx="9" cy="8" r="3.2" />
+        <path d="M3 20a6 6 0 0 1 12 0M16 5a3 3 0 0 1 0 6M18 14.5a5 5 0 0 1 3 5.5" />
+      </>
+    ),
+  };
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      {paths[id]}
+    </svg>
+  );
+}
+
+function Badge({ n, active }: { n: number; active?: boolean }) {
+  if (n <= 0) return null;
+  return (
+    <span
+      className={`ml-1.5 inline-flex min-w-[1.25rem] items-center justify-center px-1 font-mono text-[11px] leading-[1.1rem] font-bold ${
+        active ? "bg-ink-950/25 text-ink-950" : "bg-hot text-white"
+      }`}
+    >
+      {n}
+    </span>
+  );
+}
 
 /** Live scores for this week, refreshed every minute while games are on. */
 function useLive(a: Analysis) {
@@ -67,44 +144,99 @@ function useLive(a: Analysis) {
 }
 
 export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => void; refreshing: boolean }) {
-  const [tab, setTab] = useState<Tab>("plan");
+  // The open sub-tab lives in the URL hash, so refresh and the back button keep your place.
+  const [initial] = useState<Tab | null>(() => {
+    const h = typeof window !== "undefined" ? window.location.hash.slice(1) : "";
+    return ALL_TABS.has(h) ? (h as Tab) : null;
+  });
+  const [tab, setTabState] = useState<Tab>(initial && initial !== "live" ? initial : "plan");
+  const [lastTab, setLastTab] = useState<Partial<Record<Section, Tab>>>({});
+  const top = useRef<HTMLDivElement>(null);
+  const setTab = (next: Tab) => {
+    setTabState(next);
+    setLastTab((prev) => ({ ...prev, [sectionOf(next)]: next }));
+    try {
+      history.replaceState(null, "", `#${next}`);
+    } catch {
+      // not fatal
+    }
+    // Bring the new view's top into sight if we were scrolled down the old one.
+    if (top.current && top.current.getBoundingClientRect().top < 0) top.current.scrollIntoView({ block: "start" });
+  };
   const live = useLive(a);
   const isLive = Boolean(live?.started && !live.allDone);
   const showLive = Boolean(live?.started);
-  // Jump to the Live tab the first time we see games underway.
-  const [autoSwitched, setAutoSwitched] = useState(false);
+  // Jump to the Live tab the first time we see games underway — unless the
+  // URL already says where you were (e.g. after a refresh).
+  const [autoSwitched, setAutoSwitched] = useState(initial !== null && initial !== "live");
   useEffect(() => {
     if (isLive && !autoSwitched) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time switch when games start
-      setTab("live");
+      setTabState("live");
       setAutoSwitched(true);
     }
   }, [isLive, autoSwitched]);
-  const tabs = showLive ? [{ id: "live" as Tab, label: isLive ? "● Live" : "Final" }, ...TABS] : TABS;
+
+  const section = sectionOf(tab);
+  const atRisk = a.currentLineup.filter(
+    (s) => s.player && s.player.injury && s.player.injury !== "Questionable",
+  ).length;
+  const counts: Partial<Record<Tab, number>> = { waivers: a.waivers.length, injuries: atRisk };
+  const sectionCount = (id: Section) =>
+    SECTIONS.find((x) => x.id === id)!.tabs.reduce((n, t) => n + (counts[t.id] ?? 0), 0);
+  const subTabs = SECTIONS.find((x) => x.id === section)!.tabs;
+  const tabs =
+    section === "week" && showLive ? [{ id: "live" as Tab, label: isLive ? "● Live" : "Final" }, ...subTabs] : subTabs;
+  const openSection = (id: Section) => {
+    const first = id === "week" && isLive ? "live" : SECTIONS.find((x) => x.id === id)!.tabs[0].id;
+    setTab(lastTab[id] ?? first);
+  };
+
   return (
-    <div className="mt-6 flex flex-col gap-5">
+    <div className="mt-6 flex flex-col gap-5 pb-20 sm:pb-0">
       <Ticker a={a} />
       {live && showLive ? <LiveScoreboard a={a} live={live} /> : <Scoreboard a={a} />}
-      <nav className="sticky top-0 z-20 -mx-4 bg-ink-950/90 px-4 py-2 backdrop-blur sm:mx-0 sm:px-1">
-        <div className="no-scrollbar flex gap-1 overflow-x-auto px-2">
-          {tabs.map((t) => (
+      <div ref={top} className="-mb-5 scroll-mt-0" />
+      <nav className="sticky top-0 z-20 -mx-4 bg-ink-950/90 px-4 pt-2 pb-1 backdrop-blur sm:mx-0 sm:px-1">
+        {/* Sections: top bar on desktop (bottom bar on phones, below). */}
+        <div className="hidden gap-1 px-2 sm:flex">
+          {SECTIONS.map((x) => (
             <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`display flex-1 shrink-0 -skew-x-12 px-4 py-2.5 text-base font-bold whitespace-nowrap transition ${
-                tab === t.id
+              key={x.id}
+              onClick={() => openSection(x.id)}
+              aria-current={section === x.id ? "page" : undefined}
+              className={`display flex flex-1 -skew-x-12 items-center justify-center px-4 py-2.5 text-base font-bold whitespace-nowrap transition ${
+                section === x.id
                   ? "prime-gradient text-ink-950 shadow-[0_0_24px_rgb(25_227_255/0.35)]"
                   : "bg-ink-800 text-ink-400 hover:bg-ink-700 hover:text-ink-100"
               }`}
             >
-              <span className="block skew-x-12">
-                {t.label}
-                {t.id === "waivers" && a.waivers.length > 0 && (
-                  <span className={`ml-1.5 px-1.5 text-xs ${tab === t.id ? "bg-ink-950/20" : "bg-hot text-white"}`}>
-                    {a.waivers.length}
-                  </span>
-                )}
+              <span className="flex skew-x-12 items-center gap-2">
+                <SectionIcon id={x.id} className="h-[18px] w-[18px]" />
+                {x.label}
+                {x.id === "week" && isLive && <span className="h-2 w-2 animate-pulse rounded-full bg-hot" />}
+                <Badge n={sectionCount(x.id)} active={section === x.id} />
               </span>
+            </button>
+          ))}
+        </div>
+        {/* Sub-tabs for the open section. */}
+        <div className="no-scrollbar mt-1 flex gap-1 overflow-x-auto border-b border-ink-700/70 px-2 sm:mt-2">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              aria-current={tab === t.id ? "page" : undefined}
+              className={`display -mb-px shrink-0 border-b-[3px] px-3 py-2 text-[15px] font-bold whitespace-nowrap transition ${
+                tab === t.id
+                  ? t.id === "live"
+                    ? "border-hot text-hot"
+                    : "border-mint-400 text-ink-100"
+                  : "border-transparent text-ink-400 hover:text-ink-100"
+              }`}
+            >
+              {t.label}
+              <Badge n={counts[t.id] ?? 0} />
             </button>
           ))}
         </div>
@@ -120,6 +252,40 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
       {tab === "playoffs" && <Playoffs a={a} />}
       {tab === "record" && <Record a={a} />}
       {tab === "roster" && <Roster a={a} />}
+
+      {/* Phone: sections in a thumb-reach bottom bar. */}
+      <nav
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-ink-700 bg-ink-900/95 backdrop-blur sm:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div className="mx-auto flex max-w-md">
+          {SECTIONS.map((x) => (
+            <button
+              key={x.id}
+              onClick={() => openSection(x.id)}
+              aria-current={section === x.id ? "page" : undefined}
+              className={`relative flex flex-1 flex-col items-center gap-0.5 pt-2 pb-1.5 transition ${
+                section === x.id ? "text-mint-400" : "text-ink-400"
+              }`}
+            >
+              {section === x.id && <span className="prime-gradient absolute inset-x-4 top-0 h-[3px]" />}
+              <span className="relative">
+                <SectionIcon id={x.id} className="h-6 w-6" />
+                {x.id === "week" && isLive ? (
+                  <span className="absolute -top-0.5 -right-1 h-2.5 w-2.5 animate-pulse rounded-full bg-hot ring-2 ring-ink-900" />
+                ) : (
+                  sectionCount(x.id) > 0 && (
+                    <span className="absolute -top-1.5 -right-2.5 min-w-[1.1rem] rounded-full bg-hot px-1 text-center font-mono text-[10px] leading-[1.1rem] font-bold text-white">
+                      {sectionCount(x.id)}
+                    </span>
+                  )
+                )}
+              </span>
+              <span className="display text-[11px] font-bold tracking-wide uppercase">{x.label}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
     </div>
   );
 }
@@ -378,10 +544,10 @@ function LiveRoster({ title, side, accent }: { title: string; side: LiveSide; ac
           <li key={p.id + i} className="flex items-center gap-3 py-2.5">
             <SlotBadge slot={p.slot === "Superflex" ? "SUPER_FLEX" : p.slot === "Flex" ? "FLEX" : p.slot} />
             {p.player ? (
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 overflow-hidden">
                 <PlayerLine p={p.player} size={34} />
                 <div
-                  className={`mt-1 ml-[46px] flex items-center gap-1.5 text-[11px] font-semibold ${
+                  className={`mt-1 ml-[46px] flex items-center gap-1.5 truncate text-[11px] font-semibold ${
                     p.status === "in" ? "text-hot" : "text-ink-400"
                   }`}
                 >
@@ -719,7 +885,7 @@ function GameLines({ a }: { a: Analysis }) {
               <div className="min-w-0 flex-1 basis-56">
                 <PlayerLine p={p} size={30} sub={<span className="text-xs text-ink-400">vs {g.opponent}</span>} />
               </div>
-              <div className="flex items-center gap-4 pl-[42px] font-mono text-xs tabular-nums sm:pl-0">
+              <div className="flex w-full items-center gap-3 font-mono text-xs tabular-nums sm:w-auto sm:gap-4">
                 <span className="w-12 text-right">
                   <span className="block text-[9px] tracking-wider text-ink-400 uppercase">Implied</span>
                   <span
@@ -744,7 +910,7 @@ function GameLines({ a }: { a: Analysis }) {
                   <span className="block text-[9px] tracking-wider text-ink-400 uppercase">O/U</span>
                   {g.overUnder ?? "—"}
                 </span>
-                <span className="w-32 truncate text-left font-sans text-ink-300" title={g.weather ?? ""}>
+                <span className="min-w-0 flex-1 truncate text-left font-sans text-ink-300 sm:w-32 sm:flex-none" title={g.weather ?? ""}>
                   <span className="block font-mono text-[9px] tracking-wider text-ink-400 uppercase">Forecast</span>
                   {g.indoor ? "Indoors" : (g.weather ?? "—")}
                 </span>

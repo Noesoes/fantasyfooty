@@ -22,6 +22,19 @@ No App Store needed. Open the site on your phone, then:
 
 It gets its own home-screen icon and opens full screen like a regular app. A service worker keeps the app's own files on the phone so it opens instantly, even on bad stadium Wi-Fi. Sleeper and ESPN data is never cached and always loads fresh. Updates arrive automatically whenever the site is redeployed.
 
+### Finding your way around
+
+Everything is grouped into four sections, each with a few tabs:
+
+| Section | Tabs |
+| --- | --- |
+| **This Week** | Game plan · Lineup · Injuries · Opponent (plus **Live** on game days) |
+| **Moves** | Waivers · Trades |
+| **Season** | Playoffs · Schedule (bye weeks and week-by-week projections) |
+| **My Team** | Roster · Track record |
+
+On phones the sections sit in a bottom bar. Badges show only when there's something to act on: waiver targets, or starters who are out or doubtful. The open tab is kept in the URL (e.g. `#playoffs`), so refreshing or reopening the app keeps your place.
+
 ## How the recommendations work
 
 Every player gets two scores.
@@ -143,7 +156,7 @@ scripts/fetch-snapshots.mjs ESPN injury + scoreboard snapshots used by the deplo
 scripts/weekly-report.ts   CLI entry point used by the weekly GitHub Action
 scripts/gameday-alert.ts   CLI entry point used by the gameday GitHub Action
 app/page.tsx               landing page, league/week controls
-app/results.tsx            the tabs (live, game plan, lineup, scout, injuries, waivers, trades, season, playoffs, record, roster)
+app/results.tsx            sections and tabs: This Week (live, game plan, lineup, injuries, opponent), Moves (waivers, trades), Season (playoffs, schedule), My Team (roster, track record)
 app/ui.tsx                 shared UI pieces
 app/install.tsx            "Get app" install button / iPhone instructions
 app/manifest.ts            web app manifest (name, icons, colors)

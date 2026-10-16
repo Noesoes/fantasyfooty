@@ -221,7 +221,7 @@ export function Card({
 }) {
   return (
     <section
-      className={`border border-ink-700/80 bg-gradient-to-b from-ink-850 to-ink-900 shadow-[0_0_40px_rgb(25_227_255/0.05)] ${className}`}
+      className={`min-w-0 border border-ink-700/80 bg-gradient-to-b from-ink-850 to-ink-900 shadow-[0_0_40px_rgb(25_227_255/0.05)] ${className}`}
     >
       {title && (
         <header className="flex items-center justify-between gap-3 border-b border-ink-700/60 px-4 py-3 sm:px-5">
