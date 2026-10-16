@@ -179,8 +179,9 @@ export const getTrendingAdds = (lookbackHours = 72, limit = 200) =>
 export const getWeekProjections = (season: string, week: number) =>
   get<StatRow[]>(`/projections/nfl/${season}/${week}?season_type=regular&${positionQuery(OFFENSE_POSITIONS)}`);
 
-export const getWeekStats = (season: string, week: number) =>
-  get<StatRow[]>(`/stats/nfl/${season}/${week}?season_type=regular&${positionQuery(OFFENSE_POSITIONS)}`);
+/** Stat lines for a week; during games they update live (pass `fresh` to skip caches). */
+export const getWeekStats = (season: string, week: number, fresh = false) =>
+  get<StatRow[]>(`/stats/nfl/${season}/${week}?season_type=regular&${positionQuery(OFFENSE_POSITIONS)}`, fresh);
 
 export const getSeasonStats = (season: string) =>
   get<StatRow[]>(`/stats/nfl/${season}?season_type=regular&${positionQuery(OFFENSE_POSITIONS)}`);

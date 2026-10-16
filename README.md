@@ -28,7 +28,7 @@ Everything is grouped into four sections, each with a few tabs:
 
 | Section | Tabs |
 | --- | --- |
-| **This Week** | Game plan · Lineup · Injuries · Opponent (plus **Live** on game days) |
+| **This Week** | Game plan · Games · Lineup · Injuries · Opponent (plus **Live** on game days) |
 | **Moves** | Waivers · Trades |
 | **Season** | Playoffs · Schedule (bye weeks and week-by-week projections) |
 | **My Team** | Roster · Track record |
@@ -86,6 +86,8 @@ Every player gets two scores.
 - the game clock and ESPN's description
 
 Touchdowns are highlighted, plays since the last refresh get a **NEW** tag, and each player's latest play also shows in the live lineup cards. It refreshes every 30 seconds while games are on. Plays come from ESPN's live play-by-play feed. Players are matched by ESPN id from Sleeper's player database, or by name in the game's box score for players Sleeper hasn't mapped (often rookies). Penalties that wipe out a play are skipped, and the per-play points add up to Sleeper's totals (Sleeper's numbers stay the official score).
+
+**Games (This Week → Games):** a live scoreboard of every game this week (*Your games* or *All games*). Each card shows the score and clock, who has the ball, down & distance, a red-zone flag, a mini field with the ball spot and line to gain, and the last play. Before kickoff it shows the betting line. Under each game are your players in it (starters, bench marked BN, and your opponent's starters marked OPP) with live stat lines ("12 car, 64 yds · 3 rec, 18 yds") and points under your league's scoring. A row lights up with "+1.4" when that player scores between refreshes. *Your yards leaders* ranks your players by yards gained so far. It refreshes every 30 seconds while games are on, using ESPN for game state and Sleeper's live stats.
 
 **On the field (Live tab):** a drawn field in team colors for each game your players are in. It charts the current drive (or the last one once the game ends) the way a TV drive chart does. Every snap is an arrow from where it started to where it ended: runs and catches, incompletions as a dashed ring, turnovers as an ✕, and kicks as an arc. It also shows the line of scrimmage, the yellow line to gain, the ball, and down & distance, and your players' plays are labeled with what they were worth. Each play in the play-by-play feed also gets a mini field strip showing how far it moved the ball.
 
@@ -161,13 +163,15 @@ lib/scoreboard.ts          NFL games: clock, score, Vegas lines, weather, and th
 lib/live.ts                live scoring, win probability, late swaps
 lib/playbyplay.ts          live play-by-play for your players, with points per play and drive charts
 app/field.tsx              football field graphics (drive chart, per-play strip)
+app/games.tsx              Games tab: live scoreboard with your players' stat lines
+lib/gamecenter.ts          every game this week + your players' live stats
 lib/playoffs.ts            playoff odds simulation
 lib/scouting.ts            opponent scouting report
 scripts/fetch-snapshots.mjs ESPN injury + scoreboard snapshots used by the deploy workflow
 scripts/weekly-report.ts   CLI entry point used by the weekly GitHub Action
 scripts/gameday-alert.ts   CLI entry point used by the gameday GitHub Action
 app/page.tsx               landing page, league/week controls
-app/results.tsx            sections and tabs: This Week (live, game plan, lineup, injuries, opponent), Moves (waivers, trades), Season (playoffs, schedule), My Team (roster, track record)
+app/results.tsx            sections and tabs: This Week (live, game plan, games, lineup, injuries, opponent), Moves (waivers, trades), Season (playoffs, schedule), My Team (roster, track record)
 app/ui.tsx                 shared UI pieces
 app/install.tsx            "Get app" install button / iPhone instructions
 app/manifest.ts            web app manifest (name, icons, colors)

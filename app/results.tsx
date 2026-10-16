@@ -14,12 +14,14 @@ import { buildTrackRecord, type TrackRecord } from "@/lib/backtest";
 import { fetchLive, type LivePlayer, type LiveSide, type LiveState } from "@/lib/live";
 import { fetchPlayByPlay, type DriveView, type PlayByPlay, type PlayEvent } from "@/lib/playbyplay";
 import { DriveChart, FieldStrip } from "./field";
+import { GamesTab } from "./games";
 import { Card, Empty, Headshot, MatchupChip, PlayerLine, Points, PosBadge, SlotBadge } from "./ui";
 
 type Tab =
   | "live"
   | "plan"
   | "lineup"
+  | "games"
   | "scout"
   | "injuries"
   | "waivers"
@@ -39,6 +41,7 @@ const SECTIONS: { id: Section; label: string; tabs: { id: Tab; label: string }[]
     label: "This Week",
     tabs: [
       { id: "plan", label: "Game plan" },
+      { id: "games", label: "Games" },
       { id: "lineup", label: "Lineup" },
       { id: "injuries", label: "Injuries" },
       { id: "scout", label: "Opponent" },
@@ -245,6 +248,7 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
       </nav>
       {tab === "live" && live && <LiveTab a={a} live={live} />}
       {tab === "plan" && <GamePlan a={a} goTo={setTab} />}
+      {tab === "games" && <GamesTab a={a} />}
       {tab === "lineup" && <Lineup a={a} />}
       {tab === "injuries" && <Injuries a={a} />}
       {tab === "waivers" && <Waivers a={a} onRefresh={onRefresh} refreshing={refreshing} />}

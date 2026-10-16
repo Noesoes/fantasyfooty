@@ -38,6 +38,21 @@ export interface Game {
   overUnder: number | null;
   weather: { temp: number | null; condition: string } | null;
   indoor: boolean;
+  /** Live down-and-distance (in-progress games, from ESPN's scoreboard). */
+  situation: Situation | null;
+}
+
+export interface Situation {
+  /** Team with the ball. */
+  possession: string | null;
+  /** "2nd & 7 at KC 34". */
+  text: string | null;
+  /** Ball spot measured from the away team's goal line (0–100); the away end zone is drawn on the left. */
+  ballFromAway: number | null;
+  /** Yards to go, if known. */
+  distance: number | null;
+  redZone: boolean;
+  lastPlay: string | null;
 }
 
 export interface WeekGames {
@@ -60,6 +75,15 @@ interface EspnEvent {
       team: { abbreviation: string; id?: string; color?: string; alternateColor?: string };
     }[];
     odds?: { details?: string; overUnder?: number; spread?: number }[];
+    situation?: {
+      possession?: string;
+      possessionText?: string;
+      downDistanceText?: string;
+      yardLine?: number;
+      distance?: number;
+      isRedZone?: boolean;
+      lastPlay?: { text?: string };
+    };
   }[];
 }
 
@@ -95,6 +119,32 @@ function visibleColor(primary?: string, alternate?: string): string | null {
   return primary ?? alternate ?? null;
 }
 
+function situationOf(
+  e: EspnEvent,
+  homeAbbr: string,
+  awayAbbr: string,
+  homeId?: string,
+  awayId?: string,
+): Situation | null {
+  const sit = e.competitions[0].situation;
+  if (!sit || e.status.type.state !== "in") return null;
+  const possession = sit.possession === homeId ? homeAbbr : sit.possession === awayId ? awayAbbr : null;
+  // "KC 34" = 34 yards from KC's goal line; "50" = midfield.
+  let ballFromAway: number | null = null;
+  const m = sit.possessionText?.match(/^([A-Z]{2,3})\s+(\d+)$/);
+  if (m) ballFromAway = fix(m[1]) === awayAbbr ? Number(m[2]) : 100 - Number(m[2]);
+  else if (sit.possessionText?.trim() === "50") ballFromAway = 50;
+  else if (typeof sit.yardLine === "number") ballFromAway = 100 - sit.yardLine; // yardLine counts from the home goal line
+  return {
+    possession,
+    text: sit.downDistanceText ?? null,
+    ballFromAway,
+    distance: typeof sit.distance === "number" ? sit.distance : null,
+    redZone: Boolean(sit.isRedZone),
+    lastPlay: sit.lastPlay?.text?.replace(/^\s*(\([^)]*\)\s*)+/, "").trim() || null,
+  };
+}
+
 export function gamesFromEspn(events: EspnEvent[]): Map<string, Game> {
   const byTeam = new Map<string, Game>();
   for (const e of events) {
@@ -123,6 +173,7 @@ export function gamesFromEspn(events: EspnEvent[]): Map<string, Game> {
       overUnder: typeof odds?.overUnder === "number" ? odds.overUnder : null,
       weather: e.weather ? { temp: e.weather.temperature ?? null, condition: e.weather.displayValue ?? "" } : null,
       indoor: Boolean(c.venue?.indoor),
+      situation: situationOf(e, fix(home.team.abbreviation), fix(away.team.abbreviation), home.team.id, away.team.id),
     };
     byTeam.set(game.home, game);
     byTeam.set(game.away, game);
@@ -218,6 +269,7 @@ export async function getWeekGames(season: string, week: number): Promise<WeekGa
       overUnder: null,
       weather: null,
       indoor: false,
+      situation: null,
     };
     byTeam.set(g.home, game);
     byTeam.set(g.away, game);
