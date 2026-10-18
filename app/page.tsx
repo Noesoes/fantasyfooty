@@ -143,45 +143,58 @@ export default function Home() {
   }
 
   return (
-    <div className="flex min-h-full flex-col">
-      <TopBar user={user} onSignOut={signOut} />
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-16">
-        {!user ? (
-          <Landing
-            username={username}
-            setUsername={setUsername}
-            onSubmit={onSubmit}
-            loading={loadingUser}
-            error={error}
-          />
-        ) : (
-          <>
-            <Controls
-              leagues={leagues}
-              leagueId={leagueId}
-              setLeagueId={setLeagueId}
-              week={week}
-              setWeek={setWeek}
-              currentWeek={state ? upcomingWeek(state) : week}
+    // Phones: a full-height frame where only the middle scrolls and the section bar sits
+    // underneath it. (iOS moves position:fixed bars around while scrolling, especially in
+    // home-screen apps, so the bar is laid out rather than fixed.) Desktop scrolls the page.
+    <div
+      className="flex min-h-full flex-col max-sm:h-dvh max-sm:min-h-0"
+      style={{ paddingTop: "env(safe-area-inset-top)" }}
+    >
+      <div
+        id="scroller"
+        className="flex flex-1 flex-col max-sm:min-h-0 max-sm:overflow-y-auto max-sm:overscroll-contain"
+      >
+        <TopBar user={user} onSignOut={signOut} />
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-16">
+          {!user ? (
+            <Landing
+              username={username}
+              setUsername={setUsername}
+              onSubmit={onSubmit}
+              loading={loadingUser}
+              error={error}
             />
-            {error && <ErrorBox message={error} />}
-            {loadingAnalysis && !analysis && <Skeleton />}
-            {analysis && (
-              <div className={loadingAnalysis ? "pointer-events-none opacity-50 transition" : "transition"}>
-                <Results
-                  key={`${analysis.league.league_id}-${analysis.week}`}
-                  a={analysis}
-                  onRefresh={() => setRefreshKey((k) => k + 1)}
-                  refreshing={loadingAnalysis}
-                />
-              </div>
-            )}
-          </>
-        )}
-      </main>
-      <footer className="mx-auto w-full max-w-5xl px-4 pb-8 text-xs text-ink-400">
-        Data from Sleeper&apos;s public API · Not affiliated with Sleeper · Always check injury news before kickoff.
-      </footer>
+          ) : (
+            <>
+              <Controls
+                leagues={leagues}
+                leagueId={leagueId}
+                setLeagueId={setLeagueId}
+                week={week}
+                setWeek={setWeek}
+                currentWeek={state ? upcomingWeek(state) : week}
+              />
+              {error && <ErrorBox message={error} />}
+              {loadingAnalysis && !analysis && <Skeleton />}
+              {analysis && (
+                <div className={loadingAnalysis ? "pointer-events-none opacity-50 transition" : "transition"}>
+                  <Results
+                    key={`${analysis.league.league_id}-${analysis.week}`}
+                    a={analysis}
+                    onRefresh={() => setRefreshKey((k) => k + 1)}
+                    refreshing={loadingAnalysis}
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </main>
+        <footer className="mx-auto w-full max-w-5xl px-4 pb-8 text-xs text-ink-400">
+          Data from Sleeper&apos;s public API · Not affiliated with Sleeper · Always check injury news before kickoff.
+        </footer>
+      </div>
+      {/* Phones: the section bar renders here (see Results). */}
+      <div id="bottom-nav-slot" className="shrink-0 sm:hidden" />
     </div>
   );
 }

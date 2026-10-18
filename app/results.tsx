@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- remote Sleeper CDN images in a static export */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { describeMatchup, type Analysis, type PlayerAnalysis } from "@/lib/advisor";
 import { avatarUrl } from "@/lib/sleeper";
 import { evaluateTrade, findTrades, type TradeVerdict } from "@/lib/trades";
@@ -163,9 +164,19 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
     } catch {
       // not fatal
     }
-    // Bring the new view's top into sight if we were scrolled down the old one.
-    if (top.current && top.current.getBoundingClientRect().top < 0) top.current.scrollIntoView({ block: "start" });
+    // Bring the new view's top into sight if we were scrolled down the old one. On phones the
+    // page scrolls inside #scroller rather than the window.
+    const scroller = document.getElementById("scroller");
+    const inner = scroller && getComputedStyle(scroller).overflowY === "auto";
+    const edge = inner ? scroller.getBoundingClientRect().top : 0;
+    if (top.current && top.current.getBoundingClientRect().top < edge) top.current.scrollIntoView({ block: "start" });
   };
+  // Where the phone section bar renders (below the scrolling area, see page.tsx).
+  const [navSlot, setNavSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the slot exists only in the DOM
+    setNavSlot(document.getElementById("bottom-nav-slot"));
+  }, []);
   const live = useLive(a);
   const isLive = Boolean(live?.started && !live.allDone);
   const showLive = Boolean(live?.started);
@@ -196,7 +207,7 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
   };
 
   return (
-    <div className="mt-6 flex flex-col gap-5 pb-20 sm:pb-0">
+    <div className="mt-6 flex flex-col gap-5">
       <Ticker a={a} />
       {live && showLive ? <LiveScoreboard a={a} live={live} /> : <Scoreboard a={a} />}
       <div ref={top} className="-mb-5 scroll-mt-0" />
@@ -257,39 +268,40 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
       {tab === "record" && <Record a={a} />}
       {tab === "roster" && <Roster a={a} />}
 
-      {/* Phone: sections in a thumb-reach bottom bar. */}
-      <nav
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-ink-700 bg-ink-900/95 backdrop-blur sm:hidden"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      >
-        <div className="mx-auto flex max-w-md">
-          {SECTIONS.map((x) => (
-            <button
-              key={x.id}
-              onClick={() => openSection(x.id)}
-              aria-current={section === x.id ? "page" : undefined}
-              className={`relative flex flex-1 flex-col items-center gap-0.5 pt-2 pb-1.5 transition ${
-                section === x.id ? "text-mint-400" : "text-ink-400"
-              }`}
-            >
-              {section === x.id && <span className="prime-gradient absolute inset-x-4 top-0 h-[3px]" />}
-              <span className="relative">
-                <SectionIcon id={x.id} className="h-6 w-6" />
-                {x.id === "week" && isLive ? (
-                  <span className="absolute -top-0.5 -right-1 h-2.5 w-2.5 animate-pulse rounded-full bg-hot ring-2 ring-ink-900" />
-                ) : (
-                  sectionCount(x.id) > 0 && (
-                    <span className="absolute -top-1.5 -right-2.5 min-w-[1.1rem] rounded-full bg-hot px-1 text-center font-mono text-[10px] leading-[1.1rem] font-bold text-white">
-                      {sectionCount(x.id)}
-                    </span>
-                  )
-                )}
-              </span>
-              <span className="display text-[11px] font-bold tracking-wide uppercase">{x.label}</span>
-            </button>
-          ))}
-        </div>
-      </nav>
+      {/* Phone: sections in a thumb-reach bar under the scrolling area. */}
+      {navSlot &&
+        createPortal(
+          <nav className="border-t border-ink-700 bg-ink-900" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+            <div className="mx-auto flex max-w-md">
+              {SECTIONS.map((x) => (
+                <button
+                  key={x.id}
+                  onClick={() => openSection(x.id)}
+                  aria-current={section === x.id ? "page" : undefined}
+                  className={`relative flex flex-1 flex-col items-center gap-0.5 pt-2 pb-1.5 transition ${
+                    section === x.id ? "text-mint-400" : "text-ink-400"
+                  }`}
+                >
+                  {section === x.id && <span className="prime-gradient absolute inset-x-4 top-0 h-[3px]" />}
+                  <span className="relative">
+                    <SectionIcon id={x.id} className="h-6 w-6" />
+                    {x.id === "week" && isLive ? (
+                      <span className="absolute -top-0.5 -right-1 h-2.5 w-2.5 animate-pulse rounded-full bg-hot ring-2 ring-ink-900" />
+                    ) : (
+                      sectionCount(x.id) > 0 && (
+                        <span className="absolute -top-1.5 -right-2.5 min-w-[1.1rem] rounded-full bg-hot px-1 text-center font-mono text-[10px] leading-[1.1rem] font-bold text-white">
+                          {sectionCount(x.id)}
+                        </span>
+                      )
+                    )}
+                  </span>
+                  <span className="display text-[11px] font-bold tracking-wide uppercase">{x.label}</span>
+                </button>
+              ))}
+            </div>
+          </nav>,
+          navSlot,
+        )}
     </div>
   );
 }
