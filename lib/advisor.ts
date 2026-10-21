@@ -220,6 +220,12 @@ export interface Analysis {
   waivers: WaiverTarget[];
   waiversByPosition: Record<string, PlayerAnalysis[]>;
   streamersByPosition: Record<string, PlayerAnalysis[]>;
+  /** Every unrostered player Sleeper projects (including injured players and backups), best first — for search. */
+  freeAgentPool: PlayerAnalysis[];
+  /** Rest-of-season value of a freely available player at each position (~4th best free agent). */
+  replacementLevel: Record<string, number>;
+  /** True when adding a player means dropping someone. */
+  rosterFull: boolean;
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -725,7 +731,10 @@ export async function analyzeLeague(opts: {
   const freeAgentIds = projections
     .filter((r) => !rostered.has(r.player_id) && usedPositions.has(r.player?.position ?? ""))
     .map((r) => r.player_id);
-  const freeAgents = [...analyzePlayers(freeAgentIds, inputs, new Map()).values()].filter(
+  const freeAgentPool = [...analyzePlayers(freeAgentIds, inputs, new Map()).values()]
+    .filter((p) => p.team || p.injury)
+    .sort((a, b) => b.rosValue - a.rosValue);
+  const freeAgents = freeAgentPool.filter(
     (p) =>
       p.team &&
       !(p.injury && OUT_STATUSES.has(p.injury)) &&
@@ -1064,6 +1073,9 @@ export async function analyzeLeague(opts: {
     waivers,
     waiversByPosition,
     streamersByPosition,
+    freeAgentPool,
+    replacementLevel: replacement,
+    rosterFull,
   };
 }
 

@@ -14,6 +14,7 @@ import { buildInjuryReport, type InjuryReport, type InjuryRow, type Verdict } fr
 import { buildTrackRecord, type TrackRecord } from "@/lib/backtest";
 import { fetchLive, type LivePlayer, type LiveSide, type LiveState } from "@/lib/live";
 import { GamesTab } from "./games";
+import { PlayerCheck } from "./playercheck";
 import { Card, Empty, Headshot, MatchupChip, PlayerLine, Points, PosBadge, SlotBadge } from "./ui";
 
 type Tab =
@@ -352,7 +353,7 @@ function Scoreboard({ a }: { a: Analysis }) {
   const share = opp ? a.optimalTotal / Math.max(1, a.optimalTotal + opp.projected) : 0.5;
   return (
     <section className="overflow-hidden border border-ink-700/80 bg-gradient-to-b from-ink-800 to-ink-900 shadow-[0_0_48px_rgb(25_227_255/0.10)]">
-      <div className="grid sm:grid-cols-[1fr_150px_1fr]">
+      <div className="grid grid-cols-[minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_150px_minmax(0,1fr)]">
         <div className="flex items-center gap-4 p-5">
           <Avatar id={a.avatar} name={a.teamName} />
           <div className="min-w-0">
@@ -362,7 +363,7 @@ function Scoreboard({ a }: { a: Analysis }) {
               {gain > 0 && <span className="text-mint-300"> · +{gain} with moves</span>}
             </div>
           </div>
-          <div className="glow ml-auto font-mono text-6xl leading-none font-black text-ink-100 tabular-nums sm:text-7xl">
+          <div className="glow ml-auto shrink-0 font-mono text-4xl min-[360px]:text-5xl min-[400px]:text-6xl leading-none font-black text-ink-100 tabular-nums sm:text-7xl">
             {a.optimalTotal.toFixed(1)}
           </div>
         </div>
@@ -379,7 +380,7 @@ function Scoreboard({ a }: { a: Analysis }) {
                 <div className="display truncate text-2xl leading-tight font-extrabold">{opp.teamName}</div>
                 <div className="text-xs text-ink-400">Opponent · projected</div>
               </div>
-              <div className="glow-hot ml-auto font-mono text-6xl leading-none font-black text-rose-300 tabular-nums sm:mr-auto sm:ml-0 sm:text-7xl">
+              <div className="glow-hot ml-auto shrink-0 font-mono text-4xl min-[360px]:text-5xl min-[400px]:text-6xl leading-none font-black text-rose-300 tabular-nums sm:mr-auto sm:ml-0 sm:text-7xl">
                 {opp.projected.toFixed(1)}
               </div>
             </div>
@@ -418,7 +419,7 @@ function LiveScoreboard({ a, live }: { a: Analysis; live: LiveState }) {
   const win = live.winProbability;
   return (
     <section className="overflow-hidden border border-ink-700/80 bg-gradient-to-b from-ink-800 to-ink-900 shadow-[0_0_48px_rgb(255_46_136/0.12)]">
-      <div className="grid sm:grid-cols-[1fr_150px_1fr]">
+      <div className="grid grid-cols-[minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_150px_minmax(0,1fr)]">
         <div className="flex items-center gap-4 p-5">
           <Avatar id={a.avatar} name={me.teamName} />
           <div className="min-w-0">
@@ -427,7 +428,7 @@ function LiveScoreboard({ a, live }: { a: Analysis; live: LiveState }) {
               {me.remaining > 0 ? `+${me.remaining} still to come · ` : ""}proj final {me.projectedFinal.toFixed(1)}
             </div>
           </div>
-          <div className="glow ml-auto font-mono text-6xl leading-none font-black text-ink-100 tabular-nums sm:text-7xl">
+          <div className="glow ml-auto shrink-0 font-mono text-4xl min-[360px]:text-5xl min-[400px]:text-6xl leading-none font-black text-ink-100 tabular-nums sm:text-7xl">
             {me.score.toFixed(1)}
           </div>
         </div>
@@ -452,7 +453,7 @@ function LiveScoreboard({ a, live }: { a: Analysis; live: LiveState }) {
                   {opp.projectedFinal.toFixed(1)}
                 </div>
               </div>
-              <div className="glow-hot ml-auto font-mono text-6xl leading-none font-black text-rose-300 tabular-nums sm:mr-auto sm:ml-0 sm:text-7xl">
+              <div className="glow-hot ml-auto shrink-0 font-mono text-4xl min-[360px]:text-5xl min-[400px]:text-6xl leading-none font-black text-rose-300 tabular-nums sm:mr-auto sm:ml-0 sm:text-7xl">
                 {opp.score.toFixed(1)}
               </div>
             </div>
@@ -973,8 +974,15 @@ function ScoreBar({ value, max, muted }: { value: number; max: number; muted?: b
 function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => void; refreshing: boolean }) {
   const positions = Object.keys(a.waiversByPosition).filter((p) => a.waiversByPosition[p].length);
   const [pos, setPos] = useState(positions[0] ?? "QB");
+  const [checking, setChecking] = useState<PlayerAnalysis | null>(null);
+  const checkRef = useRef<HTMLElement>(null);
+  const check = (p: PlayerAnalysis) => {
+    setChecking(p);
+    requestAnimationFrame(() => checkRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  };
   return (
     <div className="flex flex-col gap-5">
+      <PlayerCheck ref={checkRef} a={a} selected={checking} onSelect={setChecking} />
       <WaiverStatus a={a} />
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-700/70 bg-ink-900 px-4 py-2.5 text-xs text-ink-400">
         <span>
@@ -1088,7 +1096,10 @@ function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => v
             </div>
           }
         >
-          <PlayerTable players={a.waiversByPosition[pos] ?? []} week={a.week} showTrending />
+          <PlayerTable players={a.waiversByPosition[pos] ?? []} week={a.week} showTrending onSelect={check} />
+          <p className="mt-2 text-xs text-ink-400">
+            Tap a player to see why you should (or shouldn&apos;t) pick him up.
+          </p>
         </Card>
       )}
     </div>
@@ -2579,12 +2590,15 @@ function PlayerTable({
   showTrending,
   showSnaps,
   sortable,
+  onSelect,
 }: {
   players: PlayerAnalysis[];
   week: number;
   showTrending?: boolean;
   showSnaps?: boolean;
   sortable?: boolean;
+  /** Makes rows tappable. */
+  onSelect?: (p: PlayerAnalysis) => void;
 }) {
   const [sort, setSort] = useState<SortKey>("weekScore");
   const rows = sortable ? [...players].sort((x, y) => (y[sort] ?? -1) - (x[sort] ?? -1)) : players;
@@ -2616,7 +2630,11 @@ function PlayerTable({
         </thead>
         <tbody>
           {rows.map((p) => (
-            <tr key={p.id} className="border-b border-ink-700/40 last:border-0 hover:bg-ink-850/60">
+            <tr
+              key={p.id}
+              onClick={onSelect ? () => onSelect(p) : undefined}
+              className={`border-b border-ink-700/40 last:border-0 hover:bg-ink-850/60 ${onSelect ? "cursor-pointer" : ""}`}
+            >
               <td className="py-2.5 pr-2 pl-4 sm:pl-5">
                 <PlayerLine
                   p={p}

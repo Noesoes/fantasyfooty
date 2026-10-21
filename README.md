@@ -57,6 +57,16 @@ Every player gets two scores.
 - A free agent gets priority if they'd crack your lineup, especially when one of your starters is out this week
 - Backup QBs and players Sleeper doesn't expect to play are never recommended as pickups. QB claims are capped at your number of QB/superflex spots
 
+**Player check (Waivers tab):** search any free agent in your league by name or team (or filter by position), or tap a player in *Best available*. The check gives a verdict (**Pick up**, **Stream** for a one-week fill-in, **Stash** for injury or role upside, or **Pass**) plus the reasons for and against. It weighs:
+- whether he'd start for you this week, and over whom
+- rest-of-season value vs. the player you'd have to drop, and vs. the rest of the waiver wire at his position
+- his role (backup QB, fill-in starter, snap share), recent form and injury status
+- this week's matchup and Vegas total
+- your depth at the position
+- how many Sleeper managers are adding him, and whether teams ahead of you on waivers want him
+
+It also names the drop and, in FAAB leagues, a suggested bid. Search covers every unrostered player Sleeper projects, including injured players and backups.
+
 **Waiver order:** shows your waiver priority (rolling or reverse standings) or FAAB budget left. Every team that claims before you (or has more FAAB to spend) is scored with the same model to guess which free agents they'd want. The app then simulates the waiver run in order, marks each of your claims as *likely gone*, *contested* or *likely available*, and suggests backup targets that are likely to still be there at your turn.
 
 **FAAB bids:** in FAAB leagues every other team is modeled too. A player's worth is a share of your remaining budget based on how much they'd add over your lineup (≈5 pts/game ≈ a quarter of your budget, capped at 35%). Each interested team's likely bid is estimated the same way from their own need and budget. The suggestion bids just over the likeliest competitor without going past 1.6× the player's worth to you, and bids low when nobody else needs the player.
@@ -156,6 +166,8 @@ lib/playbyplay.ts          drive charts for live games (ESPN play feed), your pl
 app/field.tsx              football field drive chart
 app/games.tsx              Games tab: live scoreboard with your players' stat lines
 lib/gamecenter.ts          every game this week + your players' live stats
+lib/pickup.ts              should-I-pick-him-up verdicts for any free agent
+app/playercheck.tsx        Player check search and verdict card
 lib/playoffs.ts            playoff odds simulation
 lib/scouting.ts            opponent scouting report
 scripts/fetch-snapshots.mjs ESPN injury + scoreboard snapshots used by the deploy workflow
