@@ -130,29 +130,90 @@ const LIMITED = /\blimited\b/i;
 const PRACTICE = /practic|participa|DNP/i;
 const RULED_OUT =
   /\b(ruled out|won't play|will not play|declared inactive|is inactive|will miss (sunday|monday|thursday|the game|week)|won't suit up|out for (sunday|monday|thursday|week))\b/i;
-const NEGATED = /\b(not|n't|never|yet to be)( been)?( officially)? ruled out\b/i;
+// "hasn't been ruled out": the contraction is glued to the verb, so no word boundary before n't.
+const NEGATED = /(\bnot|n't|\bnever|\byet to be)( been)?( officially)? ruled out\b/i;
 // Sentences recapping earlier weeks ("he opened last week as a non-participant…").
 const PAST = /\b(last week|previous week|a week ago|last season|last year|week \d+ injury report|ahead of week \d+)\b/i;
 
 // Hedged sentences ("if he practices Thursday, there's a chance he will play") aren't news.
 const HEDGED =
-  /\b(if|chance|could|might|may|hope(s|ful)?|possibl[ey]|uncertain|unclear|remains to be seen|optimistic|would)\b/i;
+  /\b(if|whether|determine|chance|could|might|may|hope(s|ful)?|possibl[ey]|uncertain|unclear|remains to be seen|optimistic|would|game-time decision|questionable)\b/i;
 
-const sentences = (text: string) => text.split(/(?<=[.!?])\s+/).filter((x) => x.trim());
+// Split after a sentence's final punctuation, not after initials ("A.J. Brown", "J.Taylor").
+const sentences = (text: string) => text.split(/(?<=[a-z0-9)"'’][.!?])\s+/).filter((x) => x.trim());
 const EXPECTED_IN =
   /\b(expect(s|ed)? to play|will play|good to go|no injury designation|without an injury designation|cleared to play|off the injury report|is active|will suit up|not listed)\b/i;
 
+// --- Who is a sentence about? ------------------------------------------------
+// A player's news feed often mentions teammates ("…as Alec Pierce (heel) and
+// Tyler Warren (groin) won't play"). A status phrase only counts for this
+// player if the nearest person mentioned before it is him (by last name, or
+// "he/his" when he's the sentence's first-named person).
+
+// Full names, including initials ("A.J. Brown", "J.Taylor").
+const NAME = /\b(?:(?:[A-Z]\.){1,3}\s*[A-Z][a-zA-Z'’-]+|[A-Z][a-zA-Z'’-]+(?:\s+[A-Z][a-zA-Z'’-]+)+)/g;
+// Single capitalized words that might be a surname ("since Warren is expected to play").
+const WORD = /\b[A-Z][a-z'’-]{2,}\b/g;
+const NOT_A_NAME =
+  /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|January|February|March|April|May|June|July|August|September|October|November|December|Week|Weeks|The|He|His|Him|Coach|Head|Per|According|After|Before|While|With|Despite|However|Also|If|In|On|At|For|And|But|Both|This|That|Fantasy|Rotoworld|Sleeper|Questionable|Doubtful|Out|Limited|Full|Practice|Injury|Report)$/;
+const PRONOUN = /\b(he|he's|his|him)\b/gi;
+const SUFFIX = /^(jr|sr|ii|iii|iv|v)\.?$/i;
+
+function lastNameOf(p: PlayerAnalysis): string {
+  const parts = p.name.split(/\s+/).filter((w) => !SUFFIX.test(w));
+  return (parts[parts.length - 1] ?? p.name).replace(/[.'’]/g, "").toLowerCase();
+}
+
+/** True if the phrase at `index` in `sentence` is about player `p`. */
+export function aboutPlayer(sentence: string, index: number, p: PlayerAnalysis): boolean {
+  const last = lastNameOf(p);
+  const isPlayer = (name: string) => name.replace(/[.'’]/g, "").toLowerCase().split(/\s+/).includes(last);
+  const mentions: { at: number; end: number; who: "player" | "other" | "pronoun" }[] = [];
+  for (const m of sentence.matchAll(NAME)) {
+    const at = m.index ?? 0;
+    mentions.push({ at, end: at + m[0].length, who: isPlayer(m[0]) ? "player" : "other" });
+  }
+  const inName = (at: number) => mentions.some((x) => at >= x.at && at < x.end);
+  // Bare last names ("Taylor has been ruled out") and other single capitalized surnames ("since Warren is…").
+  for (const m of sentence.matchAll(WORD)) {
+    const at = m.index ?? 0;
+    if (inName(at)) continue;
+    const word = m[0].replace(/[.'’]/g, "").toLowerCase();
+    if (word === last) mentions.push({ at, end: at + m[0].length, who: "player" });
+    else if (!NOT_A_NAME.test(m[0])) mentions.push({ at, end: at + m[0].length, who: "other" });
+  }
+  for (const m of sentence.matchAll(PRONOUN)) {
+    const at = m.index ?? 0;
+    mentions.push({ at, end: at + m[0].length, who: "pronoun" });
+  }
+  if (!mentions.length) return true; // no one named: the item is about him
+  const before = mentions.filter((x) => x.at < index).sort((x, y) => y.at - x.at);
+  const subject = before[0] ?? [...mentions].sort((x, y) => x.at - y.at)[0];
+  if (subject.who !== "pronoun") return subject.who === "player";
+  // "he/his": whoever the sentence names first (or him, if it names no one).
+  const firstNamed = mentions.filter((x) => x.who !== "pronoun").sort((x, y) => x.at - y.at)[0];
+  return !firstNamed || firstNamed.who === "player";
+}
+
+/** Index of the first match of `re` in `s` that's about `p`, or -1. */
+function matchFor(re: RegExp, s: string, p: PlayerAnalysis): number {
+  const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+  for (const m of s.matchAll(g)) if (aboutPlayer(s, m.index ?? 0, p)) return m.index ?? 0;
+  return -1;
+}
+
 /** The first sentence that reports this week's practice participation (leads carry the news). */
-function practiceFrom(text: string, when: Date): PracticeNote | null {
+export function practiceFrom(text: string, when: Date, p: PlayerAnalysis): PracticeNote | null {
   for (const sentence of sentences(text)) {
     if (!PRACTICE.test(sentence) || PAST.test(sentence)) continue;
-    const level: PracticeLevel | null = FULL.test(sentence)
-      ? "Full"
-      : DNP.test(sentence)
-        ? "DNP"
-        : LIMITED.test(sentence)
-          ? "Limited"
-          : null;
+    const level: PracticeLevel | null =
+      matchFor(FULL, sentence, p) >= 0
+        ? "Full"
+        : matchFor(DNP, sentence, p) >= 0
+          ? "DNP"
+          : matchFor(LIMITED, sentence, p) >= 0
+            ? "Limited"
+            : null;
     if (!level) continue;
     const dayMatch = sentence.match(/\b(Mon|Tues|Wednes|Thurs|Fri|Satur)day\b/i);
     const day = dayMatch
@@ -163,10 +224,15 @@ function practiceFrom(text: string, when: Date): PracticeNote | null {
   return null;
 }
 
-const ruledOutIn = (text: string) =>
-  sentences(text).some((x) => RULED_OUT.test(x) && !NEGATED.test(x) && !PAST.test(x) && !HEDGED.test(x));
-const expectedInIn = (text: string) =>
-  sentences(text).some((x) => EXPECTED_IN.test(x) && !PAST.test(x) && !HEDGED.test(x));
+export const ruledOutIn = (text: string, p: PlayerAnalysis) =>
+  sentences(text).some((x) => !NEGATED.test(x) && !PAST.test(x) && !HEDGED.test(x) && matchFor(RULED_OUT, x, p) >= 0);
+// "it does not mean that he will be cleared to play", "no guarantee he'll suit up".
+const EXPECTED_NEGATED =
+  /(\bnot|n't|\bno guarantee|\bunlikely)\b[^.]{0,60}\b(expect(s|ed)? to play|will play|cleared to play|good to go|suit up)/i;
+export const expectedInIn = (text: string, p: PlayerAnalysis) =>
+  sentences(text).some(
+    (x) => !PAST.test(x) && !HEDGED.test(x) && !EXPECTED_NEGATED.test(x) && matchFor(EXPECTED_IN, x, p) >= 0,
+  );
 
 async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
@@ -348,13 +414,13 @@ export async function assessInjuries(
     const byDay = new Map<string, PracticeNote>();
     // Oldest first, so a later report for the same day wins.
     for (const n of [...items].reverse()) {
-      const note = practiceFrom(n.text, n.when);
+      const note = practiceFrom(n.text, n.when, p);
       if (note) byDay.set(note.day, note);
     }
     const practice = [...byDay.values()].sort((x, y) => DAYS.indexOf(x.day) - DAYS.indexOf(y.day));
     const latest = practice.at(-1);
-    const ruledOut = items.some((n) => ruledOutIn(n.text));
-    const expectedIn = items.some((n) => expectedInIn(n.text));
+    const ruledOut = items.some((n) => ruledOutIn(n.text, p));
+    const expectedIn = items.some((n) => expectedInIn(n.text, p));
 
     const flagged =
       designation || (espnStatus && espnStatus !== "Active") || practice.some((n) => n.level !== "Full") || ruledOut;
