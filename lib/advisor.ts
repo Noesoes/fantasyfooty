@@ -25,6 +25,8 @@ import {
   type StatRow,
   type TrendingPlayer,
 } from "./sleeper";
+import { OUT_STATUSES } from "./status";
+import { assessInjuries } from "./injuries";
 import { gameOutlook, getWeekGames, type Game, type GameOutlook } from "./scoreboard";
 
 const RECENT_WEEKS = 3;
@@ -45,7 +47,7 @@ export const SLOT_ELIGIBILITY: Record<string, string[]> = {
 };
 
 // Statuses where the player will not suit up.
-export const OUT_STATUSES = new Set(["Out", "IR", "PUP", "Sus", "NA", "DNR", "COV", "NFI"]);
+export { OUT_STATUSES };
 const INJURY_FACTOR: Record<string, number> = { Doubtful: 0.3, Questionable: 0.85 };
 
 export type MatchupGrade = "great" | "good" | "neutral" | "tough" | "brutal";
@@ -84,6 +86,8 @@ export interface PlayerAnalysis {
   role: PlayerRole;
   trendingAdds: number;
   weekScore: number;
+  /** Chance to play this week (0–1) from the injury model, when assessed; weekScore is scaled by it. */
+  playChance: number | null;
   rosValue: number;
   /** Vegas line and weather for this week's game, when known. */
   game: GameOutlook | null;
@@ -476,7 +480,7 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
     }
     if (isOut) {
       weekScore = 0;
-      notes.push(`Ruled ${injury}${info?.injury_body_part ? ` (${info.injury_body_part})` : ""}`);
+      notes.unshift(`Ruled ${injury}${info?.injury_body_part ? ` (${info.injury_body_part})` : ""}`);
     } else if (injury && INJURY_FACTOR[injury]) {
       weekScore *= INJURY_FACTOR[injury];
       notes.push(`${injury}${info?.injury_body_part ? ` (${info.injury_body_part})` : ""} — monitor before kickoff`);
@@ -511,6 +515,7 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
       role,
       trendingAdds: adds,
       weekScore: round1(weekScore),
+      playChance: null,
       rosValue: round1(rosValue),
       game,
       notes,
@@ -572,6 +577,7 @@ export function optimizeLineup(
 function benchReason(p: PlayerAnalysis): string {
   if (p.onBye) return "on bye";
   if (p.injury && OUT_STATUSES.has(p.injury)) return `ruled ${p.injury}`;
+  if (p.playChance !== null && p.playChance < 0.85) return `only ~${Math.round(p.playChance * 100)}% to play this week`;
   if (p.injury && INJURY_FACTOR[p.injury]) return `${p.injury.toLowerCase()} and projected lower`;
   return `projects ${p.weekScore} pts`;
 }
@@ -639,6 +645,36 @@ function minimumNeeds(rosterPositions: string[]): Record<string, number> {
   return needs;
 }
 
+/**
+ * Replace the flat Questionable/Doubtful discounts with the injury model's
+ * chance to play (designation + this week's practice reports + news), so an
+ * injured player's projection is his expected points. Best effort: if the
+ * news can't be fetched, the flat discounts stay.
+ */
+async function applyPlayChances(players: PlayerAnalysis[], season: string, week: number) {
+  const hurt = players.filter((p) => p.team && !p.onBye && p.injury && !OUT_STATUSES.has(p.injury));
+  if (!hurt.length) return;
+  const { rows } = await assessInjuries(
+    hurt.map((p) => ({ player: p, side: "mine" as const, starter: false })),
+    season,
+    week,
+    { articles: false },
+  ).catch(() => ({ rows: [] }));
+  for (const r of rows) {
+    const p = r.player;
+    const flat = (p.injury && INJURY_FACTOR[p.injury]) || 1;
+    const full = p.weekScore / flat;
+    p.playChance = r.probability;
+    p.weekScore = round1(full * r.probability);
+    const practice = r.practice.length
+      ? `; practice ${r.practice.map((n) => (n.level === "Limited" ? "LP" : n.level === "Full" ? "FP" : "DNP")).join(" → ")}`
+      : "";
+    const note = `~${Math.round(r.probability * 100)}% to play (${p.injury}${practice}) — projection scaled to ${p.weekScore}`;
+    // Lead with it: it's the most important thing about this player this week.
+    p.notes = [note, ...p.notes.filter((n) => !n.includes("monitor before kickoff"))];
+  }
+}
+
 export async function analyzeLeague(opts: {
   leagueId: string;
   userId: string;
@@ -704,6 +740,7 @@ export async function analyzeLeague(opts: {
   }
 
   const myPlayers = analyzePlayers(myIds, inputs, extraInfo);
+  await applyPlayChances([...myPlayers.values()], season, week);
   const roster = [...myPlayers.values()].sort((a, b) => b.weekScore - a.weekScore);
   const active = roster.filter((p) => !reserved.has(p.id));
 
@@ -721,6 +758,13 @@ export async function analyzeLeague(opts: {
     else if (s.player.weekScore === 0) {
       warnings.push(
         `${s.player.name} is in your ${slotName(s.slot)} slot: ${s.player.notes[0] ?? "not projected to score"}.`,
+      );
+    } else if (s.player.playChance !== null && s.player.playChance < 0.6) {
+      const keep = optimalLineup.some((o) => o.player?.id === s.player!.id);
+      warnings.push(
+        `${s.player.name} is only ~${Math.round(s.player.playChance * 100)}% to play this week (${s.player.injury})${
+          keep ? ": still your best option, but have a backup ready and check before kickoff" : ""
+        }.`,
       );
     }
   }

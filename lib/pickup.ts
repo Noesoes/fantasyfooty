@@ -12,6 +12,7 @@ import {
   type PlayerAnalysis,
   type WaiverTarget,
 } from "./advisor";
+import { ordinal } from "./scouting";
 
 export type PickupVerdict = "Pick up" | "Stream" | "Stash" | "Pass";
 
@@ -244,4 +245,78 @@ export function searchFreeAgents(a: Analysis, query: string, position: string | 
       return name.includes(q) || (p.team ?? "").toLowerCase() === q;
     })
     .slice(0, limit);
+}
+
+export interface PositionPick {
+  player: PlayerAnalysis;
+  /** Expected points this week (projection × matchup × Vegas × chance to play). */
+  points: number;
+  /** Short reasons: usage, matchup, game environment, form, health. */
+  why: string[];
+  /** The starter he'd replace this week, if he'd start for you. */
+  over: PlayerAnalysis | null;
+}
+
+export const FILL_POSITIONS: Record<string, string[]> = {
+  QB: ["QB"],
+  RB: ["RB"],
+  WR: ["WR"],
+  TE: ["TE"],
+  FLEX: ["RB", "WR", "TE"],
+  K: ["K"],
+  DEF: ["DEF"],
+};
+
+/**
+ * Best free agents to fill a position for THIS week: ranked by expected
+ * points, nudged toward players with a real role (snap share), since a
+ * part-timer's projection is shakier.
+ */
+export function bestAtPosition(a: Analysis, fill: string, limit = 8): PositionPick[] {
+  const positions = FILL_POSITIONS[fill] ?? [fill];
+  const slots = a.optimalLineup.filter((s) => SLOT_ELIGIBILITY[s.slot]?.some((pos) => positions.includes(pos)));
+  const score = (p: PlayerAnalysis) => {
+    const usage =
+      p.snapShare === null || p.recentGames < 2 ? 1 : Math.min(1.05, Math.max(0.85, 0.85 + (p.snapShare - 0.3) * 0.4));
+    return p.weekScore * usage;
+  };
+  return a.freeAgentPool
+    .filter(
+      (p) =>
+        positions.includes(p.position) &&
+        p.team &&
+        !p.onBye &&
+        !(p.injury && OUT_STATUSES.has(p.injury)) &&
+        p.role !== "backup" &&
+        p.role !== "sidelined" &&
+        p.weekScore > 0,
+    )
+    .sort((x, y) => score(y) - score(x))
+    .slice(0, limit)
+    .map((p) => {
+      const why: string[] = [];
+      if (
+        p.snapShare !== null &&
+        p.recentGames >= 2 &&
+        p.position !== "QB" &&
+        p.position !== "K" &&
+        p.position !== "DEF"
+      ) {
+        why.push(`${pct(p.snapShare)} of snaps`);
+      }
+      if (p.matchup) {
+        const g = p.matchup.teams - p.matchup.rank + 1;
+        const who = p.position === "DEF" ? "D/STs" : p.position === "K" ? "Ks" : `${p.position}s`;
+        why.push(`vs ${p.matchup.opponent} (${g === 1 ? "most" : `${ordinal(g)}-most`} pts to ${who})`);
+      }
+      if (p.game?.implied != null) why.push(`${p.team} implied ${p.game.implied}`);
+      if (p.recentAvg !== null && p.recentGames >= 2) why.push(`${p.recentAvg}/g last ${p.recentGames}`);
+      if (p.injury) why.push(p.injury);
+      if (p.trendingAdds >= 1000) why.push(`${p.trendingAdds.toLocaleString()} adds`);
+      // Would he start for you?
+      const filled = slots.map((s) => s.player).filter((x): x is PlayerAnalysis => !!x);
+      const weakest = [...filled].sort((x, y) => x.weekScore - y.weekScore)[0] ?? null;
+      const over = weakest && p.weekScore > weakest.weekScore + 0.5 ? weakest : null;
+      return { player: p, points: r1(p.weekScore), why, over };
+    });
 }

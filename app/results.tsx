@@ -14,7 +14,7 @@ import { buildInjuryReport, type InjuryReport, type InjuryRow, type Verdict } fr
 import { buildTrackRecord, type TrackRecord } from "@/lib/backtest";
 import { fetchLive, type LivePlayer, type LiveSide, type LiveState } from "@/lib/live";
 import { GamesTab } from "./games";
-import { PlayerCheck } from "./playercheck";
+import { FillPosition, PlayerCheck } from "./playercheck";
 import { Card, Empty, Headshot, MatchupChip, PlayerLine, Points, PosBadge, SlotBadge } from "./ui";
 
 type Tab =
@@ -833,6 +833,13 @@ function Lineup({ a }: { a: Analysis }) {
                           ▲ MOVE INTO LINEUP
                         </div>
                       )}
+                      {s.player.playChance !== null && s.player.playChance < 0.85 && (
+                        <div
+                          className={`mt-1 ml-[52px] text-[11px] font-semibold ${s.player.playChance < 0.6 ? "text-rose-300" : "text-amber-300"}`}
+                        >
+                          ~{Math.round(s.player.playChance * 100)}% to play · projection scaled for injury risk
+                        </div>
+                      )}
                     </div>
                     <ScoreBar value={s.player.weekScore} max={max} />
                   </div>
@@ -983,6 +990,7 @@ function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => v
   return (
     <div className="flex flex-col gap-5">
       <PlayerCheck ref={checkRef} a={a} selected={checking} onSelect={setChecking} />
+      <FillPosition a={a} onCheck={check} />
       <WaiverStatus a={a} />
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-700/70 bg-ink-900 px-4 py-2.5 text-xs text-ink-400">
         <span>

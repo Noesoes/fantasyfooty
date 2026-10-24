@@ -5,7 +5,7 @@
 
 import { forwardRef, useMemo, useState } from "react";
 import type { Analysis, PlayerAnalysis } from "@/lib/advisor";
-import { evaluatePickup, searchFreeAgents, type PickupVerdict } from "@/lib/pickup";
+import { bestAtPosition, evaluatePickup, FILL_POSITIONS, searchFreeAgents, type PickupVerdict } from "@/lib/pickup";
 import { Card, Headshot, PlayerLine } from "./ui";
 
 const VERDICT_STYLE: Record<PickupVerdict, string> = {
@@ -211,3 +211,101 @@ export const PlayerCheck = forwardRef<
     </Card>
   );
 });
+
+/** "I need a RB this week": the best free agents at a position by expected points this week. */
+export function FillPosition({ a, onCheck }: { a: Analysis; onCheck: (p: PlayerAnalysis) => void }) {
+  const options = useMemo(
+    () =>
+      Object.keys(FILL_POSITIONS).filter((k) =>
+        a.freeAgentPool.some((p) => FILL_POSITIONS[k].includes(p.position) && p.weekScore > 0),
+      ),
+    [a],
+  );
+  const [fill, setFill] = useState<string | null>(null);
+  const picks = useMemo(() => (fill ? bestAtPosition(a, fill, 8) : []), [a, fill]);
+  const top = picks[0];
+  return (
+    <Card title="Fill a position" action={<span className="text-xs text-ink-400">best pickup for week {a.week}</span>}>
+      <div className="flex flex-wrap gap-1.5">
+        {options.map((k) => (
+          <button
+            key={k}
+            onClick={() => setFill(fill === k ? null : k)}
+            className={`display -skew-x-12 px-3.5 py-1.5 text-sm font-bold transition ${
+              fill === k ? "prime-gradient text-ink-950" : "bg-ink-800 text-ink-300 hover:bg-ink-700"
+            }`}
+          >
+            <span className="block skew-x-12">{k === "FLEX" ? "Flex" : k}</span>
+          </button>
+        ))}
+      </div>
+      {!fill && (
+        <p className="mt-3 text-xs text-ink-400">
+          Need someone at a position this week? Pick it and you&apos;ll get the available players ranked by expected
+          points: projection, matchup, Vegas total, playing time and health.
+        </p>
+      )}
+      {fill && picks.length === 0 && (
+        <p className="mt-3 text-sm text-ink-400">No free agent at {fill} is projected to play this week.</p>
+      )}
+      {top && (
+        <div className="mt-4 border border-mint-400/40 bg-mint-400/10 p-3">
+          <div className="text-[10px] font-bold tracking-wider text-mint-300 uppercase">
+            Best pickup at {fill === "FLEX" ? "Flex" : fill}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+            <PlayerLine p={top.player} size={40} />
+            <div className="text-right">
+              <div className="font-mono text-2xl leading-none font-black text-mint-400 tabular-nums">
+                {top.points.toFixed(1)}
+              </div>
+              <div className="text-[10px] text-ink-400">expected pts</div>
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-ink-300">
+            {top.why.join(" · ")}
+            {top.over && (
+              <>
+                {" "}
+                · <b className="text-ink-100">would start over {top.over.name}</b> ({top.over.weekScore.toFixed(1)})
+              </>
+            )}
+          </p>
+          <button onClick={() => onCheck(top.player)} className="mt-2 text-xs font-bold text-mint-400 hover:underline">
+            Why or why not pick him up? →
+          </button>
+        </div>
+      )}
+      {picks.length > 1 && (
+        <ul className="mt-3 divide-y divide-ink-700/50 border border-ink-700">
+          {picks.slice(1).map((r, i) => (
+            <li key={r.player.id}>
+              <button
+                onClick={() => onCheck(r.player)}
+                className="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-ink-800"
+              >
+                <span className="w-5 shrink-0 font-mono text-sm font-bold text-ink-400">{i + 2}</span>
+                <div className="min-w-0 flex-1">
+                  <PlayerLine p={r.player} size={30} />
+                  <div className="mt-0.5 ml-[42px] truncate text-[11px] text-ink-400">
+                    {r.why.join(" · ")}
+                    {r.over ? ` · would start over ${r.over.name}` : ""}
+                  </div>
+                </div>
+                <div className="shrink-0 text-right font-mono text-base font-bold tabular-nums">
+                  {r.points.toFixed(1)}
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {fill && picks.length > 0 && (
+        <p className="mt-2 text-xs text-ink-400">
+          Expected points already account for each player&apos;s matchup, Vegas total and chance to play; players with a
+          bigger share of snaps get a small boost. Tap anyone for the full pickup check.
+        </p>
+      )}
+    </Card>
+  );
+}

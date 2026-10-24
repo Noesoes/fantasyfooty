@@ -45,7 +45,7 @@ Every player gets two scores.
 - Blended 80/20 with recent form (last 3 games)
 - Nudged up or down by the **opponent's points allowed to that position** this season (shrunk toward neutral early in the season, when samples are small)
 - **QB depth chart:** Sleeper only projects pass attempts for the QB it expects to start, so backups score 0, and a usual starter who isn't projected to start (e.g. Lamar with Huntley projected to start) is flagged
-- Zeroed for **byes** and players ruled Out/IR/Suspended. Questionable ×0.85, Doubtful ×0.3
+- Zeroed for **byes** and players ruled Out/IR/Suspended. Questionable and Doubtful players are scaled by their **chance to play** from the injury model (designation + this week's practice reports + news, the same estimate as the Injuries tab), so a questionable player who hasn't practiced counts for ~30% of his projection and one with full practices ~90%. If the news can't be loaded, the flat fallback is ×0.85 / ×0.3. Starters under 60% to play get a warning in the Game plan.
 - **Vegas and weather:** a few percent up or down for the team's implied total (half the over/under ± half the spread, vs. a ~22.5-pt average; for defenses, the opponent's), a small game-script nudge for RBs who are big favorites or underdogs, and down for passing games and kickers in snow, rain, wind or bitter cold (outdoor games only). Each player shows their team's implied total and a weather icon, and the Lineup tab has a *Vegas & weather* card for your starters. Lines and forecasts come from ESPN's scoreboard (snapshotted by the deploy workflow for the browser).
 
 **Rest-of-season value** (`rosValue`), used for drops and waivers:
@@ -66,6 +66,8 @@ Every player gets two scores.
 - how many Sleeper managers are adding him, and whether teams ahead of you on waivers want him
 
 It also names the drop and, in FAAB leagues, a suggested bid. Search covers every unrostered player Sleeper projects, including injured players and backups.
+
+**Fill a position (Waivers tab):** pick QB, RB, WR, TE, Flex, K or DEF and get the available players ranked by expected points this week. The ranking combines projection, matchup, Vegas total and chance to play, with a small boost for players who see more snaps. The top pick is called out with its reasons and the starter he'd replace, and tapping anyone opens the full Player check.
 
 **Waiver order:** shows your waiver priority (rolling or reverse standings) or FAAB budget left. Every team that claims before you (or has more FAAB to spend) is scored with the same model to guess which free agents they'd want. The app then simulates the waiver run in order, marks each of your claims as *likely gone*, *contested* or *likely available*, and suggests backup targets that are likely to still be there at your turn.
 
@@ -159,14 +161,15 @@ lib/trades.ts              trade finder, offer evaluator, positional strength
 lib/planner.ts             rest-of-season projections, byes and playoff weeks
 lib/backtest.ts            track record from past weeks' actual scores
 lib/gameday.ts             pre-kickoff inactive check
-lib/injuries.ts            injury report and chance-to-play estimates
+lib/injuries.ts            injury report and chance-to-play estimates (also used to scale injured players' projections)
+lib/status.ts              injury designations that mean a player won't play
 lib/scoreboard.ts          NFL games: clock, score, Vegas lines, weather, and the start/sit nudges from them
 lib/live.ts                live scoring, win probability, late swaps
 lib/playbyplay.ts          drive charts for live games (ESPN play feed), your players' snaps labeled
 app/field.tsx              football field drive chart
 app/games.tsx              Games tab: live scoreboard with your players' stat lines
 lib/gamecenter.ts          every game this week + your players' live stats
-lib/pickup.ts              should-I-pick-him-up verdicts for any free agent
+lib/pickup.ts              should-I-pick-him-up verdicts and best-available-by-position rankings
 app/playercheck.tsx        Player check search and verdict card
 lib/playoffs.ts            playoff odds simulation
 lib/scouting.ts            opponent scouting report

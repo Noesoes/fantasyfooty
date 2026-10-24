@@ -13,7 +13,8 @@
 // suit up, and far more when they finish the week with a full practice), not
 // a trained model.
 
-import { OUT_STATUSES, type Analysis, type PlayerAnalysis } from "./advisor";
+import type { Analysis, PlayerAnalysis } from "./advisor";
+import { OUT_STATUSES } from "./status";
 import { getAllPlayers, getPlayerNews, getSchedule, type NewsItem } from "./sleeper";
 
 export type PracticeLevel = "DNP" | "Limited" | "Full";
@@ -276,23 +277,35 @@ function pickArticle(
 const verdictFor = (p: number): Verdict =>
   p >= 0.85 ? "Playing" : p >= 0.6 ? "Likely" : p >= 0.4 ? "Toss-up" : p >= 0.1 ? "Unlikely" : "Out";
 
-export async function buildInjuryReport(a: Analysis): Promise<InjuryReport> {
-  const myStarters = new Set(a.currentLineup.map((s) => s.player?.id).filter(Boolean) as string[]);
-  const candidates: { player: PlayerAnalysis; side: "mine" | "opponent"; starter: boolean }[] = [
-    ...a.roster.map((p) => ({ player: p, side: "mine" as const, starter: myStarters.has(p.id) })),
-    ...(a.opponent?.starters ?? []).map((p) => ({ player: p, side: "opponent" as const, starter: true })),
-  ].filter((c) => c.player.position !== "DEF");
+export interface InjuryCandidate {
+  player: PlayerAnalysis;
+  side: "mine" | "opponent";
+  starter: boolean;
+}
 
+/**
+ * Chance-to-play estimates for a set of players (the ones that are flagged:
+ * designated, limited in practice, ruled out, or not expected to start).
+ * Shared by the Injuries tab and by the lineup optimizer, which scales each
+ * injured player's projection by his chance to play.
+ */
+export async function assessInjuries(
+  candidates: InjuryCandidate[],
+  season: string,
+  week: number,
+  opts: { articles?: boolean } = {},
+): Promise<{ rows: InjuryRow[]; espnAvailable: boolean; espnAsOf: number | null }> {
+  candidates = candidates.filter((c) => c.player.position !== "DEF");
   const [espnResult, schedule, news, rw] = await Promise.all([
     fetchEspn().catch(() => null),
-    getSchedule(a.season).catch(() => []),
+    getSchedule(season).catch(() => []),
     mapLimit(candidates, 6, (c) => getPlayerNews(c.player.id).catch(() => [] as NewsItem[])),
-    getRotowireIds(),
+    opts.articles === false ? Promise.resolve(new Map<string, number>()) : getRotowireIds(),
   ]);
   const espn = espnResult?.map ?? null;
 
   // This game week runs from the Tuesday before its first game.
-  const weekGames = schedule.filter((g) => g.week === a.week);
+  const weekGames = schedule.filter((g) => g.week === week);
   const firstGame = weekGames.map((g) => new Date(`${g.date}T12:00:00Z`).getTime()).sort((x, y) => x - y)[0];
   const weekStart = firstGame ? firstGame - 2 * 86_400_000 - 12 * 3_600_000 : Date.now() - 6 * 86_400_000;
   const gameStatus = new Map<string, string>();
@@ -435,6 +448,19 @@ export async function buildInjuryReport(a: Analysis): Promise<InjuryReport> {
   // Your starters first, most at risk first; then your bench; then the opponent.
   const rank = (r: InjuryRow) => (r.side === "mine" ? (r.starter ? 0 : 1) : 2);
   rows.sort((x, y) => rank(x) - rank(y) || x.probability - y.probability);
+  return { rows, espnAvailable: espn !== null, espnAsOf: espnResult?.asOf ?? null };
+}
+
+export async function buildInjuryReport(a: Analysis): Promise<InjuryReport> {
+  const myStarters = new Set(a.currentLineup.map((s) => s.player?.id).filter(Boolean) as string[]);
+  const { rows, espnAvailable, espnAsOf } = await assessInjuries(
+    [
+      ...a.roster.map((p) => ({ player: p, side: "mine" as const, starter: myStarters.has(p.id) })),
+      ...(a.opponent?.starters ?? []).map((p) => ({ player: p, side: "opponent" as const, starter: true })),
+    ],
+    a.season,
+    a.week,
+  );
   const mineStarters = a.currentLineup.filter((s) => s.player && s.player.position !== "DEF");
   const atRisk = new Set(
     rows.filter((r) => r.side === "mine" && r.starter && r.probability < 0.85).map((r) => r.player.id),
@@ -444,7 +470,7 @@ export async function buildInjuryReport(a: Analysis): Promise<InjuryReport> {
     healthyStarters: mineStarters.filter((s) => !atRisk.has(s.player!.id)).length,
     totalStarters: mineStarters.length,
     fetchedAt: Date.now(),
-    espnAvailable: espn !== null,
-    espnAsOf: espnResult?.asOf ?? null,
+    espnAvailable,
+    espnAsOf,
   };
 }
