@@ -12,6 +12,7 @@ import { buildScouting, ordinal, type Scouting } from "@/lib/scouting";
 import { buildPlayoffOdds, type PlayoffOdds, type PlayoffTeam } from "@/lib/playoffs";
 import { buildInjuryReport, type InjuryReport, type InjuryRow, type Verdict } from "@/lib/injuries";
 import { buildTrackRecord, type TrackRecord } from "@/lib/backtest";
+import { compareStart, factorsFor, FACTOR_LABELS, type FactorKey, type Tone } from "@/lib/explain";
 import { fetchLive, type LivePlayer, type LiveSide, type LiveState } from "@/lib/live";
 import { GamesTab } from "./games";
 import { FillPosition, PlayerCheck } from "./playercheck";
@@ -603,6 +604,8 @@ interface Task {
   title: React.ReactNode;
   detail: string;
   players: PlayerAnalysis[];
+  /** Start/sit calls: the players to break down side by side (the pick first). */
+  why?: PlayerAnalysis[];
 }
 
 function useChecked(key: string) {
@@ -631,22 +634,34 @@ function useChecked(key: string) {
 function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
   const tasks: Task[] = useMemo(() => {
     const list: Task[] = [];
+    // A start paired with the player it replaces reads as one call; the bench is implied.
+    const covered = new Set(a.moves.filter((m) => m.action === "start" && m.vs).map((m) => m.vs!.id));
     for (const m of a.moves) {
+      if (m.action === "bench" && covered.has(m.player.id)) continue;
+      const pair = m.vs ? (m.action === "start" ? [m.player, m.vs] : [m.vs, m.player]) : [m.player];
       list.push({
         id: `${m.action}-${m.player.id}`,
         kind: m.action,
         title:
           m.action === "start" ? (
             <>
-              Start <b>{m.player.name}</b> at {m.slot}
+              Start <b>{m.player.name}</b>
+              {m.vs && (
+                <>
+                  {" "}
+                  over <b>{m.vs.name}</b>
+                </>
+              )}{" "}
+              at {m.slot}
             </>
           ) : (
             <>
               Bench <b>{m.player.name}</b>
             </>
           ),
-        detail: m.reason,
-        players: [m.player],
+        detail: m.vs ? compareStart(pair[0], pair[1]).headline : m.reason,
+        players: pair,
+        why: pair,
       });
     }
     for (const w of a.waivers.slice(0, 3)) {
@@ -752,6 +767,7 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
                       ))}
                     </div>
                   </button>
+                  {t.why && !checked[t.id] && <WhyBreakdown players={t.why} />}
                 </li>
               ))}
             </ol>
@@ -769,6 +785,93 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
         <QuickLink label="Your roster" value={`${a.roster.length} players`} onClick={() => goTo("roster")} />
       </div>
     </div>
+  );
+}
+
+const TONE_CLASS: Record<Tone, string> = {
+  good: "text-mint-400",
+  bad: "text-rose-400",
+  neutral: "text-ink-100",
+};
+
+/** Expandable "why": the edges behind a start/sit call and every factor, side by side. */
+function WhyBreakdown({ players }: { players: PlayerAnalysis[] }) {
+  const cmp = players.length === 2 ? compareStart(players[0], players[1]) : null;
+  const factors = players.map((p) => new Map(factorsFor(p).map((f) => [f.key, f])));
+  const keys = (Object.keys(FACTOR_LABELS) as FactorKey[]).filter((k) => factors.some((m) => m.has(k)));
+  return (
+    <details className="group mt-1 rounded-xl border border-ink-700 bg-ink-900 text-xs">
+      <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2 font-semibold text-mint-400 select-none">
+        <span>Why this call?</span>
+        <span className="text-ink-400 transition group-open:rotate-90">›</span>
+      </summary>
+      <div className="flex flex-col gap-3 border-t border-ink-700 px-3 py-3">
+        {cmp && (cmp.edges.length > 0 || cmp.against.length > 0) && (
+          <div className="flex flex-col gap-2">
+            {cmp.edges.length > 0 && (
+              <div>
+                <div className="mb-1 font-bold text-ink-100">Why {players[0].name}</div>
+                <ul className="flex flex-col gap-1">
+                  {cmp.edges.map((e) => (
+                    <li key={e} className="flex gap-2 text-ink-100">
+                      <span className="text-mint-400">+</span>
+                      <span>{e}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {cmp.against.length > 0 && (
+              <div>
+                <div className="mb-1 font-bold text-ink-100">In {players[1].name}&apos;s favor</div>
+                <ul className="flex flex-col gap-1">
+                  {cmp.against.map((e) => (
+                    <li key={e} className="flex gap-2 text-ink-400">
+                      <span className="text-rose-400">−</span>
+                      <span>{e}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+        <table className="w-full table-fixed border-collapse">
+          <thead>
+            <tr className="text-left text-[10px] tracking-wider text-ink-400 uppercase">
+              <th className="w-[22%] pb-1 font-semibold"></th>
+              {players.map((p, i) => (
+                <th key={p.id} className="pb-1 pl-2 font-semibold">
+                  <span className={i === 0 && players.length === 2 ? "text-mint-400" : ""}>{p.name}</span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {keys.map((k) => (
+              <tr key={k} className={`border-t border-ink-800 align-top ${k === "total" ? "font-bold" : ""}`}>
+                <td className="py-1.5 pr-1 text-ink-400">{FACTOR_LABELS[k]}</td>
+                {factors.map((m, i) => {
+                  const f = m.get(k);
+                  return (
+                    <td
+                      key={i}
+                      className={`py-1.5 pl-2 leading-snug break-words ${f ? TONE_CLASS[f.tone] : "text-ink-600"}`}
+                    >
+                      {f?.text ?? "—"}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="text-[11px] leading-relaxed text-ink-400">
+          Expected pts start from the projection blended with recent form, then adjust for the defense, a growing or
+          shrinking role, Vegas/weather and the chance to play.
+        </p>
+      </div>
+    </details>
   );
 }
 

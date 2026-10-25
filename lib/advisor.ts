@@ -83,6 +83,8 @@ export interface PlayerAnalysis {
   recentGames: number;
   /** Share of team offensive snaps over the recent games, 0-1. */
   snapShare: number | null;
+  /** Workload over the recent games (RB/WR/TE), from Sleeper's weekly stats. */
+  usage: Usage | null;
   role: PlayerRole;
   trendingAdds: number;
   weekScore: number;
@@ -94,6 +96,20 @@ export interface PlayerAnalysis {
   notes: string[];
 }
 
+export interface Usage {
+  /** Carries + targets per game over the recent games. */
+  touches: number;
+  /** Same, over the whole season (null early on). */
+  seasonTouches: number | null;
+  /** Share of the team's carries / targets in the games he played, 0-1. */
+  carryShare: number;
+  targetShare: number;
+  /** Red-zone carries + targets per game. */
+  redZone: number;
+  /** Multiplier applied to this week's projection for a growing or shrinking role (1 = none). */
+  trendFactor: number;
+}
+
 export interface LineupSlot {
   slot: string;
   player: PlayerAnalysis | null;
@@ -102,6 +118,8 @@ export interface LineupSlot {
 export interface LineupMove {
   action: "start" | "bench";
   player: PlayerAnalysis;
+  /** For starts: the current starter he replaces (for benches: the player taking his spot). */
+  vs: PlayerAnalysis | null;
   /** Slot the player should go into (starts only). */
   slot: string | null;
   reason: string;
@@ -373,6 +391,19 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
     if (!cur || gs > cur.gs) usualStarterQB.set(r.team, { id: r.player_id, gs });
   }
 
+  // Each team's carries and targets per recent week, for usage shares.
+  const teamTotals = recentStats.map((week) => {
+    const t = new Map<string, { att: number; tgt: number }>();
+    for (const r of week) {
+      if (!r.team) continue;
+      const cur = t.get(r.team) ?? { att: 0, tgt: 0 };
+      cur.att += r.stats.rush_att ?? 0;
+      cur.tgt += r.stats.rec_tgt ?? 0;
+      t.set(r.team, cur);
+    }
+    return t;
+  });
+
   const result = new Map<string, PlayerAnalysis>();
   for (const id of ids) {
     if (!id || id === "0" || result.has(id)) continue;
@@ -396,20 +427,48 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
     let recentGames = 0;
     let snaps = 0;
     let teamSnaps = 0;
-    for (const week of recentById) {
+    let att = 0;
+    let tgt = 0;
+    let rz = 0;
+    let teamAtt = 0;
+    let teamTgt = 0;
+    recentById.forEach((week, w) => {
       const row = week.get(id);
-      if (!row) continue;
+      if (!row) return;
       if ((row.stats.gp ?? 0) > 0) {
         recentPts += points(row.stats, scoring, position);
         recentGames += 1;
+        att += row.stats.rush_att ?? 0;
+        tgt += row.stats.rec_tgt ?? 0;
+        rz += (row.stats.rush_rz_att ?? 0) + (row.stats.rec_rz_tgt ?? 0);
+        const tt = row.team ? teamTotals[w].get(row.team) : undefined;
+        teamAtt += tt?.att ?? 0;
+        teamTgt += tt?.tgt ?? 0;
       }
       if ((row.stats.tm_off_snp ?? 0) > 0) {
         snaps += row.stats.off_snp ?? 0;
         teamSnaps += row.stats.tm_off_snp ?? 0;
       }
-    }
+    });
     const recentAvg = recentGames > 0 ? recentPts / recentGames : null;
     const snapShare = teamSnaps > 0 && position !== "K" && position !== "DEF" ? snaps / teamSnaps : null;
+    let usage: Usage | null = null;
+    if (["RB", "WR", "TE"].includes(position) && recentGames > 0) {
+      const touches = (att + tgt) / recentGames;
+      const sGames = season?.stats.gp ?? 0;
+      const seasonTouches =
+        sGames >= 3 ? ((season?.stats.rush_att ?? 0) + (season?.stats.rec_tgt ?? 0)) / sGames : null;
+      // A role that's growing (or shrinking) lately counts for a little: projections lag behind usage changes.
+      const trend = seasonTouches && seasonTouches >= 3 && recentGames >= 2 ? touches / seasonTouches : 1;
+      usage = {
+        touches,
+        seasonTouches,
+        carryShare: teamAtt > 0 ? att / teamAtt : 0,
+        targetShare: teamTgt > 0 ? tgt / teamTgt : 0,
+        redZone: rz / recentGames,
+        trendFactor: Math.min(1.08, Math.max(0.92, 1 + (trend - 1) * 0.25)),
+      };
+    }
 
     // Prior for small samples. A projection is the best guess at a player's
     // role; a healthy player on a team that plays but gets no projection
@@ -466,6 +525,7 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
       // Projections already bake in the matchup, so only lean on it lightly.
       weekScore *= Math.min(1.12, Math.max(0.88, 1 + (matchup.ratio - 1) * 0.5));
     }
+    if (usage && weekScore > 0 && usage.trendFactor !== 1) weekScore *= usage.trendFactor;
     const game = onBye ? null : gameOutlook(team ? inputs.games?.get(team) : undefined, team, position);
     if (game && weekScore > 0) {
       weekScore *= game.factor;
@@ -512,6 +572,14 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
       recentAvg: recentAvg === null ? null : round1(recentAvg),
       recentGames,
       snapShare: snapShare === null ? null : Math.round(snapShare * 100) / 100,
+      usage: usage && {
+        touches: round1(usage.touches),
+        seasonTouches: usage.seasonTouches === null ? null : round1(usage.seasonTouches),
+        carryShare: Math.round(usage.carryShare * 100) / 100,
+        targetShare: Math.round(usage.targetShare * 100) / 100,
+        redZone: round1(usage.redZone),
+        trendFactor: Math.round(usage.trendFactor * 1000) / 1000,
+      },
       role,
       trendingAdds: adds,
       weekScore: round1(weekScore),
@@ -600,18 +668,45 @@ function startReason(p: PlayerAnalysis): string {
 function buildMoves(current: LineupSlot[], optimal: LineupSlot[]): LineupMove[] {
   const currentIds = new Set(current.map((s) => s.player?.id).filter(Boolean));
   const optimalIds = new Set(optimal.map((s) => s.player?.id).filter(Boolean));
-  const starts: LineupMove[] = optimal
+  const ins = optimal
     .filter((s) => s.player && !currentIds.has(s.player.id))
-    .sort((a, b) => (b.player as PlayerAnalysis).weekScore - (a.player as PlayerAnalysis).weekScore)
-    .map((s) => {
-      const p = s.player as PlayerAnalysis;
-      return { action: "start", player: p, slot: slotName(s.slot), reason: capitalize(startReason(p)) + "." };
-    });
-  const benches: LineupMove[] = current
+    .sort((a, b) => (b.player as PlayerAnalysis).weekScore - (a.player as PlayerAnalysis).weekScore);
+  const outs = current
     .filter((s) => s.player && !optimalIds.has(s.player.id))
     .map((s) => s.player as PlayerAnalysis)
-    .sort((a, b) => a.weekScore - b.weekScore)
-    .map((p) => ({ action: "bench", player: p, slot: null, reason: capitalize(benchReason(p)) + "." }));
+    .sort((a, b) => a.weekScore - b.weekScore);
+  // Pair each new starter with a benched player he can replace (same position first).
+  const pairedOut = new Set<string>();
+  const vsFor = new Map<string, PlayerAnalysis>();
+  for (const s of ins) {
+    const p = s.player as PlayerAnalysis;
+    const pick =
+      outs.find((o) => !pairedOut.has(o.id) && o.position === p.position) ??
+      outs.find((o) => !pairedOut.has(o.id) && o.eligible.some((e) => SLOT_ELIGIBILITY[s.slot]?.includes(e))) ??
+      outs.find((o) => !pairedOut.has(o.id));
+    if (pick) {
+      pairedOut.add(pick.id);
+      vsFor.set(p.id, pick);
+      vsFor.set(pick.id, p);
+    }
+  }
+  const starts: LineupMove[] = ins.map((s) => {
+    const p = s.player as PlayerAnalysis;
+    return {
+      action: "start",
+      player: p,
+      vs: vsFor.get(p.id) ?? null,
+      slot: slotName(s.slot),
+      reason: capitalize(startReason(p)) + ".",
+    };
+  });
+  const benches: LineupMove[] = outs.map((p) => ({
+    action: "bench",
+    player: p,
+    vs: vsFor.get(p.id) ?? null,
+    slot: null,
+    reason: capitalize(benchReason(p)) + ".",
+  }));
   return [...starts, ...benches];
 }
 

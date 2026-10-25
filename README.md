@@ -44,8 +44,10 @@ Every player gets two scores.
 - Sleeper's weekly projection, scored with **your league's own scoring settings**
 - Blended 80/20 with recent form (last 3 games)
 - Nudged up or down by the **opponent's points allowed to that position** this season (shrunk toward neutral early in the season, when samples are small)
+- **Workload trend (RB/WR/TE):** touches per game, share of the team's carries and targets, and red-zone looks over the last 3 games, from Sleeper's weekly stats. A role that's growing or shrinking against the season average moves the projection up to ±8% (projections lag behind usage changes)
 - **QB depth chart:** Sleeper only projects pass attempts for the QB it expects to start, so backups score 0, and a usual starter who isn't projected to start (e.g. Lamar with Huntley projected to start) is flagged
 - Zeroed for **byes** and players ruled Out/IR/Suspended. Questionable and Doubtful players are scaled by their **chance to play** from the injury model (designation + this week's practice reports + news, the same estimate as the Injuries tab), so a questionable player who hasn't practiced counts for ~30% of his projection and one with full practices ~90%. If the news can't be loaded, the flat fallback is ×0.85 / ×0.3. Starters under 60% to play get a warning in the Game plan.
+- Every start/sit call in the Game plan has a **Why this call?** panel: the biggest edges for the player to start over the one being replaced (health, defense faced, volume, target/carry share, red-zone work, role trend, implied team total, form, projection), what's in the other player's favor, and a side-by-side table of every factor colored good/bad.
 - **Vegas and weather:** a few percent up or down for the team's implied total (half the over/under ± half the spread, vs. a ~22.5-pt average; for defenses, the opponent's), a small game-script nudge for RBs who are big favorites or underdogs, and down for passing games and kickers in snow, rain, wind or bitter cold (outdoor games only). Each player shows their team's implied total and a weather icon, and the Lineup tab has a *Vegas & weather* card for your starters. Lines and forecasts come from ESPN's scoreboard (snapshotted by the deploy workflow for the browser).
 
 **Rest-of-season value** (`rosValue`), used for drops and waivers:
@@ -156,6 +158,7 @@ The `/projections` and `/stats` endpoints are undocumented: they're what the Sle
 ```
 lib/sleeper.ts             Sleeper API client + "which week is upcoming" logic
 lib/advisor.ts             scoring, lineup optimizer, drop & waiver logic
+lib/explain.ts             factor breakdown and start-over-sit comparison behind each Game plan call
 lib/report.ts              Markdown rendering for the weekly issue
 lib/trades.ts              trade finder, offer evaluator, positional strength
 lib/planner.ts             rest-of-season projections, byes and playoff weeks

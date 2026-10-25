@@ -336,7 +336,9 @@ export function gameOutlook(game: Game | undefined, team: string | null, positio
   if (!game.indoor && game.weather) {
     const c = game.weather.condition.toLowerCase();
     const temp = game.weather.temp;
-    weather = [game.weather.condition, temp !== null ? `${temp}°F` : null].filter(Boolean).join(", ") || null;
+    // ESPN sometimes sends a bare numeric code instead of a condition.
+    const cond = /^\d+$/.test(game.weather.condition.trim()) ? null : game.weather.condition;
+    weather = [cond, temp !== null ? `${temp}°F` : null].filter(Boolean).join(", ") || null;
     const before = factor;
     if (/snow|blizzard|flurr/.test(c)) {
       if (PASSING.has(position)) factor *= 0.93;
