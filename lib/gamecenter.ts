@@ -17,6 +17,8 @@ export interface GamePlayer {
   /** Scrimmage yards (passing yards for QBs). */
   yards: number;
   touches: number;
+  /** Raw Sleeper stat line, for the points breakdown. */
+  stats: Record<string, number>;
 }
 
 export interface GameCard {
@@ -89,6 +91,7 @@ export async function fetchGameCenter(a: Analysis, starters: Set<string>): Promi
       points: Math.round(points(s, a.league.scoring_settings, player.position) * 10) / 10,
       yards: qb ? n(s, "pass_yd") + n(s, "rush_yd") : n(s, "rush_yd") + n(s, "rec_yd"),
       touches: n(s, "rush_att") + n(s, "rec") + (qb ? n(s, "pass_cmp") : 0),
+      stats: s,
     });
   }
   for (const c of cards.values()) c.players.sort((x, y) => order[x.role] - order[y.role] || y.points - x.points);

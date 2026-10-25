@@ -4,11 +4,12 @@
 // stat lines inside each game. Rows light up when a player gains points
 // since the last refresh.
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Analysis } from "@/lib/advisor";
 import { fetchGameCenter, type GameCard, type GameCenter, type GamePlayer } from "@/lib/gamecenter";
 import type { Game } from "@/lib/scoreboard";
 import { DriveChart } from "./field";
+import { GameSheet, type SheetTab } from "./gamesheet";
 import { Card, Empty, Headshot } from "./ui";
 
 /** Live scoreboard + your players' stats, every 30s while games are on (5 min otherwise). */
@@ -153,49 +154,72 @@ function StatusChip({ g }: { g: Game }) {
   return <span className="display text-sm font-bold text-ink-300">{when}</span>;
 }
 
-function PlayerRow({ p, game, gain }: { p: GamePlayer; game: Game; gain: number | undefined }) {
+function PlayerRow({
+  p,
+  game,
+  gain,
+  onOpen,
+}: {
+  p: GamePlayer;
+  game: Game;
+  gain: number | undefined;
+  onOpen: () => void;
+}) {
   const pre = game.state === "pre";
   return (
-    <li
-      className={`flex items-center gap-2.5 px-3 py-2 transition-colors duration-700 ${
-        gain && gain > 0 ? "bg-mint-400/10" : gain && gain < 0 ? "bg-rose-500/10" : ""
-      }`}
-    >
-      <Headshot p={p.player} size={30} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span className="truncate text-sm font-semibold">{p.player.name}</span>
-          {p.role === "bench" && <span className="display bg-ink-700 px-1 text-[10px] font-bold text-ink-300">BN</span>}
-          {p.role === "opponent" && (
-            <span className="display bg-rose-500/15 px-1 text-[10px] font-bold text-rose-300">OPP</span>
-          )}
-          {gain !== undefined && gain !== 0 && (
-            <span
-              className={`display animate-pulse px-1 text-[11px] font-black ${gain > 0 ? "bg-mint-400 text-ink-950" : "bg-rose-400 text-white"}`}
-            >
-              {gain > 0 ? "+" : ""}
-              {gain.toFixed(1)}
-            </span>
-          )}
-        </div>
-        <div className="truncate text-[11px] text-ink-400">
-          {pre
-            ? `${p.player.position} · projected ${p.player.weekScore.toFixed(1)}`
-            : p.line || (game.state === "in" ? "No stats yet" : "No stats")}
-        </div>
-      </div>
-      <div
-        className={`shrink-0 text-right font-mono text-lg leading-none font-black tabular-nums ${
-          pre ? "text-ink-500" : p.role === "opponent" ? "text-rose-300" : "text-mint-400"
+    <li>
+      <button
+        onClick={onOpen}
+        className={`flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors duration-700 hover:bg-ink-800 ${
+          gain && gain > 0 ? "bg-mint-400/10" : gain && gain < 0 ? "bg-rose-500/10" : ""
         }`}
       >
-        {(pre ? p.player.weekScore : p.points).toFixed(1)}
-      </div>
+        <Headshot p={p.player} size={30} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-sm font-semibold">{p.player.name}</span>
+            {p.role === "bench" && (
+              <span className="display bg-ink-700 px-1 text-[10px] font-bold text-ink-300">BN</span>
+            )}
+            {p.role === "opponent" && (
+              <span className="display bg-rose-500/15 px-1 text-[10px] font-bold text-rose-300">OPP</span>
+            )}
+            {gain !== undefined && gain !== 0 && (
+              <span
+                className={`display animate-pulse px-1 text-[11px] font-black ${gain > 0 ? "bg-mint-400 text-ink-950" : "bg-rose-400 text-white"}`}
+              >
+                {gain > 0 ? "+" : ""}
+                {gain.toFixed(1)}
+              </span>
+            )}
+          </div>
+          <div className="truncate text-[11px] text-ink-400">
+            {pre
+              ? `${p.player.position} · projected ${p.player.weekScore.toFixed(1)}`
+              : p.line || (game.state === "in" ? "No stats yet" : "No stats")}
+          </div>
+        </div>
+        <div
+          className={`shrink-0 text-right font-mono text-lg leading-none font-black tabular-nums ${
+            pre ? "text-ink-500" : p.role === "opponent" ? "text-rose-300" : "text-mint-400"
+          }`}
+        >
+          {(pre ? p.player.weekScore : p.points).toFixed(1)}
+        </div>
+      </button>
     </li>
   );
 }
 
-function GameTile({ c, gains }: { c: GameCard; gains: Map<string, number> }) {
+function GameTile({
+  c,
+  gains,
+  onOpen,
+}: {
+  c: GameCard;
+  gains: Map<string, number>;
+  onOpen: (tab: SheetTab, focus?: string) => void;
+}) {
   const g = c.game;
   const s = g.state === "in" ? g.situation : null;
   const line =
@@ -210,22 +234,36 @@ function GameTile({ c, gains }: { c: GameCard; gains: Map<string, number> }) {
         g.state === "in" ? "border-hot/40 shadow-[0_0_24px_rgb(255_46_136/0.12)] sm:col-span-2" : "border-ink-700"
       }`}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-ink-700/70 px-3 py-1.5">
+      <button
+        onClick={() => onOpen(c.game.id ? "overview" : "players")}
+        className="group flex items-center justify-between gap-2 border-b border-ink-700/70 px-3 py-1.5 text-left hover:bg-ink-800"
+      >
         <StatusChip g={g} />
         <span className="flex items-center gap-2 text-[11px] text-ink-400">
           {s?.redZone && <span className="display bg-hot px-1.5 font-black text-white">RED ZONE</span>}
           {line}
+          <span className="display font-bold text-mint-400 transition group-hover:translate-x-0.5">Game center ›</span>
         </span>
-      </div>
+      </button>
       <div className="flex flex-col gap-1 px-3 pt-2.5 pb-2">
-        <TeamRow g={g} side="away" />
-        <TeamRow g={g} side="home" />
+        <button
+          onClick={() => onOpen(c.game.id ? "overview" : "players")}
+          className="flex flex-col gap-1 text-left"
+          aria-label={`Open ${g.away} at ${g.home}`}
+        >
+          <TeamRow g={g} side="away" />
+          <TeamRow g={g} side="home" />
+        </button>
         {s && (
           <>
             {c.drive ? (
-              <div className="-mx-3 mt-2 overflow-hidden border-y border-ink-700">
+              <button
+                onClick={() => onOpen("drives")}
+                aria-label="See all drives"
+                className="-mx-3 mt-2 block overflow-hidden border-y border-ink-700 text-left"
+              >
                 <DriveChart d={c.drive} />
-              </div>
+              </button>
             ) : (
               <GameField g={g} />
             )}
@@ -239,7 +277,13 @@ function GameTile({ c, gains }: { c: GameCard; gains: Map<string, number> }) {
       {c.players.length > 0 && (
         <ul className="mt-auto divide-y divide-ink-700/50 border-t border-ink-700/70">
           {c.players.map((p) => (
-            <PlayerRow key={p.player.id} p={p} game={g} gain={gains.get(p.player.id)} />
+            <PlayerRow
+              key={p.player.id}
+              p={p}
+              game={g}
+              gain={gains.get(p.player.id)}
+              onOpen={() => onOpen("players", p.player.id)}
+            />
           ))}
         </ul>
       )}
@@ -250,6 +294,9 @@ function GameTile({ c, gains }: { c: GameCard; gains: Map<string, number> }) {
 export function GamesTab({ a }: { a: Analysis }) {
   const { gc, failed, gains } = useGameCenter(a);
   const [filter, setFilter] = useState<"mine" | "all">("mine");
+  const [state, setState] = useState<"any" | Game["state"]>("any");
+  const [open, setOpen] = useState<{ key: string; tab: SheetTab; focus: string | null } | null>(null);
+  const close = useCallback(() => setOpen(null), []);
   if (!gc) {
     return failed ? (
       <Empty>Couldn&apos;t load this week&apos;s games. Retrying…</Empty>
@@ -261,7 +308,10 @@ export function GamesTab({ a }: { a: Analysis }) {
       </div>
     );
   }
-  const cards = filter === "mine" ? gc.cards.filter((c) => c.players.length > 0) : gc.cards;
+  const cards = (filter === "mine" ? gc.cards.filter((c) => c.players.length > 0) : gc.cards).filter(
+    (c) => state === "any" || c.game.state === state,
+  );
+  const sheetCard = open ? gc.cards.find((c) => c.game.home === open.key) : undefined;
   const yardsLeaders = gc.cards
     .flatMap((c) => (c.game.state === "in" ? c.players.filter((p) => p.role !== "opponent" && p.yards > 0) : []))
     .sort((x, y) => y.yards - x.yards)
@@ -289,15 +339,34 @@ export function GamesTab({ a }: { a: Analysis }) {
           </div>
         }
       >
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-          {gc.live > 0 && (
-            <span className="flex items-center gap-1.5 font-bold text-hot">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-hot" />
-              {gc.live} live
-            </span>
-          )}
-          <span className="text-ink-300">{gc.final} final</span>
-          <span className="text-ink-300">{gc.upcoming} upcoming</span>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-sm">
+          {(
+            [
+              ["any", "All", gc.cards.length],
+              ["in", "Live", gc.live],
+              ["pre", "Upcoming", gc.upcoming],
+              ["post", "Final", gc.final],
+            ] as const
+          ).map(([id, label, count]) => (
+            <button
+              key={id}
+              onClick={() => setState(id)}
+              disabled={id !== "any" && count === 0}
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold transition disabled:opacity-40 ${
+                state === id
+                  ? id === "in"
+                    ? "bg-hot text-white"
+                    : "bg-ink-100 text-ink-950"
+                  : "bg-ink-800 text-ink-300 hover:text-ink-100"
+              }`}
+            >
+              {id === "in" && count > 0 && (
+                <span className={`h-1.5 w-1.5 animate-pulse rounded-full ${state === id ? "bg-white" : "bg-hot"}`} />
+              )}
+              {label}
+              <span className="font-mono opacity-70">{count}</span>
+            </button>
+          ))}
           <span className="ml-auto text-xs text-ink-400">
             {gc.live > 0 ? "Updates every 30 seconds" : "Updates every 5 minutes"} ·{" "}
             {new Date(gc.asOf).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
@@ -309,11 +378,18 @@ export function GamesTab({ a }: { a: Analysis }) {
               Your yards leaders
             </span>
             {yardsLeaders.map((p) => (
-              <span key={p.player.id} className="flex items-center gap-1.5 bg-ink-800 py-0.5 pr-2 pl-0.5 text-xs">
+              <button
+                key={p.player.id}
+                onClick={() => {
+                  const card = gc.cards.find((c) => c.players.includes(p));
+                  if (card) setOpen({ key: card.game.home, tab: "players", focus: p.player.id });
+                }}
+                className="flex items-center gap-1.5 bg-ink-800 py-0.5 pr-2 pl-0.5 text-xs transition hover:bg-ink-700"
+              >
                 <Headshot p={p.player} size={22} />
                 <b>{p.player.name.split(" ").slice(-1)[0]}</b>
                 <span className="font-mono text-mint-400 tabular-nums">{p.yards} yds</span>
-              </span>
+              </button>
             ))}
           </div>
         )}
@@ -342,19 +418,34 @@ export function GamesTab({ a }: { a: Analysis }) {
         )}
       </Card>
       {cards.length === 0 ? (
-        <Empty>{filter === "mine" ? "None of your players are in this week's games." : "No games this week."}</Empty>
+        <Empty>
+          {state !== "any"
+            ? "No games match this filter."
+            : filter === "mine"
+              ? "None of your players are in this week's games."
+              : "No games this week."}
+        </Empty>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {cards.map((c) => (
-            <GameTile key={c.game.home} c={c} gains={gains} />
+            <GameTile
+              key={c.game.home}
+              c={c}
+              gains={gains}
+              onOpen={(tab, focus) => setOpen({ key: c.game.home, tab, focus: focus ?? null })}
+            />
           ))}
         </div>
       )}
       <p className="text-xs text-ink-400">
         Scores, clocks and down &amp; distance from ESPN; stat lines from Sleeper&apos;s live stats, with points under
         your league&apos;s scoring. A highlighted row means that player scored since the last refresh. Your bench
-        players are marked BN, your opponent&apos;s starters OPP.
+        players are marked BN, your opponent&apos;s starters OPP. Tap any game for its game center, or a player to see
+        where their points came from.
       </p>
+      {open && sheetCard && (
+        <GameSheet key={open.key} c={sheetCard} a={a} initialTab={open.tab} focus={open.focus} onClose={close} />
+      )}
     </div>
   );
 }
