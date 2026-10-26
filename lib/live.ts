@@ -55,7 +55,7 @@ export interface LiveState {
 }
 
 /** Standard normal CDF (Abramowitz–Stegun approximation). */
-function phi(x: number): number {
+export function phi(x: number): number {
   const t = 1 / (1 + 0.2316419 * Math.abs(x));
   const d = 0.3989423 * Math.exp((-x * x) / 2);
   const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
@@ -113,7 +113,10 @@ function side(
 }
 
 export async function fetchLive(a: Analysis): Promise<LiveState> {
-  const [matchups, games] = await Promise.all([getMatchups(a.league.league_id, a.week), getWeekGames(a.season, a.week)]);
+  const [matchups, games] = await Promise.all([
+    getMatchups(a.league.league_id, a.week),
+    getWeekGames(a.season, a.week),
+  ]);
   const slots = a.league.roster_positions.filter((s) => s !== "BN" && s !== "IR" && s !== "TAXI");
   const mine = matchups.find((m) => m.roster_id === a.myRosterId);
   const theirs = mine?.matchup_id
@@ -129,7 +132,15 @@ export async function fetchLive(a: Analysis): Promise<LiveState> {
   const me = side(a.teamName, a.avatar, myStarters, slots, mine?.players_points ?? {}, lookup, games);
   const opp =
     theirs && a.opponent
-      ? side(a.opponent.teamName, a.opponent.avatar, theirs.starters ?? [], slots, theirs.players_points ?? {}, lookup, games)
+      ? side(
+          a.opponent.teamName,
+          a.opponent.avatar,
+          theirs.starters ?? [],
+          slots,
+          theirs.players_points ?? {},
+          lookup,
+          games,
+        )
       : null;
 
   let winProbability: number | null = null;

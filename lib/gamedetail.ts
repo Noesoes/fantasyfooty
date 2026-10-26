@@ -3,6 +3,7 @@
 // summary and team leaders. Used by the game sheet on the Games tab.
 
 import type { Game } from "./scoreboard";
+import { safeUrl } from "./url";
 
 const SUMMARY = "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/summary";
 
@@ -46,6 +47,27 @@ export interface Leader {
   line: string;
 }
 
+export interface Highlight {
+  id: string;
+  headline: string;
+  thumbnail: string | null;
+  /** Direct MP4 for inline playback. */
+  video: string | null;
+  /** Adaptive stream (plays natively on iPhone, lighter on cell data). */
+  hls: string | null;
+  /** ESPN's page for the clip. */
+  page: string | null;
+  duration: number;
+}
+
+export interface BoxCategory {
+  /** "Passing", "Rushing", … */
+  name: string;
+  labels: string[];
+  rows: { id: string; name: string; stats: string[] }[];
+  totals: string[] | null;
+}
+
 export interface GameDetail {
   /** Points per quarter (overtime included). */
   linescore: { away: number[]; home: number[] };
@@ -58,6 +80,9 @@ export interface GameDetail {
   drives: DriveSummary[];
   scoring: ScoringPlay[];
   leaders: Leader[];
+  highlights: Highlight[];
+  /** Full box score per team (keyed by team abbreviation). */
+  box: Record<string, BoxCategory[]>;
   asOf: number;
 }
 
@@ -106,6 +131,15 @@ const STAT_ROWS: { key: string; label: string; lowerBetter?: boolean; num?: (v: 
 const abbr = (t: Json): string => {
   const a = String(t?.abbreviation ?? "");
   return a === "WSH" ? "WAS" : a === "JAX" ? "JAC" : a;
+};
+
+const BOX_CATEGORIES: Record<string, string> = {
+  passing: "Passing",
+  rushing: "Rushing",
+  receiving: "Receiving",
+  kicking: "Kicking",
+  defensive: "Defense",
+  interceptions: "Interceptions",
 };
 
 function driveKind(result: string, live: boolean): DriveSummary["kind"] {
@@ -200,6 +234,32 @@ export async function fetchGameDetail(game: Game): Promise<GameDetail> {
     }
   }
 
+  const highlights: Highlight[] = (d.videos ?? []).map((v: Json) => ({
+    id: String(v.id),
+    headline: String(v.headline ?? ""),
+    thumbnail: safeUrl(v.thumbnail),
+    video: safeUrl(v.links?.source?.HD?.href ?? v.links?.source?.href),
+    hls: safeUrl(v.links?.source?.HLS?.href),
+    page: safeUrl(v.links?.web?.href),
+    duration: Number(v.duration) || 0,
+  }));
+
+  const box: Record<string, BoxCategory[]> = {};
+  for (const t of d.boxscore?.players ?? []) {
+    box[abbr(t.team)] = (t.statistics ?? [])
+      .filter((c: Json) => BOX_CATEGORIES[c.name] && c.athletes?.length)
+      .map((c: Json) => ({
+        name: BOX_CATEGORIES[c.name],
+        labels: (c.labels ?? []).map(String),
+        rows: c.athletes.map((x: Json) => ({
+          id: String(x.athlete?.id ?? ""),
+          name: String(x.athlete?.displayName ?? ""),
+          stats: (x.stats ?? []).map(String),
+        })),
+        totals: c.totals?.length ? c.totals.map(String) : null,
+      }));
+  }
+
   const predictor = d.predictor?.homeTeam?.gameProjection;
   return {
     linescore: { away: quarters(side("away")), home: quarters(side("home")) },
@@ -212,6 +272,8 @@ export async function fetchGameDetail(game: Game): Promise<GameDetail> {
     drives,
     scoring,
     leaders,
+    highlights,
+    box,
     asOf: Date.now(),
   };
 }

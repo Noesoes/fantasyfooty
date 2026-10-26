@@ -4,6 +4,7 @@
 
 import { points, type Analysis, type PlayerAnalysis } from "./advisor";
 import { fetchDrives, type DriveView } from "./playbyplay";
+import { phi } from "./live";
 import { getWeekGames, type Game, type WeekGames } from "./scoreboard";
 import { getWeekStats, type StatRow } from "./sleeper";
 
@@ -21,9 +22,22 @@ export interface GamePlayer {
   stats: Record<string, number>;
 }
 
+/** What one NFL game means for your fantasy matchup. */
+export interface Stake {
+  /** Your starters' points in this game so far, and expected still to come. */
+  mine: number;
+  mineLeft: number;
+  theirs: number;
+  theirsLeft: number;
+  /** Your win chance if this game goes well / badly for you (one standard deviation), when it can still move. */
+  winIfGood: number | null;
+  winIfBad: number | null;
+}
+
 export interface GameCard {
   game: Game;
   players: GamePlayer[];
+  stake: Stake | null;
   /** The current drive, for live games. */
   drive: DriveView | null;
 }
@@ -34,6 +48,8 @@ export interface GameCenter {
   live: number;
   final: number;
   upcoming: number;
+  /** Your fantasy win chance right now (null without an opponent). */
+  winProbability: number | null;
   asOf: number;
 }
 
@@ -77,7 +93,7 @@ export async function fetchGameCenter(a: Analysis, starters: Set<string>): Promi
 
   // One card per game (byTeam lists each game twice).
   const cards = new Map<Game, GameCard>();
-  for (const g of new Set(games.byTeam.values())) cards.set(g, { game: g, players: [], drive: null });
+  for (const g of new Set(games.byTeam.values())) cards.set(g, { game: g, players: [], stake: null, drive: null });
   const order = { starter: 0, bench: 1, opponent: 2 };
   for (const { player, role } of people) {
     const g = games.byTeam.get(player.team!);
@@ -95,6 +111,51 @@ export async function fetchGameCenter(a: Analysis, starters: Set<string>): Promi
     });
   }
   for (const c of cards.values()) c.players.sort((x, y) => order[x.role] - order[y.role] || y.points - x.points);
+
+  // Your matchup, game by game: points so far, expected still to come and how
+  // much each game can still move your win chance (same model as Live mode).
+  const SPREAD = 0.6;
+  let margin = 0;
+  let variance = 0;
+  const perGame = new Map<Game, { mine: number; mineLeft: number; theirs: number; theirsLeft: number; v: number }>();
+  for (const c of cards.values()) {
+    const left = 1 - c.game.elapsed;
+    const t = { mine: 0, mineLeft: 0, theirs: 0, theirsLeft: 0, v: 0 };
+    for (const p of c.players) {
+      if (p.role === "bench") continue;
+      const rest = c.game.state === "post" ? 0 : p.player.weekScore * left;
+      const v = c.game.state === "post" ? 0 : (SPREAD * p.player.weekScore) ** 2 * left;
+      if (p.role === "starter") {
+        t.mine += p.points;
+        t.mineLeft += rest;
+        margin += p.points + rest;
+      } else {
+        t.theirs += p.points;
+        t.theirsLeft += rest;
+        margin -= p.points + rest;
+      }
+      t.v += v;
+    }
+    variance += t.v;
+    perGame.set(c.game, t);
+  }
+  const hasOpponent = !!a.opponent;
+  const sd = Math.sqrt(variance);
+  const win = (m: number) => (sd < 0.5 ? (m > 0 ? 1 : m < 0 ? 0 : 0.5) : phi(m / sd));
+  const r1 = (x: number) => Math.round(x * 10) / 10;
+  for (const c of cards.values()) {
+    const t = perGame.get(c.game)!;
+    if (!c.players.some((p) => p.role !== "bench")) continue;
+    const swing = Math.sqrt(t.v);
+    c.stake = {
+      mine: r1(t.mine),
+      mineLeft: r1(t.mineLeft),
+      theirs: r1(t.theirs),
+      theirsLeft: r1(t.theirsLeft),
+      winIfGood: hasOpponent && swing >= 0.5 ? win(margin + swing) : null,
+      winIfBad: hasOpponent && swing >= 0.5 ? win(margin - swing) : null,
+    };
+  }
 
   // Drive charts for every live game, with your (and your opponent's) players' snaps labeled.
   const drives = await fetchDrives(
@@ -122,6 +183,7 @@ export async function fetchGameCenter(a: Analysis, starters: Set<string>): Promi
     live: list.filter((c) => c.game.state === "in").length,
     final: list.filter((c) => c.game.state === "post").length,
     upcoming: list.filter((c) => c.game.state === "pre").length,
+    winProbability: hasOpponent ? win(margin) : null,
     asOf: Date.now(),
   };
 }

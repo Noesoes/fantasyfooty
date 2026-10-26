@@ -96,12 +96,14 @@ It also names the drop and, in FAAB leagues, a suggested bid. Search covers ever
 
 **Football field (Games tab):** every live game card draws the field in team colors and charts the current drive, the way a TV drive chart does. Every snap is an arrow from where it started to where it ended: runs and catches, incompletions as a dashed ring, turnovers as an ✕, kicks as an arc, and penalties in amber. It also shows the line of scrimmage, the yellow line to gain and the ball. Snaps by your players (or your opponent's) are labeled with what they were worth under your league's scoring. Plays come from ESPN's live play feed. Players are matched by ESPN id from Sleeper's player database, or by name in the game's box score for players Sleeper hasn't mapped.
 
-**Game center (Games tab):** tap any game, or any player in it, to open its game center. Filter the list by Live / Upcoming / Final.
+**Game center (Games tab):** tap any game, or any player in it, to open its game center. Swipe sideways (or use the arrows / arrow keys) to move between games. ☆ pins a game to the top of the list on this device. Filter the list by Live / Upcoming / Final.
 
-- **Overview:** a win-probability chart you can drag across to see who was favored at any point (or ESPN's matchup predictor before kickoff), score by quarter, the scoring summary and team leaders. Before kickoff it shows the spread, over/under and weather instead.
-- **Team stats:** side-by-side bars for yards, passing, rushing, first downs, 3rd down, red zone, turnovers, penalties and time of possession.
+- **Your stake:** each game card shows what that game means for your fantasy matchup: your starters' points there and what's still to come, your opponent's, the net, and how much a big game or a dud from those players would move your win chance (same model as Live mode).
+- **Overview:** your stake, a win-probability chart you can drag across to see who was favored at any point (or ESPN's matchup predictor before kickoff), highlight clips that play right in the app (tagged when they feature your or your opponent's players), score by quarter, the scoring summary and team leaders. Before kickoff it shows the spread, over/under and weather instead.
+- **Box:** the full box score for both teams (passing, rushing, receiving, kicking, defense), with your and your opponent's players marked.
+- **Stats:** side-by-side bars for yards, passing, rushing, first downs, 3rd down, red zone, turnovers, penalties and time of possession.
 - **Drives:** the current drive chart, then every drive as a bar on a mini field from where it started to where it ended, colored by result. Tap a drive for plays, yards and time, or filter to one team.
-- **Players:** your players (and your opponent's starters) in that game. Tap one to see where their fantasy points came from under your league's scoring.
+- **Players:** your players (and your opponent's starters) in that game, with snap counts (once Sleeper posts them; the recent snap share until then) and their highlight clips. Tap one to see where their fantasy points came from under your league's scoring.
 
 It refreshes every 30 seconds while the game is live. Data comes from ESPN's game summary.
 
@@ -180,8 +182,10 @@ lib/live.ts                live scoring, win probability, late swaps
 lib/playbyplay.ts          drive charts for live games (ESPN play feed), your players' snaps labeled
 app/field.tsx              football field drive chart
 app/games.tsx              Games tab: live scoreboard with your players' stat lines
-app/gamesheet.tsx          game center sheet: win probability, team stats, drives, points breakdown
-lib/gamedetail.ts          ESPN game summary parsing and fantasy points breakdown
+app/gamesheet.tsx          game center sheet: win probability, team stats, drives, points breakdown, swipe between games
+app/gameparts.tsx          your stake in a game, highlight clips, full box score
+lib/gamedetail.ts          ESPN game summary parsing (incl. highlights, box score) and fantasy points breakdown
+lib/url.ts                 https-only guard for links from outside feeds
 lib/gamecenter.ts          every game this week + your players' live stats
 lib/pickup.ts              should-I-pick-him-up verdicts and best-available-by-position rankings
 app/playercheck.tsx        Player check search and verdict card

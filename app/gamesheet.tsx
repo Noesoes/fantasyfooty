@@ -9,12 +9,13 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Analysis } from "@/lib/advisor";
 import type { GameCard, GamePlayer } from "@/lib/gamecenter";
-import { fetchGameDetail, pointBreakdown, type DriveSummary, type GameDetail } from "@/lib/gamedetail";
+import { fetchGameDetail, pointBreakdown, type DriveSummary, type GameDetail, type Highlight } from "@/lib/gamedetail";
 import type { Game } from "@/lib/scoreboard";
 import { DriveChart } from "./field";
+import { BoxScore, Highlights, playersIn, snapText, StakeStrip } from "./gameparts";
 import { Headshot } from "./ui";
 
-export type SheetTab = "overview" | "stats" | "drives" | "players";
+export type SheetTab = "overview" | "box" | "stats" | "drives" | "players";
 
 const color = (c: string | null) => (c ? `#${c}` : "var(--color-ink-500)");
 
@@ -52,7 +53,15 @@ function useGameDetail(game: Game) {
 
 // --- Header -------------------------------------------------------------------
 
-function SheetHeader({ g, d, onClose }: { g: Game; d: GameDetail | null; onClose: () => void }) {
+interface SheetNav {
+  index: number;
+  count: number;
+  go: (delta: number) => void;
+  pinned: boolean;
+  togglePin: () => void;
+}
+
+function SheetHeader({ g, d, onClose, nav }: { g: Game; d: GameDetail | null; onClose: () => void; nav: SheetNav }) {
   const status =
     g.state === "in"
       ? g.detail || "Live"
@@ -102,13 +111,46 @@ function SheetHeader({ g, d, onClose }: { g: Game; d: GameDetail | null; onClose
           {g.state === "in" && <span className="h-2 w-2 animate-pulse rounded-full bg-hot" />}
           {status}
         </span>
-        <button
-          onClick={onClose}
-          aria-label="Close game center"
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-800 text-lg text-ink-300 hover:text-ink-100"
-        >
-          ✕
-        </button>
+        <div className="flex items-center gap-1.5">
+          {nav.count > 1 && (
+            <>
+              <button
+                onClick={() => nav.go(-1)}
+                disabled={nav.index === 0}
+                aria-label="Previous game"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-800 text-lg text-ink-300 hover:text-ink-100 disabled:opacity-30"
+              >
+                ‹
+              </button>
+              <span className="font-mono text-[11px] text-ink-400 tabular-nums">
+                {nav.index + 1}/{nav.count}
+              </span>
+              <button
+                onClick={() => nav.go(1)}
+                disabled={nav.index === nav.count - 1}
+                aria-label="Next game"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-800 text-lg text-ink-300 hover:text-ink-100 disabled:opacity-30"
+              >
+                ›
+              </button>
+            </>
+          )}
+          <button
+            onClick={nav.togglePin}
+            aria-pressed={nav.pinned}
+            aria-label={nav.pinned ? "Unpin game" : "Pin game to the top"}
+            className={`flex h-8 w-8 items-center justify-center rounded-full bg-ink-800 text-base ${nav.pinned ? "text-[#facc15]" : "text-ink-400 hover:text-ink-100"}`}
+          >
+            {nav.pinned ? "★" : "☆"}
+          </button>
+          <button
+            onClick={onClose}
+            aria-label="Close game center"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-800 text-lg text-ink-300 hover:text-ink-100"
+          >
+            ✕
+          </button>
+        </div>
       </div>
       <div className="flex items-start gap-3">
         {team("away")}
@@ -163,6 +205,7 @@ function WinProbChart({ g, probs }: { g: Game; probs: number[] }) {
       <svg
         viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="none"
+        data-noswipe
         className="block h-32 w-full cursor-crosshair touch-none bg-ink-900"
         onPointerMove={scrub}
         onPointerDown={scrub}
@@ -283,10 +326,15 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Overview({ c, d }: { c: GameCard; d: GameDetail }) {
+function Overview({ c, d, winNow }: { c: GameCard; d: GameDetail; winNow: number | null }) {
   const g = c.game;
   return (
     <div className="flex flex-col gap-5">
+      {c.stake && (
+        <div className="border-l-4 border-violet bg-ink-900 px-3 py-2.5">
+          <StakeStrip s={c.stake} winNow={winNow} />
+        </div>
+      )}
       {d.winProb.length > 1 ? (
         <Section title="Win probability">
           <WinProbChart g={g} probs={d.winProb} />
@@ -297,6 +345,11 @@ function Overview({ c, d }: { c: GameCard; d: GameDetail }) {
             <PregameOdds g={g} home={d.pregameHome} />
           </Section>
         )
+      )}
+      {d.highlights.length > 0 && (
+        <Section title="Highlights">
+          <Highlights list={d.highlights} players={c.players} />
+        </Section>
       )}
       {g.state === "pre" && (
         <Section title="Vegas & weather">
@@ -528,15 +581,18 @@ function PlayerDetail({
   p,
   a,
   game,
+  clips,
   open,
   onToggle,
 }: {
   p: GamePlayer;
   a: Analysis;
   game: Game;
+  clips: Highlight[];
   open: boolean;
   onToggle: () => void;
 }) {
+  const snaps = snapText(p);
   const pre = game.state === "pre";
   const parts = pre ? [] : pointBreakdown(p.stats, a.league.scoring_settings);
   const max = Math.max(1, ...parts.map((x) => Math.abs(x.points)));
@@ -559,6 +615,16 @@ function PlayerDetail({
           <div className="truncate text-[11px] text-ink-400">
             {pre ? `${p.player.position} · projected ${p.player.weekScore.toFixed(1)}` : p.line || "No stats yet"}
           </div>
+          {(snaps || clips.length > 0) && (
+            <div className="flex items-center gap-2 text-[10px] text-ink-400">
+              {snaps && <span>{snaps}</span>}
+              {clips.length > 0 && (
+                <span className="display bg-violet/20 px-1 font-bold text-violet">
+                  ▶ {clips.length} clip{clips.length > 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className="shrink-0 text-right">
           <div
@@ -615,13 +681,28 @@ function PlayerDetail({
               </ul>
             </>
           )}
+          {clips.length > 0 && (
+            <div className="mt-3">
+              <Highlights list={clips} players={[p]} />
+            </div>
+          )}
         </div>
       )}
     </li>
   );
 }
 
-function Players({ c, a, focus }: { c: GameCard; a: Analysis; focus: string | null }) {
+function Players({
+  c,
+  a,
+  focus,
+  highlights,
+}: {
+  c: GameCard;
+  a: Analysis;
+  focus: string | null;
+  highlights: Highlight[];
+}) {
   const [open, setOpen] = useState<string | null>(focus);
   if (!c.players.length)
     return <p className="text-sm text-ink-400">None of your or your opponent&apos;s players are in this game.</p>;
@@ -637,6 +718,7 @@ function Players({ c, a, focus }: { c: GameCard; a: Analysis; focus: string | nu
           p={p}
           a={a}
           game={c.game}
+          clips={highlights.filter((h) => playersIn(h.headline, [p]).length > 0)}
           open={open === p.player.id}
           onToggle={() => setOpen(open === p.player.id ? null : p.player.id)}
         />
@@ -672,31 +754,128 @@ function Players({ c, a, focus }: { c: GameCard; a: Analysis; focus: string | nu
 
 const TABS: { id: SheetTab; label: string }[] = [
   { id: "overview", label: "Overview" },
-  { id: "stats", label: "Team stats" },
+  { id: "box", label: "Box" },
+  { id: "stats", label: "Stats" },
   { id: "drives", label: "Drives" },
   { id: "players", label: "Players" },
 ];
 
-export function GameSheet({
+/** One game's header, tabs and content; keyed by game so switching games starts fresh. */
+function GamePanel({
   c,
   a,
-  initialTab,
+  tab,
+  setTab,
   focus,
+  winNow,
   onClose,
+  nav,
 }: {
   c: GameCard;
   a: Analysis;
-  initialTab: SheetTab;
+  tab: SheetTab;
+  setTab: (t: SheetTab) => void;
   focus: string | null;
+  winNow: number | null;
   onClose: () => void;
+  nav: SheetNav;
 }) {
-  const [tab, setTab] = useState<SheetTab>(initialTab);
   const { detail, failed } = useGameDetail(c.game);
   const body = useRef<HTMLDivElement>(null);
+  useEffect(() => body.current?.scrollTo({ top: 0 }), [tab]);
+  const tabs = TABS.filter((t) => c.game.id || t.id === "players");
+  const active = tabs.some((t) => t.id === tab) ? tab : "players";
+  return (
+    <>
+      <SheetHeader g={c.game} d={detail} onClose={onClose} nav={nav} />
+      <div className="flex border-b border-ink-700 px-2">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`display relative flex-1 px-1 py-2.5 text-xs font-bold tracking-wide uppercase transition ${
+              active === t.id ? "text-ink-100" : "text-ink-400 hover:text-ink-100"
+            }`}
+          >
+            {t.label}
+            {active === t.id && <span className="absolute inset-x-2 bottom-0 h-0.5 bg-mint-400" />}
+          </button>
+        ))}
+      </div>
+      <div ref={body} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
+        {active === "players" ? (
+          <Players c={c} a={a} focus={focus} highlights={detail?.highlights ?? []} />
+        ) : !detail ? (
+          failed ? (
+            <p className="text-sm text-ink-400">Couldn&apos;t load this game from ESPN. Retrying…</p>
+          ) : (
+            <div className="flex flex-col gap-3" aria-busy="true">
+              <div className="skeleton h-32" />
+              <div className="skeleton h-16" />
+            </div>
+          )
+        ) : active === "overview" ? (
+          <Overview c={c} d={detail} winNow={winNow} />
+        ) : active === "box" ? (
+          <BoxScore g={c.game} box={detail.box} players={c.players} />
+        ) : active === "stats" ? (
+          <TeamStats g={c.game} d={detail} />
+        ) : (
+          <Drives c={c} d={detail} />
+        )}
+      </div>
+    </>
+  );
+}
 
-  // Close on Escape; keep the page behind from scrolling.
+export function GameSheet({
+  cards,
+  startKey,
+  a,
+  initialTab,
+  focus,
+  winNow,
+  pinned,
+  onTogglePin,
+  onClose,
+}: {
+  /** The games in the order shown on the list; swipe or use the arrows to move between them. */
+  cards: GameCard[];
+  startKey: string;
+  a: Analysis;
+  initialTab: SheetTab;
+  focus: string | null;
+  winNow: number | null;
+  pinned: Set<string>;
+  onTogglePin: (key: string) => void;
+  onClose: () => void;
+}) {
+  const [key, setKey] = useState(startKey);
+  const [tab, setTab] = useState<SheetTab>(initialTab);
+  const [focused, setFocused] = useState(focus);
+  const index = Math.max(
+    0,
+    cards.findIndex((c) => c.game.home === key),
+  );
+  const c = cards[index];
+  const go = (delta: number) => {
+    const next = cards[index + delta];
+    if (!next) return;
+    setKey(next.game.home);
+    setFocused(null);
+  };
+  const goRef = useRef(go);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    goRef.current = go;
+  });
+
+  // Close on Escape, arrow keys switch games; keep the page behind from scrolling.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowRight") goRef.current(1);
+      else if (e.key === "ArrowLeft") goRef.current(-1);
+    };
     window.addEventListener("keydown", onKey);
     const scroller = document.getElementById("scroller");
     const prev = scroller?.style.overflow;
@@ -707,11 +886,23 @@ export function GameSheet({
     };
   }, [onClose]);
 
-  useEffect(() => body.current?.scrollTo({ top: 0 }), [tab]);
+  // Horizontal swipe = next / previous game (not when swiping a chart, clip row or wide table).
+  const touch = useRef<{ x: number; y: number } | null>(null);
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    touch.current = (e.target as HTMLElement).closest("[data-noswipe]") ? null : { x: t.clientX, y: t.clientY };
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = touch.current;
+    touch.current = null;
+    if (!start) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (Math.abs(dx) > 70 && Math.abs(dx) > 2 * Math.abs(dy)) go(dx < 0 ? 1 : -1);
+  };
 
-  const tabs = TABS.filter((t) => c.game.id || t.id === "players");
-  const active = tabs.some((t) => t.id === tab) ? tab : "players";
-
+  if (!c) return null;
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6"
@@ -720,44 +911,28 @@ export function GameSheet({
     >
       <button aria-label="Close" onClick={onClose} className="absolute inset-0 bg-ink-950/75 backdrop-blur-sm" />
       <div
-        className="relative flex h-[90dvh] sm:h-auto sm:max-h-[85dvh] sm:min-h-[60dvh] w-full max-w-lg flex-col overflow-hidden border-t border-ink-700 bg-ink-850 shadow-2xl sm:border"
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        className="relative flex h-[90dvh] w-full max-w-lg flex-col overflow-hidden border-t border-ink-700 bg-ink-850 shadow-2xl sm:h-auto sm:max-h-[85dvh] sm:min-h-[60dvh] sm:border"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <SheetHeader g={c.game} d={detail} onClose={onClose} />
-        <div className="flex border-b border-ink-700 px-2">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`display relative flex-1 px-1 py-2.5 text-xs font-bold tracking-wide uppercase transition ${
-                active === t.id ? "text-ink-100" : "text-ink-400 hover:text-ink-100"
-              }`}
-            >
-              {t.label}
-              {active === t.id && <span className="absolute inset-x-2 bottom-0 h-0.5 bg-mint-400" />}
-            </button>
-          ))}
-        </div>
-        <div ref={body} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
-          {active === "players" ? (
-            <Players c={c} a={a} focus={focus} />
-          ) : !detail ? (
-            failed ? (
-              <p className="text-sm text-ink-400">Couldn&apos;t load this game from ESPN. Retrying…</p>
-            ) : (
-              <div className="flex flex-col gap-3" aria-busy="true">
-                <div className="skeleton h-32" />
-                <div className="skeleton h-16" />
-              </div>
-            )
-          ) : active === "overview" ? (
-            <Overview c={c} d={detail} />
-          ) : active === "stats" ? (
-            <TeamStats g={c.game} d={detail} />
-          ) : (
-            <Drives c={c} d={detail} />
-          )}
-        </div>
+        <GamePanel
+          key={c.game.home}
+          c={c}
+          a={a}
+          tab={tab}
+          setTab={setTab}
+          focus={focused}
+          winNow={winNow}
+          onClose={onClose}
+          nav={{
+            index,
+            count: cards.length,
+            go,
+            pinned: pinned.has(c.game.home),
+            togglePin: () => onTogglePin(c.game.home),
+          }}
+        />
       </div>
     </div>,
     document.body,

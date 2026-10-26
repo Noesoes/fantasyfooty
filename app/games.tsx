@@ -9,6 +9,7 @@ import type { Analysis } from "@/lib/advisor";
 import { fetchGameCenter, type GameCard, type GameCenter, type GamePlayer } from "@/lib/gamecenter";
 import type { Game } from "@/lib/scoreboard";
 import { DriveChart } from "./field";
+import { StakeStrip } from "./gameparts";
 import { GameSheet, type SheetTab } from "./gamesheet";
 import { Card, Empty, Headshot } from "./ui";
 
@@ -54,6 +55,33 @@ function useGameCenter(a: Analysis) {
     };
   }, [a]);
   return { gc, failed, gains };
+}
+
+/** Games you've starred, per league, kept on this device. */
+function usePins(leagueId: string) {
+  const key = `pins:${leagueId}`;
+  const [pins, setPins] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(key) ?? "[]");
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring from localStorage after hydration
+      if (Array.isArray(saved)) setPins(new Set(saved.filter((x) => typeof x === "string")));
+    } catch {}
+  }, [key]);
+  const toggle = useCallback(
+    (team: string) =>
+      setPins((prev) => {
+        const next = new Set(prev);
+        if (next.has(team)) next.delete(team);
+        else next.add(team);
+        try {
+          localStorage.setItem(key, JSON.stringify([...next]));
+        } catch {}
+        return next;
+      }),
+    [key],
+  );
+  return [pins, toggle] as const;
 }
 
 const color = (c: string | null) => (c ? `#${c}` : "var(--color-ink-600)");
@@ -214,10 +242,16 @@ function PlayerRow({
 function GameTile({
   c,
   gains,
+  winNow,
+  pinned,
+  onPin,
   onOpen,
 }: {
   c: GameCard;
   gains: Map<string, number>;
+  winNow: number | null;
+  pinned: boolean;
+  onPin: () => void;
   onOpen: (tab: SheetTab, focus?: string) => void;
 }) {
   const g = c.game;
@@ -234,17 +268,29 @@ function GameTile({
         g.state === "in" ? "border-hot/40 shadow-[0_0_24px_rgb(255_46_136/0.12)] sm:col-span-2" : "border-ink-700"
       }`}
     >
-      <button
-        onClick={() => onOpen(c.game.id ? "overview" : "players")}
-        className="group flex items-center justify-between gap-2 border-b border-ink-700/70 px-3 py-1.5 text-left hover:bg-ink-800"
-      >
-        <StatusChip g={g} />
-        <span className="flex items-center gap-2 text-[11px] text-ink-400">
-          {s?.redZone && <span className="display bg-hot px-1.5 font-black text-white">RED ZONE</span>}
-          {line}
-          <span className="display font-bold text-mint-400 transition group-hover:translate-x-0.5">Game center ›</span>
-        </span>
-      </button>
+      <div className="flex items-stretch border-b border-ink-700/70">
+        <button
+          onClick={onPin}
+          aria-pressed={pinned}
+          aria-label={pinned ? `Unpin ${g.away} at ${g.home}` : `Pin ${g.away} at ${g.home} to the top`}
+          className={`shrink-0 border-r border-ink-700/70 px-2.5 text-sm hover:bg-ink-800 ${pinned ? "text-[#facc15]" : "text-ink-500 hover:text-ink-100"}`}
+        >
+          {pinned ? "★" : "☆"}
+        </button>
+        <button
+          onClick={() => onOpen(c.game.id ? "overview" : "players")}
+          className="group flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-1.5 text-left hover:bg-ink-800"
+        >
+          <StatusChip g={g} />
+          <span className="flex items-center gap-2 text-[11px] text-ink-400">
+            {s?.redZone && <span className="display bg-hot px-1.5 font-black text-white">RED ZONE</span>}
+            {line}
+            <span className="display font-bold whitespace-nowrap text-mint-400 transition group-hover:translate-x-0.5">
+              Game center ›
+            </span>
+          </span>
+        </button>
+      </div>
       <div className="flex flex-col gap-1 px-3 pt-2.5 pb-2">
         <button
           onClick={() => onOpen(c.game.id ? "overview" : "players")}
@@ -274,8 +320,15 @@ function GameTile({
           </>
         )}
       </div>
+      {c.stake && g.state !== "pre" && (
+        <div className="border-t border-ink-700/70 px-3 py-2">
+          <StakeStrip s={c.stake} winNow={winNow} compact />
+        </div>
+      )}
       {c.players.length > 0 && (
-        <ul className="mt-auto divide-y divide-ink-700/50 border-t border-ink-700/70">
+        <ul
+          className={`divide-y divide-ink-700/50 border-t border-ink-700/70 ${c.stake && g.state !== "pre" ? "" : "mt-auto"}`}
+        >
           {c.players.map((p) => (
             <PlayerRow
               key={p.player.id}
@@ -297,6 +350,7 @@ export function GamesTab({ a }: { a: Analysis }) {
   const [state, setState] = useState<"any" | Game["state"]>("any");
   const [open, setOpen] = useState<{ key: string; tab: SheetTab; focus: string | null } | null>(null);
   const close = useCallback(() => setOpen(null), []);
+  const [pins, togglePin] = usePins(a.league.league_id);
   if (!gc) {
     return failed ? (
       <Empty>Couldn&apos;t load this week&apos;s games. Retrying…</Empty>
@@ -308,10 +362,13 @@ export function GamesTab({ a }: { a: Analysis }) {
       </div>
     );
   }
-  const cards = (filter === "mine" ? gc.cards.filter((c) => c.players.length > 0) : gc.cards).filter(
+  const shown = (filter === "mine" ? gc.cards.filter((c) => c.players.length > 0) : gc.cards).filter(
     (c) => state === "any" || c.game.state === state,
   );
-  const sheetCard = open ? gc.cards.find((c) => c.game.home === open.key) : undefined;
+  // Starred games first, otherwise the usual order (live, upcoming, final).
+  const cards = [...shown.filter((c) => pins.has(c.game.home)), ...shown.filter((c) => !pins.has(c.game.home))];
+  // Swipe through the list as shown; fall back to every game if the open one dropped out of the filter.
+  const sheetCards = open && cards.some((c) => c.game.home === open.key) ? cards : gc.cards;
   const yardsLeaders = gc.cards
     .flatMap((c) => (c.game.state === "in" ? c.players.filter((p) => p.role !== "opponent" && p.yards > 0) : []))
     .sort((x, y) => y.yards - x.yards)
@@ -432,6 +489,9 @@ export function GamesTab({ a }: { a: Analysis }) {
               key={c.game.home}
               c={c}
               gains={gains}
+              winNow={gc.winProbability}
+              pinned={pins.has(c.game.home)}
+              onPin={() => togglePin(c.game.home)}
               onOpen={(tab, focus) => setOpen({ key: c.game.home, tab, focus: focus ?? null })}
             />
           ))}
@@ -440,11 +500,22 @@ export function GamesTab({ a }: { a: Analysis }) {
       <p className="text-xs text-ink-400">
         Scores, clocks and down &amp; distance from ESPN; stat lines from Sleeper&apos;s live stats, with points under
         your league&apos;s scoring. A highlighted row means that player scored since the last refresh. Your bench
-        players are marked BN, your opponent&apos;s starters OPP. Tap any game for its game center, or a player to see
-        where their points came from.
+        players are marked BN, your opponent&apos;s starters OPP. Tap any game for its game center (swipe sideways to
+        move between games), or a player to see where their points came from. ☆ pins a game to the top.
       </p>
-      {open && sheetCard && (
-        <GameSheet key={open.key} c={sheetCard} a={a} initialTab={open.tab} focus={open.focus} onClose={close} />
+      {open && (
+        <GameSheet
+          key={`${open.key}-${open.tab}-${open.focus}`}
+          cards={sheetCards}
+          startKey={open.key}
+          a={a}
+          initialTab={open.tab}
+          focus={open.focus}
+          winNow={gc.winProbability}
+          pinned={pins}
+          onTogglePin={togglePin}
+          onClose={close}
+        />
       )}
     </div>
   );
