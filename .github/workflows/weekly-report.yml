@@ -20,8 +20,8 @@ jobs:
   report:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
@@ -39,12 +39,6 @@ jobs:
           npm run --silent report > report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
           # GitHub issues max out at 65,536 characters (many leagues can exceed it).
-          if [ "$(wc -c < report.md)" -gt 60000 ]; then
-            head -c 60000 report.md > trimmed.md
-            echo "" >> trimmed.md
-            echo "_Trimmed to fit in an issue. Full report: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/${GITHUB_RUN_ID}_" >> trimmed.md
-            mv trimmed.md report.md
-          fi
           # GitHub issues max out at 65,536 characters (many leagues can exceed it).
           if [ "$(wc -c < report.md)" -gt 60000 ]; then
             head -c 60000 report.md > trimmed.md

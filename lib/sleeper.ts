@@ -6,6 +6,8 @@
 // /projections and /stats endpoints are the undocumented ones the Sleeper app
 // itself uses; they have been stable for years but could change.
 
+import { safeUrl } from "./url";
+
 const BASE = "https://api.sleeper.app";
 
 export const OFFENSE_POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"] as const;
@@ -170,7 +172,10 @@ export interface NewsItem {
 
 /** Latest news blurbs for one player (Rotowire, RotoBaller, …), newest first. */
 export const getPlayerNews = (playerId: string, limit = 15) =>
-  get<NewsItem[] | null>(`/players/nfl/${playerId}/news?limit=${limit}`).then((n) => n ?? []);
+  get<NewsItem[] | null>(`/players/nfl/${playerId}/news?limit=${limit}`).then((n) =>
+    // Drop links that aren't plain https before anything renders them.
+    (n ?? []).map((x) => ({ ...x, metadata: { ...x.metadata, url: safeUrl(x.metadata?.url) ?? undefined } })),
+  );
 
 export const getTrendingAdds = (lookbackHours = 72, limit = 200) =>
   get<TrendingPlayer[]>(`/v1/players/nfl/trending/add?lookback_hours=${lookbackHours}&limit=${limit}`);
