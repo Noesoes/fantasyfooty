@@ -687,7 +687,7 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
         detail: w.bid
           ? `${bidSummary(w.bid)} ${w.reason}`
           : w.likelyClaimedBy
-            ? `Heads up: ${w.likelyClaimedBy} is ahead of you and likely to claim this player first. ${w.reason}`
+            ? `Heads up: ${w.likelyClaimedBy} is ahead of you and likely to claim this player first${w.likelyClaimWhy ? ` (${w.likelyClaimWhy})` : ""}. ${w.reason}`
             : w.reason,
         players: w.dropFor ? [w.player, w.dropFor] : [w.player],
       });
@@ -1365,7 +1365,7 @@ function ClaimStatus({ w }: { w: Analysis["waivers"][number] }) {
   if (w.likelyClaimedBy) {
     return (
       <span
-        title={`Projected to be claimed by ${w.likelyClaimedBy} before your turn`}
+        title={`Projected to be claimed by ${w.likelyClaimedBy} before your turn${w.likelyClaimWhy ? `: ${w.likelyClaimWhy}` : ""}`}
         className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[11px] font-semibold text-rose-300"
       >
         Likely gone · {w.likelyClaimedBy}
@@ -1416,7 +1416,10 @@ function Rivals({ a }: { a: Analysis }) {
             </div>
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 pl-[60px] sm:pl-0">
               {r.projectedClaim && (
-                <span className="inline-flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 py-0.5 pr-2.5 pl-0.5">
+                <span
+                  title={r.targets.find((t) => t.player.id === r.projectedClaim?.id)?.why}
+                  className="inline-flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 py-0.5 pr-2.5 pl-0.5"
+                >
                   <Headshot p={r.projectedClaim} size={24} />
                   <span className="text-xs font-semibold">{r.projectedClaim.name}</span>
                 </span>
@@ -1429,13 +1432,19 @@ function Rivals({ a }: { a: Analysis }) {
                     {t.player.name}
                   </span>
                 ))}
+              {r.projectedClaim && (
+                <span className="w-full text-[11px] text-ink-400">
+                  {r.targets.find((t) => t.player.id === r.projectedClaim?.id)?.why}
+                </span>
+              )}
             </div>
           </li>
         ))}
       </ul>
       <p className="mt-3 text-xs text-ink-400">
-        Projection: each team takes the free agent that would help their lineup most, in waiver order. Teams can make
-        several claims, so treat this as a guide.
+        Projection: each team takes the free agent that would help their lineup most the rest of the season (or fill a
+        hole they can&apos;t cover this week), in waiver order. A team that&apos;s already deep at a position isn&apos;t
+        expected to chase it. Teams can make several claims, so treat this as a guide.
       </p>
     </Card>
   );

@@ -142,6 +142,8 @@ export interface WaiverTarget {
   contestedBy: string[];
   /** Team projected to claim this player before your turn, if any. */
   likelyClaimedBy: string | null;
+  /** Why that team would want him, e.g. "he'd start over Bo Nix for them". */
+  likelyClaimWhy: string | null;
   /** FAAB leagues only. */
   bid: BidSuggestion | null;
 }
@@ -186,7 +188,14 @@ interface TeamModel {
   players: PlayerAnalysis[];
   lineup: LineupSlot[];
   /** Free agents who'd improve this team's lineup, with the gain. */
-  interest: Map<string, { gain: number; over: PlayerAnalysis | null }>;
+  interest: Map<string, Interest>;
+}
+
+interface Interest {
+  gain: number;
+  over: PlayerAnalysis | null;
+  /** "he'd start over Bo Nix for them" / "they have no one healthy for K this week". */
+  why: string;
 }
 
 export interface Rival {
@@ -196,7 +205,7 @@ export interface Rival {
   waiverPosition: number | null;
   budgetLeft: number | null;
   /** Free agents this team would most likely put in a claim for, best first. */
-  targets: { player: PlayerAnalysis; over: PlayerAnalysis | null }[];
+  targets: { player: PlayerAnalysis; over: PlayerAnalysis | null; why: string }[];
   /** Their projected top claim once the teams ahead of them have picked. */
   projectedClaim: PlayerAnalysis | null;
 }
@@ -783,6 +792,49 @@ function lineupUpgrade(t: PlayerAnalysis, lineup: LineupSlot[]) {
   return { gain: rosGain + weekGain * 0.5, over: rosGain + weekGain > 0 ? over : null };
 }
 
+/**
+ * Which free agents another team would actually claim. Judged on their
+ * rest-of-season lineup (so a team with three good QBs doesn't chase a QB
+ * because one of theirs is on bye), plus real holes this week: a lineup slot
+ * they can't fill with anyone healthy.
+ */
+function rivalInterest(
+  pool: PlayerAnalysis[],
+  players: PlayerAnalysis[],
+  weekLineup: LineupSlot[],
+  rosterPositions: string[],
+  current: LineupSlot[],
+): Map<string, Interest> {
+  // Best lineup by rest-of-season value: who they'd start in a normal week.
+  const asRos = players.map((p) => ({ ...p, weekScore: p.rosValue }));
+  const rosLineup = optimizeLineup(rosterPositions, asRos, current);
+  const out = new Map<string, Interest>();
+  for (const p of pool) {
+    const fits = (slot: string) => SLOT_ELIGIBILITY[slot]?.some((pos) => p.eligible.includes(pos));
+    const rosSlots = rosLineup.filter((s) => fits(s.slot));
+    if (!rosSlots.length) continue;
+    let best: Interest | null = null;
+    const open = rosSlots.find((s) => !s.player);
+    if (open) best = { gain: p.rosValue, over: null, why: `they have nobody for ${slotName(open.slot)}` };
+    else {
+      const weakest = [...rosSlots].sort((a, b) => a.player!.rosValue - b.player!.rosValue)[0].player!;
+      const gain = p.rosValue - weakest.rosValue;
+      if (gain >= 1.5) best = { gain, over: weakest, why: `he'd start over ${weakest.name} for them` };
+    }
+    // A hole this week (bye, injury) that nobody on their bench covers.
+    const hole = weekLineup.find((s) => fits(s.slot) && (!s.player || s.player.weekScore <= 0));
+    if (hole && !p.onBye && p.weekScore * 0.5 > (best?.gain ?? 0)) {
+      best = {
+        gain: p.weekScore * 0.5,
+        over: hole.player,
+        why: `they have no one healthy for ${slotName(hole.slot)} this week`,
+      };
+    }
+    if (best && best.gain >= 1.5) out.set(p.id, best);
+  }
+  return out;
+}
+
 /** How many players at each position the lineup needs at minimum (dedicated slots only). */
 function minimumNeeds(rosterPositions: string[]): Record<string, number> {
   const needs: Record<string, number> = {};
@@ -998,6 +1050,8 @@ export async function analyzeLeague(opts: {
   const rosterSize = league.roster_positions.filter((s) => s !== "IR" && s !== "TAXI").length;
   const rosterFull = active.length >= rosterSize;
   const takenDrops = new Set<string>();
+  const streamWarned = new Set<string>();
+  const byeNotes: { name: string; text: string }[] = [];
   const waivers: WaiverTarget[] = [];
   const startUpgrade = (t: PlayerAnalysis) => lineupUpgrade(t, optimalLineup);
   const claimValue = (t: PlayerAnalysis) => vor(t) + startUpgrade(t).gain;
@@ -1030,8 +1084,29 @@ export async function analyzeLeague(opts: {
         .sort((a, b) => a.weekScore - b.weekScore);
       const bestMine = mineAtPos[mineAtPos.length - 1];
       if (bestMine && target.weekScore < bestMine.weekScore + 1.5) continue;
-      dropFor = mineAtPos[0] ?? null;
-      if (!dropFor && rosterFull) continue;
+      // Never drop a K/DEF who's as good as the streamer the rest of the way
+      // (e.g. a top kicker on bye): you'd just want him back next week.
+      // Kickers and defenses swing a lot week to week, so judge them on the season average.
+      const kdValue = (p: PlayerAnalysis) => p.seasonAvg ?? p.rosValue;
+      dropFor = mineAtPos.find((p) => kdValue(p) < kdValue(target) - 1) ?? null;
+      if (!dropFor && rosterFull) {
+        // Carry two for a week only if a bench spot is truly free (below waiver-level value).
+        dropFor =
+          dropPool.find(
+            (p) => !takenDrops.has(p.id) && p.position !== target.position && canDrop(p) && holdValue(p) < 0,
+          ) ?? null;
+        if (!dropFor) {
+          const keeper = mineAtPos.find((p) => p.onBye || p.weekScore === 0);
+          if (keeper && !streamWarned.has(target.position)) {
+            streamWarned.add(target.position);
+            byeNotes.push({
+              name: keeper.name,
+              text: `${keeper.name} is ${keeper.onBye ? "on bye" : "out"} in week ${week}. Keep him (${keeper.seasonAvg ?? keeper.rosValue} pts/game this season); you'll take a 0 at ${target.position} unless you free up a bench spot for a one-week streamer like ${target.name} (${target.weekScore} projected).`,
+            });
+          }
+          continue;
+        }
+      }
     } else {
       const value = claimValue(target);
       if (value <= 0.5) continue;
@@ -1057,7 +1132,11 @@ export async function analyzeLeague(opts: {
     if (dropFor) {
       parts.push(
         streamer
-          ? `${dropFor.name} projects only ${dropFor.weekScore}`
+          ? dropFor.position === target.position
+            ? `${dropFor.name} projects only ${dropFor.weekScore} and isn't better the rest of the way`
+            : `carry two ${target.position}s this week: ${dropFor.name} is below waiver-level value, and you keep ${
+                active.find((p) => p.position === target.position)?.name ?? `your ${target.position}`
+              } for when he's back`
           : `${dropFor.name} is your most expendable bench player`,
       );
     }
@@ -1067,6 +1146,7 @@ export async function analyzeLeague(opts: {
       reason: capitalize(parts.join("; ")) + ".",
       contestedBy: [],
       likelyClaimedBy: null,
+      likelyClaimWhy: null,
       bid: null,
     });
   }
@@ -1108,11 +1188,7 @@ export async function analyzeLeague(opts: {
         return { slot, player: id && id !== "0" ? (byId.get(id) ?? null) : null };
       });
       const lineup = optimizeLineup(league.roster_positions, players, theirCurrent);
-      const interest = new Map<string, { gain: number; over: PlayerAnalysis | null }>();
-      for (const p of contestPool) {
-        const up = lineupUpgrade(p, lineup);
-        if (up.gain >= 1) interest.set(p.id, up);
-      }
+      const interest = rivalInterest(contestPool, players, lineup, league.roster_positions, theirCurrent);
       return {
         roster: r,
         teamName: teamNameOf(r.owner_id),
@@ -1135,7 +1211,7 @@ export async function analyzeLeague(opts: {
         .filter((p) => t.interest.has(p.id))
         .sort((x, y) => vor(y) + t.interest.get(y.id)!.gain - (vor(x) + t.interest.get(x.id)!.gain))
         .slice(0, 5)
-        .map((p) => ({ player: p, over: t.interest.get(p.id)!.over })),
+        .map((p) => ({ player: p, over: t.interest.get(p.id)!.over, why: t.interest.get(p.id)!.why })),
       projectedClaim: null as PlayerAnalysis | null,
     }))
     .sort((a, b) =>
@@ -1178,17 +1254,18 @@ export async function analyzeLeague(opts: {
   // Simulate the waiver run up to your turn: each team ahead takes its top
   // target that hasn't gone yet. A rough guess (teams can put in several
   // claims), but it shows which of your targets are realistic.
-  const claimedBy = new Map<string, string>();
+  const claimedBy = new Map<string, { team: string; why: string }>();
   for (const r of rivals) {
     const pick = r.targets.find((t) => !claimedBy.has(t.player.id));
     if (pick) {
       r.projectedClaim = pick.player;
-      claimedBy.set(pick.player.id, r.teamName);
+      claimedBy.set(pick.player.id, { team: r.teamName, why: pick.why });
     }
   }
   for (const w of waivers) {
     w.contestedBy = rivals.filter((r) => r.targets.some((t) => t.player.id === w.player.id)).map((r) => r.teamName);
-    w.likelyClaimedBy = claimedBy.get(w.player.id) ?? null;
+    w.likelyClaimedBy = claimedBy.get(w.player.id)?.team ?? null;
+    w.likelyClaimWhy = claimedBy.get(w.player.id)?.why ?? null;
     if (waiverType === "faab") {
       // Blind bidding: everyone with interest competes, regardless of order.
       const bid = suggestBid(w);
@@ -1196,6 +1273,9 @@ export async function analyzeLeague(opts: {
       w.contestedBy = bid.competitors.map((c) => c.teamName);
       const top = bid.competitors[0];
       w.likelyClaimedBy = top && top.estimate >= bid.suggested ? top.teamName : null;
+      w.likelyClaimWhy = w.likelyClaimedBy
+        ? (others.find((t) => t.teamName === w.likelyClaimedBy)?.interest.get(w.player.id)?.why ?? null)
+        : null;
     }
   }
   const recommended = new Set(waivers.map((w) => w.player.id));
@@ -1236,6 +1316,13 @@ export async function analyzeLeague(opts: {
       projected: total(starters.map((id) => ({ slot: "", player: scored.get(id) ?? null }))),
       starters: starters.map((id) => scored.get(id)).filter((p): p is PlayerAnalysis => Boolean(p)),
     };
+  }
+
+  // A keeper K/DEF on bye: say to hold him instead of the generic "on bye in your lineup" alert.
+  for (const note of byeNotes) {
+    const i = warnings.findIndex((w) => w.startsWith(`${note.name} is in your`));
+    if (i >= 0) warnings[i] = note.text;
+    else warnings.push(note.text);
   }
 
   return {

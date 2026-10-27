@@ -124,7 +124,7 @@ export function renderMarkdown(
       const contested = w.bid
         ? ""
         : w.likelyClaimedBy
-          ? ` 🚫 Likely claimed before your turn by ${w.likelyClaimedBy}.`
+          ? ` 🚫 Likely claimed before your turn by ${w.likelyClaimedBy}${w.likelyClaimWhy ? ` (${w.likelyClaimWhy})` : ""}.`
           : w.contestedBy.length
             ? ` ⚠️ Also wanted by ${w.contestedBy.slice(0, 3).join(", ")}${w.contestedBy.length > 3 ? ` +${w.contestedBy.length - 3}` : ""}.`
             : " ✅ Likely available at your turn.";
