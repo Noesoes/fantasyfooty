@@ -1175,6 +1175,41 @@ function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => v
 
       <Rivals a={a} />
 
+      {a.activeRoster.some((p) => p.stash) && (
+        <Card title="Hold these stashes">
+          <ul className="flex flex-col divide-y divide-ink-700/60">
+            {a.activeRoster
+              .filter((p) => p.stash)
+              .sort((x, y) => y.stash!.value - x.stash!.value)
+              .map((p) => {
+                const st = p.stash!;
+                return (
+                  <li key={p.id} className="py-3">
+                    <PlayerLine p={p} size={34} />
+                    <div className="mt-1.5 ml-[46px] text-xs">
+                      <p className="text-ink-100">
+                        <b className="text-violet">~{Math.round(st.chance * 100)}% chance</b> {st.starter}&apos;s job
+                        opens up — {p.name.split(" ").slice(-1)[0]} would be worth{" "}
+                        <b className="font-mono">~{st.ifStarter}</b> pts/game if it does (
+                        <span className="font-mono">{p.rosValue}</span> now).
+                      </p>
+                      <ul className="mt-1 flex flex-col gap-0.5 text-ink-400">
+                        {st.reasons.map((r) => (
+                          <li key={r}>· {r}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </li>
+                );
+              })}
+          </ul>
+          <p className="mt-2 text-[11px] text-ink-400">
+            Backups get credit for the chance their starter is traded or hurt, so the advisor won&apos;t suggest
+            dropping them for a marginal pickup.
+          </p>
+        </Card>
+      )}
+
       {a.drops.length > 0 && (
         <Card title="Drop candidates">
           <ul className="flex flex-col divide-y divide-ink-700/60">

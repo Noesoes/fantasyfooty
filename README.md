@@ -56,6 +56,7 @@ Every player gets two scores.
 - Role adjustments: backup QBs ×0.25, injury fill-in starters ×0.6, part-time players (<35% of snaps) ×0.85
 - Discounted for IR/Out/suspension, with a small bump for players trending in adds across Sleeper
 - Compared as **value over replacement** (vs. the ~4th-best free agent at the same position), so QBs don't crowd out every other position in 1-QB leagues
+- **Stash value** for your backup RBs, TEs and QBs: the chance the starter ahead of them leaves or gets hurt, times what they'd gain by taking over. The chance starts at a base injury rate and goes up for trade rumors about the starter (before the trade deadline, counted by how many days they've been reported), the starter's injury status, and recent articles calling the backup a stash, handcuff or next man up. A growing workload is listed as supporting evidence. Stash value counts toward keeping a player, so the advisor won't suggest dropping, say, the handcuff to a starter in trade rumors for a marginal pickup. These players show in a *Hold these stashes* card on the Waivers tab
 - A free agent gets priority if they'd crack your lineup, especially when one of your starters is out this week
 - Backup QBs and players Sleeper doesn't expect to play are never recommended as pickups. QB claims are capped at your number of QB/superflex spots
 
@@ -169,6 +170,7 @@ The `/projections` and `/stats` endpoints are undocumented: they're what the Sle
 ```
 lib/sleeper.ts             Sleeper API client + "which week is upcoming" logic
 lib/advisor.ts             scoring, lineup optimizer, drop & waiver logic
+lib/stash.ts               stash value for backups (trade rumors, injuries, handcuff news)
 lib/explain.ts             factor breakdown and start-over-sit comparison behind each Game plan call
 lib/report.ts              Markdown rendering for the weekly issue
 lib/trades.ts              trade finder, offer evaluator, positional strength

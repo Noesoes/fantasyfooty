@@ -8,6 +8,7 @@ import {
   OUT_STATUSES,
   SLOT_ELIGIBILITY,
   slotName,
+  keepValue,
   type Analysis,
   type PlayerAnalysis,
   type WaiverTarget,
@@ -82,22 +83,27 @@ export function evaluatePickup(a: Analysis, p: PlayerAnalysis): PickupReport {
   if (a.rosterFull) {
     drop = isStreamPos
       ? (a.activeRoster.filter(samePos).sort((x, y) => x.weekScore - y.weekScore)[0] ?? null)
-      : (a.drops[0]?.player ?? [...bench].sort((x, y) => x.rosValue - y.rosValue)[0] ?? null);
+      : (a.drops[0]?.player ?? [...bench].sort((x, y) => keepValue(x) - keepValue(y))[0] ?? null);
   }
-  const rosDelta = drop ? p.rosValue - drop.rosValue : p.rosValue;
+  // A dropped backup's stash upside counts against the add.
+  const dropValue = drop ? Math.round(keepValue(drop) * 10) / 10 : 0;
+  const rosDelta = drop ? p.rosValue - dropValue : p.rosValue;
   if (!a.rosterFull) {
     pros.push("You have an open roster spot, so it costs you nothing to add him.");
   } else if (drop && !isStreamPos) {
     if (rosDelta >= 1) {
       pros.push(
-        `Better rest-of-season value than ${drop.name}, your most expendable player: ${p.rosValue} vs ${drop.rosValue} pts/game.`,
+        `Better rest-of-season value than ${drop.name}, your most expendable player: ${p.rosValue} vs ${dropValue} pts/game.`,
       );
     } else if (rosDelta <= -0.5) {
       cons.push(
-        `Worth less the rest of the way than ${drop.name}, who you'd have to drop (${p.rosValue} vs ${drop.rosValue} pts/game).`,
+        `Worth less the rest of the way than ${drop.name}, who you'd have to drop (${p.rosValue} vs ${dropValue} pts/game${drop.stash ? " counting his stash upside" : ""}).`,
       );
     } else {
       cons.push(`About the same rest-of-season value as ${drop.name}, who you'd drop: not a real upgrade.`);
+    }
+    if (drop.stash) {
+      cons.push(`Dropping ${drop.name} gives up his stash upside: ${drop.stash.reasons[0]}.`);
     }
   }
 

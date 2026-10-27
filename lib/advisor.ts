@@ -27,6 +27,7 @@ import {
 } from "./sleeper";
 import { OUT_STATUSES } from "./status";
 import { assessInjuries } from "./injuries";
+import { assessStashes, stashNote, type Stash, type StashCandidate } from "./stash";
 import { gameOutlook, getWeekGames, type Game, type GameOutlook } from "./scoreboard";
 
 const RECENT_WEEKS = 3;
@@ -91,6 +92,8 @@ export interface PlayerAnalysis {
   /** Chance to play this week (0–1) from the injury model, when assessed; weekScore is scaled by it. */
   playChance: number | null;
   rosValue: number;
+  /** Upside if the starter ahead of him leaves or gets hurt (your bench backups only). */
+  stash: Stash | null;
   /** Vegas line and weather for this week's game, when known. */
   game: GameOutlook | null;
   notes: string[];
@@ -585,6 +588,7 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
       weekScore: round1(weekScore),
       playChance: null,
       rosValue: round1(rosValue),
+      stash: null,
       game,
       notes,
     });
@@ -640,6 +644,57 @@ export function optimizeLineup(
     }
   }
   return filled;
+}
+
+/** Rest-of-season value for deciding whether to keep someone: his own value plus stash upside. */
+export function keepValue(p: PlayerAnalysis): number {
+  return p.rosValue + (p.stash?.value ?? 0);
+}
+
+/**
+ * Credit your backups (RB/TE/QB) whose starter might leave or get hurt:
+ * trade rumors, injuries, analysts calling them the stash. Network failures
+ * just mean no stash credit.
+ */
+async function applyStashes(active: PlayerAnalysis[], inputs: Inputs, week: number) {
+  const scoring = inputs.league.scoring_settings;
+  const byTeamPos = new Map<string, { id: string; pts: number }[]>();
+  for (const r of inputs.projections) {
+    const pos = r.player?.position;
+    if (!r.team || !pos || !["RB", "TE", "QB"].includes(pos)) continue;
+    const key = `${r.team}|${pos}`;
+    const list = byTeamPos.get(key) ?? [];
+    list.push({ id: r.player_id, pts: points(r.stats, scoring, pos) });
+    byTeamPos.set(key, list);
+  }
+  const pending: { player: PlayerAnalysis; starterId: string; clearBackup: boolean }[] = [];
+  for (const p of active) {
+    if (!p.team || !["RB", "TE", "QB"].includes(p.position)) continue;
+    const mates = [...(byTeamPos.get(`${p.team}|${p.position}`) ?? [])].sort((a, b) => b.pts - a.pts);
+    const top = mates[0];
+    if (!top || top.id === p.id || top.pts < 5) continue;
+    // Already sharing the job (or the "starter" is barely ahead): no stash premium.
+    if (p.projection >= top.pts * 0.6) continue;
+    // Your own starter ahead of him is a handcuff you already own the upside of; still counts.
+    const others = mates.filter((m) => m.id !== top.id);
+    pending.push({ player: p, starterId: top.id, clearBackup: others[0]?.id === p.id });
+  }
+  if (!pending.length) return;
+  const starters = analyzePlayers([...new Set(pending.map((x) => x.starterId))], inputs, new Map());
+  const candidates: StashCandidate[] = pending
+    .filter((x) => starters.has(x.starterId))
+    .map((x) => ({ player: x.player, starter: starters.get(x.starterId)!, clearBackup: x.clearBackup }));
+  try {
+    const stashes = await assessStashes(candidates, week);
+    for (const p of active) {
+      const st = stashes.get(p.id);
+      if (!st) continue;
+      p.stash = st;
+      p.notes.push(stashNote(p, st));
+    }
+  } catch {
+    // No news, no stash credit.
+  }
 }
 
 function benchReason(p: PlayerAnalysis): string {
@@ -838,6 +893,7 @@ export async function analyzeLeague(opts: {
   await applyPlayChances([...myPlayers.values()], season, week);
   const roster = [...myPlayers.values()].sort((a, b) => b.weekScore - a.weekScore);
   const active = roster.filter((p) => !reserved.has(p.id));
+  await applyStashes(active, inputs, week);
 
   const starterSlots = league.roster_positions.filter((s) => s !== "BN" && s !== "IR" && s !== "TAXI");
   const currentLineup: LineupSlot[] = starterSlots.map((slot, i) => {
@@ -907,6 +963,8 @@ export async function analyzeLeague(opts: {
     replacement[pos] = values[REPLACEMENT_INDEX] ?? values[values.length - 1] ?? 0;
   }
   const vor = (p: PlayerAnalysis) => p.rosValue - (replacement[p.position] ?? 0);
+  // For keeping a player: his own value plus any stash upside.
+  const holdValue = (p: PlayerAnalysis) => keepValue(p) - (replacement[p.position] ?? 0);
 
   // --- Drops ---
   const optimalIds = new Set(optimalLineup.map((s) => s.player?.id).filter(Boolean));
@@ -920,10 +978,10 @@ export async function analyzeLeague(opts: {
     return have - 1 >= need;
   };
 
-  const dropPool = benchPlayers.filter((p) => canDrop(p)).sort((a, b) => vor(a) - vor(b));
+  const dropPool = benchPlayers.filter((p) => canDrop(p)).sort((a, b) => holdValue(a) - holdValue(b));
   // Only flag players at or below what the waiver wire offers at their spot.
   const drops: DropCandidate[] = dropPool
-    .filter((p) => vor(p) < 1)
+    .filter((p) => holdValue(p) < 1)
     .slice(0, 3)
     .map((p) => {
       const reasons: string[] = [];
@@ -978,7 +1036,7 @@ export async function analyzeLeague(opts: {
       const value = claimValue(target);
       if (value <= 0.5) continue;
       if (rosterFull) {
-        dropFor = dropPool.find((p) => !takenDrops.has(p.id) && canDrop(p, target) && vor(p) + 1 < value) ?? null;
+        dropFor = dropPool.find((p) => !takenDrops.has(p.id) && canDrop(p, target) && holdValue(p) + 1 < value) ?? null;
         if (!dropFor) continue;
       }
     }
