@@ -57,6 +57,7 @@ Every player gets two scores.
 - Discounted for IR/Out/suspension, with a small bump for players trending in adds across Sleeper
 - Compared as **value over replacement** (vs. the ~4th-best free agent at the same position), so QBs don't crowd out every other position in 1-QB leagues
 - **Stash value** for your backup RBs, TEs and QBs: the chance the starter ahead of them leaves or gets hurt, times what they'd gain by taking over. The chance starts at a base injury rate and goes up for trade rumors about the starter (before the trade deadline, counted by how many days they've been reported), the starter's injury status, and recent articles calling the backup a stash, handcuff or next man up. A growing workload is listed as supporting evidence. Stash value counts toward keeping a player, so the advisor won't suggest dropping, say, the handcuff to a starter in trade rumors for a marginal pickup. These players show in a *Hold these stashes* card on the Waivers tab
+- **Your rules:** tell the advisor what you've decided and it respects it. Tap *Not trading* on a trade idea or *Keep* on a suggested drop, or use the *Your rules* card (Roster and Trades tabs): don't suggest trading him, don't suggest dropping him, untouchable, or *he's my backup for…* (never traded or dropped, labeled as your backup everywhere). Rules are saved per league on your device, and the trade grader warns if you build a trade around a protected player
 - **K/DEF streams** never drop a kicker or defense who's averaging as much as the streamer this season (kickers swing week to week, so it's the season average that counts). If your good kicker is on bye, the advisor tells you to hold him; you only carry two for a week if a bench spot is below waiver-level value
 - **Waiver competition:** a team ahead of you is only expected to claim a player who'd start for them on their rest-of-season lineup, or fill a hole they can't cover this week. A team with three good QBs isn't expected to chase another QB just because one of theirs is on bye. Each projected claim says why
 - A free agent gets priority if they'd crack your lineup, especially when one of your starters is out this week
@@ -172,6 +173,7 @@ The `/projections` and `/stats` endpoints are undocumented: they're what the Sle
 ```
 lib/sleeper.ts             Sleeper API client + "which week is upcoming" logic
 lib/advisor.ts             scoring, lineup optimizer, drop & waiver logic
+lib/prefs.ts               your rules (don't trade / don't drop / backup for), saved per league
 lib/stash.ts               stash value for backups (trade rumors, injuries, handcuff news)
 lib/explain.ts             factor breakdown and start-over-sit comparison behind each Game plan call
 lib/report.ts              Markdown rendering for the weekly issue

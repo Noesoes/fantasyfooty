@@ -2,8 +2,9 @@
 
 /* eslint-disable @next/next/no-img-element -- remote Sleeper CDN images in a static export */
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { analyzeLeague, type Analysis } from "@/lib/advisor";
+import { loadPrefs, savePrefs, withRule, type PlayerRule, type Prefs } from "@/lib/prefs";
 import {
   avatarUrl,
   getNflState,
@@ -15,6 +16,7 @@ import {
   type SleeperUser,
 } from "@/lib/sleeper";
 import { Results } from "./results";
+import { RulesProvider } from "./rules";
 import { InstallButton } from "./install";
 
 const STORAGE_KEY = "sleeper-advisor";
@@ -61,6 +63,9 @@ export default function Home() {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const requestId = useRef(0);
   const [refreshKey, setRefreshKey] = useState(0);
+  // Your rules for this league (don't trade / don't drop / backup for); a change re-runs the analysis.
+  const [prefs, setPrefs] = useState<Prefs>({});
+  const [rulesKey, setRulesKey] = useState(0);
 
   const findLeagues = useCallback(async (name: string, preferLeague?: string) => {
     setLoadingUser(true);
@@ -108,11 +113,14 @@ export default function Home() {
     setLoadingAnalysis(true);
     setError(null);
     save({ username: user.username ?? username, leagueId });
+    const rules = loadPrefs(leagueId);
+    setPrefs(rules);
     analyzeLeague({
       leagueId,
       userId: user.user_id,
       season: state.league_season ?? state.season,
       week,
+      prefs: rules,
     })
       .then((result) => {
         if (id === requestId.current) setAnalysis(result);
@@ -127,7 +135,21 @@ export default function Home() {
         if (id === requestId.current) setLoadingAnalysis(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- username is only used for saving
-  }, [user, state, leagueId, week, refreshKey]);
+  }, [user, state, leagueId, week, refreshKey, rulesKey]);
+
+  const rulesApi = useMemo(
+    () => ({
+      prefs,
+      setRule: (playerId: string, rule: PlayerRule | null) => {
+        if (!leagueId) return;
+        const next = withRule(prefs, playerId, rule);
+        savePrefs(leagueId, next);
+        setPrefs(next);
+        setRulesKey((k) => k + 1);
+      },
+    }),
+    [prefs, leagueId],
+  );
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -178,12 +200,14 @@ export default function Home() {
               {loadingAnalysis && !analysis && <Skeleton />}
               {analysis && (
                 <div className={loadingAnalysis ? "pointer-events-none opacity-50 transition" : "transition"}>
-                  <Results
-                    key={`${analysis.league.league_id}-${analysis.week}`}
-                    a={analysis}
-                    onRefresh={() => setRefreshKey((k) => k + 1)}
-                    refreshing={loadingAnalysis}
-                  />
+                  <RulesProvider value={rulesApi}>
+                    <Results
+                      key={`${analysis.league.league_id}-${analysis.week}`}
+                      a={analysis}
+                      onRefresh={() => setRefreshKey((k) => k + 1)}
+                      refreshing={loadingAnalysis}
+                    />
+                  </RulesProvider>
                 </div>
               )}
             </>

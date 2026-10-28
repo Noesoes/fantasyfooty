@@ -27,6 +27,7 @@ import {
 } from "./sleeper";
 import { OUT_STATUSES } from "./status";
 import { assessInjuries } from "./injuries";
+import { isNoDrop, type Prefs } from "./prefs";
 import { assessStashes, stashNote, type Stash, type StashCandidate } from "./stash";
 import { gameOutlook, getWeekGames, type Game, type GameOutlook } from "./scoreboard";
 
@@ -222,6 +223,8 @@ export interface Opponent {
 
 export interface Analysis {
   league: League;
+  /** Your rules for your players (don't trade / don't drop / backup for). */
+  prefs: Prefs;
   teamName: string;
   myRosterId: number;
   /** Best-ball league: Sleeper sets the lineup automatically, so no start/sit advice. */
@@ -882,8 +885,10 @@ export async function analyzeLeague(opts: {
   userId: string;
   season: string;
   week: number;
+  prefs?: Prefs;
 }): Promise<Analysis> {
   const { leagueId, userId, season, week } = opts;
+  const prefs = opts.prefs ?? {};
   const recentWeeks = Array.from({ length: RECENT_WEEKS }, (_, i) => week - 1 - i).filter((w) => w >= 1);
 
   const [league, rosters, users, matchups, projections, seasonStats, trending, weekGames, ...recentStats] =
@@ -946,6 +951,11 @@ export async function analyzeLeague(opts: {
   const roster = [...myPlayers.values()].sort((a, b) => b.weekScore - a.weekScore);
   const active = roster.filter((p) => !reserved.has(p.id));
   await applyStashes(active, inputs, week);
+  // Your designated backups say so wherever they show up.
+  for (const p of roster) {
+    const starter = prefs[p.id]?.backupFor;
+    if (starter) p.notes.unshift(`Your backup for ${myPlayers.get(starter)?.name ?? "a starter"}`);
+  }
 
   const starterSlots = league.roster_positions.filter((s) => s !== "BN" && s !== "IR" && s !== "TAXI");
   const currentLineup: LineupSlot[] = starterSlots.map((slot, i) => {
@@ -1030,7 +1040,10 @@ export async function analyzeLeague(opts: {
     return have - 1 >= need;
   };
 
-  const dropPool = benchPlayers.filter((p) => canDrop(p)).sort((a, b) => holdValue(a) - holdValue(b));
+  // Players you've said to keep are never suggested as drops.
+  const dropPool = benchPlayers
+    .filter((p) => canDrop(p) && !isNoDrop(prefs, p.id))
+    .sort((a, b) => holdValue(a) - holdValue(b));
   // Only flag players at or below what the waiver wire offers at their spot.
   const drops: DropCandidate[] = dropPool
     .filter((p) => holdValue(p) < 1)
@@ -1088,7 +1101,7 @@ export async function analyzeLeague(opts: {
       // (e.g. a top kicker on bye): you'd just want him back next week.
       // Kickers and defenses swing a lot week to week, so judge them on the season average.
       const kdValue = (p: PlayerAnalysis) => p.seasonAvg ?? p.rosValue;
-      dropFor = mineAtPos.find((p) => kdValue(p) < kdValue(target) - 1) ?? null;
+      dropFor = mineAtPos.find((p) => kdValue(p) < kdValue(target) - 1 && !isNoDrop(prefs, p.id)) ?? null;
       if (!dropFor && rosterFull) {
         // Carry two for a week only if a bench spot is truly free (below waiver-level value).
         dropFor =
@@ -1347,6 +1360,7 @@ export async function analyzeLeague(opts: {
     warnings: bestBall ? [] : warnings,
     roster,
     activeRoster: active,
+    prefs,
     otherTeams: others.map((t) => ({
       rosterId: t.roster.roster_id,
       teamName: t.teamName,

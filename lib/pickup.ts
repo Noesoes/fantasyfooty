@@ -3,6 +3,7 @@
 // lineup, rest-of-season value vs. the player you'd drop, role and usage,
 // form, injuries, matchup, depth at the position, and waiver competition.
 
+import { isNoDrop } from "./prefs";
 import {
   describeMatchup,
   OUT_STATUSES,
@@ -77,12 +78,14 @@ export function evaluatePickup(a: Analysis, p: PlayerAnalysis): PickupReport {
 
   // --- Rest of season vs. the player you'd drop ---
   const optimalIds = new Set(a.optimalLineup.map((s) => s.player?.id));
-  const bench = a.activeRoster.filter((x) => !optimalIds.has(x.id));
+  const bench = a.activeRoster.filter((x) => !optimalIds.has(x.id) && !isNoDrop(a.prefs, x.id));
   const samePos = (x: PlayerAnalysis) => x.position === p.position;
   let drop: PlayerAnalysis | null = null;
   if (a.rosterFull) {
     drop = isStreamPos
-      ? (a.activeRoster.filter(samePos).sort((x, y) => x.weekScore - y.weekScore)[0] ?? null)
+      ? (a.activeRoster
+          .filter((x) => samePos(x) && !isNoDrop(a.prefs, x.id))
+          .sort((x, y) => x.weekScore - y.weekScore)[0] ?? null)
       : (a.drops[0]?.player ?? [...bench].sort((x, y) => keepValue(x) - keepValue(y))[0] ?? null);
   }
   // A dropped backup's stash upside counts against the add.

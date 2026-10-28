@@ -5,6 +5,7 @@
 // little credit for bench depth (byes and injuries happen). We try every
 // 1-for-1, 2-for-1 and 1-for-2 between your top players and theirs.
 
+import { isNoTrade } from "./prefs";
 import { SLOT_ELIGIBILITY, type Analysis, type PlayerAnalysis } from "./advisor";
 
 const BENCH_WEIGHT = 0.15;
@@ -228,9 +229,14 @@ export function evaluateTrade(
       ? `It ${lineup} ${value}. Ask for ${counter.add.name} as well and it becomes a clear win (+${counter.yourGain}/wk).`
       : `It ${lineup} ${value}.`;
 
+  const blocked = give.filter((p) => isNoTrade(a.prefs, p.id));
+  const ruleNote = blocked.length
+    ? ` Heads up: you marked ${blocked.map((p) => p.name).join(" and ")} as not for trade${blocked.some((p) => a.prefs[p.id]?.backupFor) ? " (your backup)" : ""}.`
+    : "";
+
   return {
     verdict,
-    summary: summary.charAt(0).toUpperCase() + summary.slice(1),
+    summary: summary.charAt(0).toUpperCase() + summary.slice(1) + ruleNote,
     yourGain: round1(yourGain),
     theirGain: round1(theirGain),
     marketGive: round1(marketGive),
@@ -247,7 +253,8 @@ export function findTrades(a: Analysis): TradeReport {
 
   const mine = [...a.activeRoster].sort(byValue);
   const myBase = teamValue(slots, mine);
-  const myPool = mine.filter(tradeable).slice(0, POOL_SIZE);
+  // Players you've said you won't trade are never offered.
+  const myPool = mine.filter((p) => tradeable(p) && !isNoTrade(a.prefs, p.id)).slice(0, POOL_SIZE);
 
   // --- Positional strength vs. the league ---
   const allTeams = [{ id: -1, players: mine }, ...a.otherTeams.map((t) => ({ id: t.rosterId, players: t.players }))];

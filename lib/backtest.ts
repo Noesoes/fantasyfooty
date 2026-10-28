@@ -48,7 +48,9 @@ export interface TrackRecord {
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 function lineupSlots(rosterPositions: string[]) {
-  return rosterPositions.filter((s) => s in SLOT_ELIGIBILITY).sort((a, b) => SLOT_ELIGIBILITY[a].length - SLOT_ELIGIBILITY[b].length);
+  return rosterPositions
+    .filter((s) => s in SLOT_ELIGIBILITY)
+    .sort((a, b) => SLOT_ELIGIBILITY[a].length - SLOT_ELIGIBILITY[b].length);
 }
 
 /** Greedy lineup maximizing `score` over players with known positions. */
@@ -93,11 +95,13 @@ export async function buildTrackRecord(a: Analysis): Promise<TrackRecord> {
         const row = projById.get(id);
         const k = known.get(id);
         const position = row?.player?.position ?? k?.position ?? (/^[A-Z]{2,3}$/.test(id) ? "DEF" : "?");
-        const eligible = row?.player?.fantasy_positions?.length ? row.player.fantasy_positions : (k?.eligible ?? [position]);
+        const eligible = row?.player?.fantasy_positions?.length
+          ? row.player.fantasy_positions
+          : (k?.eligible ?? [position]);
         const name =
           position === "DEF"
             ? `${id} D/ST`
-            : ([row?.player?.first_name, row?.player?.last_name].filter(Boolean).join(" ") || k?.name || id);
+            : [row?.player?.first_name, row?.player?.last_name].filter(Boolean).join(" ") || k?.name || id;
         return { id, name, position, team: row?.team ?? k?.team ?? null, eligible };
       };
       const projected = (id: string) => {
@@ -109,7 +113,9 @@ export async function buildTrackRecord(a: Analysis): Promise<TrackRecord> {
       const pos = new Map(players.map((id) => [id, info(id).eligible]));
       // Your actual lineup, restricted to slot types we model (no IDP).
       const yourIds = new Set(
-        (mine.starters ?? []).filter((id, i) => id && id !== "0" && starterSlots[i] && starterSlots[i] in SLOT_ELIGIBILITY),
+        (mine.starters ?? []).filter(
+          (id, i) => id && id !== "0" && starterSlots[i] && starterSlots[i] in SLOT_ELIGIBILITY,
+        ),
       );
       const advisorIds = pick(slots, players, pos, projected);
       const bestIds = pick(slots, players, pos, actual);

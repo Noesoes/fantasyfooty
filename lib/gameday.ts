@@ -83,7 +83,9 @@ export async function gamedayCheck(opts: {
     });
   }
 
-  const signature = [opts.leagueId, opts.week, ...issues.map((i) => `${i.player?.id ?? i.slot}:${i.problem}`)].join("|");
+  const signature = [opts.leagueId, opts.week, ...issues.map((i) => `${i.player?.id ?? i.slot}:${i.problem}`)].join(
+    "|",
+  );
   return { analysis, issues, signature };
 }
 
@@ -91,7 +93,9 @@ export function renderGamedayMarkdown(r: GamedayResult): string {
   const a = r.analysis;
   const lines = [`## ${a.league.name} — ${a.teamName}`, ""];
   for (const i of r.issues) {
-    const who = i.player ? `**${i.player.name}** (${i.player.position}, ${i.player.team ?? "FA"})` : `Your **${i.slot}** slot`;
+    const who = i.player
+      ? `**${i.player.name}** (${i.player.position}, ${i.player.team ?? "FA"})`
+      : `Your **${i.slot}** slot`;
     const r = i.replacement;
     const fix = r
       ? `→ ${i.source === "bench" ? "start" : "add free agent and start"} **${r.name}** (${r.position}, ${r.team}), projected ${r.weekScore} pts`

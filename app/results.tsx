@@ -16,6 +16,7 @@ import { compareStart, factorsFor, FACTOR_LABELS, type FactorKey, type Tone } fr
 import { fetchLive, type LivePlayer, type LiveSide, type LiveState } from "@/lib/live";
 import { GamesTab } from "./games";
 import { FillPosition, PlayerCheck } from "./playercheck";
+import { RuleChip, RulesCard } from "./rules";
 import { Card, Empty, Headshot, MatchupChip, PlayerLine, Points, PosBadge, SlotBadge } from "./ui";
 
 type Tab =
@@ -1135,9 +1136,12 @@ function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => v
                   <PlayerLine p={w.player} sub={<MatchupChip p={w.player} compact />} />
                 </div>
                 {w.dropFor && (
-                  <div className="flex items-center gap-2 opacity-80">
+                  <div className="flex items-center gap-2">
                     <span className="w-10 text-[11px] font-bold text-rose-400">DROP</span>
-                    <PlayerLine p={w.dropFor} size={32} />
+                    <div className="min-w-0 flex-1 opacity-80">
+                      <PlayerLine p={w.dropFor} size={32} />
+                    </div>
+                    <RuleChip p={w.dropFor} kind="noDrop" />
                   </div>
                 )}
                 {w.bid && <BidBox bid={w.bid} />}
@@ -1215,7 +1219,12 @@ function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => v
           <ul className="flex flex-col divide-y divide-ink-700/60">
             {a.drops.map((d) => (
               <li key={d.player.id} className="py-3">
-                <PlayerLine p={d.player} size={34} />
+                <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <PlayerLine p={d.player} size={34} />
+                  </div>
+                  <RuleChip p={d.player} kind="noDrop" />
+                </div>
                 <p className="mt-1 ml-[46px] text-xs text-ink-400">{d.reason}</p>
               </li>
             ))}
@@ -1691,15 +1700,22 @@ function Trades({ a }: { a: Analysis }) {
                   </div>
                 </div>
                 <p className="mt-3 text-xs leading-relaxed text-ink-400">{t.reason}</p>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {t.give.map((p) => (
+                    <RuleChip key={p.id} p={p} kind="noTrade" />
+                  ))}
+                </div>
               </article>
             ))}
           </div>
         )}
         <p className="mt-4 text-xs text-ink-400">
           Every idea improves both teams&apos; best lineups for the rest of the season (pts/week) and is roughly even on
-          value over replacement, so it&apos;s worth proposing. Gains assume both teams start their best players.
+          value over replacement, so it&apos;s worth proposing. Gains assume both teams start their best players. Tap
+          &ldquo;Not trading&rdquo; on a player and he won&apos;t be suggested again.
         </p>
       </Card>
+      <RulesCard a={a} />
     </div>
   );
 }
@@ -2733,9 +2749,12 @@ type SortKey = "weekScore" | "seasonAvg" | "recentAvg" | "snapShare";
 
 function Roster({ a }: { a: Analysis }) {
   return (
-    <Card title="Your roster">
-      <PlayerTable players={a.roster} week={a.week} showSnaps sortable />
-    </Card>
+    <div className="flex flex-col gap-5">
+      <Card title="Your roster">
+        <PlayerTable players={a.roster} week={a.week} showSnaps sortable />
+      </Card>
+      <RulesCard a={a} />
+    </div>
   );
 }
 
