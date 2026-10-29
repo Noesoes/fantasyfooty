@@ -249,7 +249,7 @@ function ThemeToggle() {
     // Match the phone's status bar to the theme.
     document
       .querySelector('meta[name="theme-color"]')
-      ?.setAttribute("content", next === "light" ? "#f4f5f8" : "#0b0d12");
+      ?.setAttribute("content", next === "light" ? "#eef0fb" : "#0a0b14");
     try {
       localStorage.setItem("theme", next);
     } catch {

@@ -242,7 +242,7 @@ export function Card({
   className?: string;
 }) {
   return (
-    <section className={`min-w-0 rounded-2xl bg-ink-900 ${className}`}>
+    <section className={`min-w-0 rounded-2xl border border-ink-700 bg-ink-900 ${className}`}>
       {title && (
         <header className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-5">
           <h2 className="text-[17px] leading-tight font-bold tracking-tight text-ink-100">{title}</h2>

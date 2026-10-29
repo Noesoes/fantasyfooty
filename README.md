@@ -33,6 +33,8 @@ Everything is grouped into four sections, each with a few tabs:
 | **Games** | Every game this week, with a game center for each |
 | **Team** | Roster · Playoffs · Schedule (bye weeks and week-by-week projections) · Track record |
 
+**Look:** "Glass": frosted, translucent cards over colored light, big rounded numbers, and a floating tab bar (light and dark). Home opens with widgets for your win chance and projected score, then the moves to make, heads-up alerts, and Waivers and Injuries widgets. A player's sheet is tinted with his team's color and shows usage as rings.
+
 **Player sheet:** tap any player (Roster, Lineup, the plan, waivers, trades) for this week's call (start, bench or out) and why, the defense he faces (where it ranks against his position, fantasy points it allows per game vs. the league average, and the Vegas line and weather), his workload (snap share, share of team carries and targets, touches and red-zone looks per game vs. his season average), every factor behind the projection, and switches for your rules.
 
 On phones the sections sit in a bottom bar. Badges show only when there's something to act on: waiver targets, or starters who are out or doubtful. The open tab is kept in the URL (e.g. `#playoffs`), so refreshing or reopening the app keeps your place.
@@ -176,6 +178,7 @@ The `/projections` and `/stats` endpoints are undocumented: they're what the Sle
 lib/sleeper.ts             Sleeper API client + "which week is upcoming" logic
 lib/advisor.ts             scoring, lineup optimizer, drop & waiver logic
 lib/prefs.ts               your rules (don't trade / don't drop / backup for), saved per league
+lib/teamcolors.ts          NFL team colors for team-tinted player sheets
 lib/stash.ts               stash value for backups (trade rumors, injuries, handcuff news)
 lib/explain.ts             factor breakdown and start-over-sit comparison behind each Game plan call
 lib/report.ts              Markdown rendering for the weekly issue

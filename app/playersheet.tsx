@@ -12,6 +12,7 @@ import { isNoDrop, isNoTrade } from "@/lib/prefs";
 import { PlayerSheetContext, useOpenPlayer } from "./playerctx";
 import { useRules } from "./rules";
 import { useDragToClose } from "./sheetdrag";
+import { teamColor } from "@/lib/teamcolors";
 import { Headshot, InjuryTag, PosBadge } from "./ui";
 
 const OUT = new Set(["Out", "IR", "PUP", "Sus", "NA", "DNR", "COV", "NFI"]);
@@ -96,26 +97,27 @@ function Section({ title, right, children }: { title: string; right?: React.Reac
   );
 }
 
-function ShareBar({ label, value, note }: { label: string; value: number; note?: string }) {
+/** Usage as a ring: share of snaps, carries or targets (or a scaled count). */
+function UsageRing({ label, value, color, text }: { label: string; value: number; color: string; text?: string }) {
+  const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
   return (
-    <div>
-      <div className="mb-1 flex items-baseline justify-between text-sm">
-        <span className="text-ink-300">{label}</span>
-        <span className="font-mono font-bold">
-          {pct(value)}
-          {note && <span className="ml-1 text-xs font-normal text-ink-400">{note}</span>}
-        </span>
+    <div className="flex flex-col items-center gap-1.5">
+      <div
+        className="flex h-16 w-16 items-center justify-center rounded-full"
+        style={{ background: `conic-gradient(${color} 0 ${pct}%, var(--color-ink-700) ${pct}% 100%)` }}
+      >
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-ink-950/85 font-mono text-[15px] font-black">
+          {text ?? `${pct}%`}
+        </div>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-ink-700">
-        <div className="h-full rounded-full bg-mint-400" style={{ width: `${Math.min(100, value * 100)}%` }} />
-      </div>
+      <span className="text-[11px] font-bold text-ink-300">{label}</span>
     </div>
   );
 }
 
 function Stat({ value, label, tone = "neutral" }: { value: string; label: string; tone?: Tone }) {
   return (
-    <div className="rounded-xl bg-ink-800 px-2 py-2.5 text-center">
+    <div className="rounded-2xl border border-ink-700 bg-ink-900 px-2 py-3 text-center">
       <div className={`font-mono text-xl font-extrabold ${TONE_TEXT[tone]}`}>{value}</div>
       <div className="text-[11px] text-ink-400">{label}</div>
     </div>
@@ -159,19 +161,19 @@ function SheetBody({ a, p }: { a: Analysis; p: PlayerAnalysis }) {
   return (
     <>
       {/* Header */}
-      <div className="flex items-center gap-3.5">
-        <Headshot p={p} size={64} />
-        <div className="min-w-0">
-          <div className="truncate text-[22px] leading-tight font-extrabold tracking-tight">{p.name}</div>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-ink-400">
-            <PosBadge pos={p.position} />
-            <span>{p.team ?? "FA"}</span>
-            <span>·</span>
-            <span>{status}</span>
-            {p.injury && <InjuryTag status={p.injury} />}
-          </div>
-          {backupFor && <div className="mt-0.5 text-xs font-semibold text-violet">Your backup for {backupFor}</div>}
+      <div className="flex flex-col items-center text-center">
+        <span className="rounded-full border-4 border-white/25">
+          <Headshot p={p} size={96} />
+        </span>
+        <div className="mt-2 text-[26px] leading-tight font-black tracking-tight">{p.name}</div>
+        <div className="mt-1 flex flex-wrap items-center justify-center gap-1.5 text-sm font-semibold text-ink-300">
+          <PosBadge pos={p.position} />
+          <span>{p.team ?? "FA"}</span>
+          {p.matchup && <span>· vs {p.matchup.opponent}</span>}
+          <span>· {status}</span>
+          {p.injury && <InjuryTag status={p.injury} />}
         </div>
+        {backupFor && <div className="mt-1 text-xs font-bold text-violet">Your backup for {backupFor}</div>}
       </div>
 
       {/* This week's call */}
@@ -201,7 +203,7 @@ function SheetBody({ a, p }: { a: Analysis; p: PlayerAnalysis }) {
       {/* The defense */}
       {m && (
         <Section title={`vs ${m.opponent} defense`} right={`${m.teams} defenses ranked`}>
-          <div className="rounded-2xl bg-ink-800 p-4">
+          <div className="rounded-2xl border border-ink-700 bg-ink-900 p-4">
             <div className="flex items-baseline justify-between gap-3">
               <div className="text-sm text-ink-300">
                 Allows the{" "}
@@ -278,21 +280,27 @@ function SheetBody({ a, p }: { a: Analysis; p: PlayerAnalysis }) {
       {/* Workload */}
       {(u || p.snapShare !== null) && p.position !== "K" && p.position !== "DEF" && (
         <Section title="Workload" right={`last ${p.recentGames || 3} games`}>
-          <div className="flex flex-col gap-3 rounded-2xl bg-ink-800 p-4">
-            {p.snapShare !== null && <ShareBar label="Snap share" value={p.snapShare} />}
-            {u && (p.position === "RB" || u.carryShare >= 0.05) && (
-              <ShareBar label="Share of team carries" value={u.carryShare} />
-            )}
-            {u && <ShareBar label="Share of team targets" value={u.targetShare} />}
+          <div className="flex flex-col gap-4 rounded-2xl border border-ink-700 bg-ink-900 p-4">
+            <div className="flex justify-around">
+              {p.snapShare !== null && <UsageRing label="Snaps" value={p.snapShare} color="var(--color-mint-400)" />}
+              {u && (p.position === "RB" || u.carryShare >= 0.05) && (
+                <UsageRing label="Carries" value={u.carryShare} color="#60a5fa" />
+              )}
+              {u && <UsageRing label="Targets" value={u.targetShare} color="#f472b6" />}
+              {u && (
+                <UsageRing
+                  label="RZ looks/g"
+                  value={Math.min(1, u.redZone / 5)}
+                  text={String(u.redZone)}
+                  color="#fbbf24"
+                />
+              )}
+            </div>
             {u && (
-              <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+              <div className="grid grid-cols-2 gap-2 pt-1 text-center">
                 <div>
                   <div className="font-mono text-lg font-bold">{u.touches}</div>
                   <div className="text-[11px] text-ink-400">touches/g</div>
-                </div>
-                <div>
-                  <div className="font-mono text-lg font-bold">{u.redZone}</div>
-                  <div className="text-[11px] text-ink-400">red-zone looks/g</div>
                 </div>
                 <div>
                   <div
@@ -317,7 +325,7 @@ function SheetBody({ a, p }: { a: Analysis; p: PlayerAnalysis }) {
       {/* Why */}
       {reasons.length > 0 && (
         <Section title="What goes into the call">
-          <ul className="flex flex-col divide-y divide-ink-800 rounded-2xl bg-ink-800 px-4">
+          <ul className="flex flex-col divide-y divide-ink-800 rounded-2xl border border-ink-700 bg-ink-900 px-4">
             {reasons.map((f) => (
               <li key={f.key} className="flex gap-3 py-2.5 text-sm">
                 <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${TONE_DOT[f.tone]}`} />
@@ -370,6 +378,7 @@ function SheetBody({ a, p }: { a: Analysis; p: PlayerAnalysis }) {
 function SheetFrame({ a, p, onClose }: { a: Analysis; p: PlayerAnalysis; onClose: () => void }) {
   const scroll = useRef<HTMLDivElement>(null);
   const { handlers, style, pulled } = useDragToClose(onClose, scroll);
+  const tint = teamColor(p.team);
   // A new player starts at the top.
   useEffect(() => scroll.current?.scrollTo({ top: 0 }), [p.id]);
   return (
@@ -387,8 +396,15 @@ function SheetFrame({ a, p, onClose }: { a: Analysis; p: PlayerAnalysis; onClose
       />
       <div
         {...handlers}
-        className="relative flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-ink-900 shadow-2xl sm:rounded-3xl"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)", ...style }}
+        className="glass relative flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-ink-700 bg-ink-950/85 shadow-2xl sm:rounded-3xl"
+        style={{
+          paddingBottom: "env(safe-area-inset-bottom)",
+          // Tinted with the player's team color, fading into the glass.
+          backgroundImage: tint
+            ? `linear-gradient(180deg, ${tint}d9 0px, ${tint}55 180px, transparent 360px)`
+            : undefined,
+          ...style,
+        }}
       >
         {/* Grab handle: drag down from here (or from anywhere at the top of the content) to close. */}
         <div data-sheet-handle className="flex h-8 shrink-0 items-start justify-center pt-3 sm:h-4">

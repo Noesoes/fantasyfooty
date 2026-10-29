@@ -1,32 +1,33 @@
 @import "tailwindcss";
 
 @theme inline {
-  --font-sans: var(--font-inter);
+  --font-sans: var(--font-nunito);
   /* Numbers use the same face with tabular figures (see .font-mono below). */
-  --font-mono: var(--font-inter);
-  --font-display: var(--font-inter);
+  --font-mono: var(--font-nunito);
+  --font-display: var(--font-nunito);
 }
 
 /* Not `inline`: utilities reference these variables, so the light theme
    below can swap the whole palette by redefining them. */
 @theme {
-  /* Clean: near-black neutral surfaces (950 = page, 900 = cards), text 100. */
-  --color-ink-950: #0b0d12;
-  --color-ink-900: #15181f;
-  --color-ink-850: #181c24;
-  --color-ink-800: #1f2430;
-  --color-ink-700: #2a303c;
-  --color-ink-600: #3a4150;
-  --color-ink-500: #5b6373;
-  --color-ink-400: #8a92a3;
-  --color-ink-300: #b4bac6;
-  --color-ink-100: #f2f4f8;
+  /* Glass: a dark base under colored light (see body), with translucent
+     surfaces on top. 950 = the solid base; 900-600 = frosted layers. */
+  --color-ink-950: #0a0b14;
+  --color-ink-900: rgb(255 255 255 / 0.08);
+  --color-ink-850: rgb(255 255 255 / 0.06);
+  --color-ink-800: rgb(255 255 255 / 0.11);
+  --color-ink-700: rgb(255 255 255 / 0.16);
+  --color-ink-600: rgb(255 255 255 / 0.28);
+  --color-ink-500: #7e86a0;
+  --color-ink-400: #a3aac0;
+  --color-ink-300: #c8cde0;
+  --color-ink-100: #ffffff;
 
-  /* Accent ("mint" name kept so components don't change): calm green. */
-  --color-mint-300: #86efac;
-  --color-mint-400: #4ade80;
-  --color-mint-500: #22c55e;
-  --color-violet: #a78bfa;
+  /* Accent ("mint" name kept so components don't change): bright teal. */
+  --color-mint-300: #99f6e4;
+  --color-mint-400: #5eead4;
+  --color-mint-500: #2dd4bf;
+  --color-violet: #c4b5fd;
   /* Live / alerts. */
   --color-hot: #fb7185;
 
@@ -35,39 +36,39 @@
   --color-rose-400: #fb7185;
   --color-rose-500: #f43f5e;
 
-  --color-pos-qb: #f472b6;
-  --color-pos-rb: #34d399;
-  --color-pos-wr: #60a5fa;
-  --color-pos-te: #fbbf24;
-  --color-pos-k: #a78bfa;
-  --color-pos-def: #94a3b8;
+  --color-pos-qb: #f9a8d4;
+  --color-pos-rb: #6ee7b7;
+  --color-pos-wr: #93c5fd;
+  --color-pos-te: #fcd34d;
+  --color-pos-k: #c4b5fd;
+  --color-pos-def: #cbd5e1;
 
-  /* Soft, rounded cards. */
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-2xl: 20px;
-  --radius-3xl: 24px;
+  /* Big, soft corners. */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-2xl: 26px;
+  --radius-3xl: 30px;
 }
 
 [data-theme="light"] {
   color-scheme: light;
-  --color-ink-950: #f4f5f8;
-  --color-ink-900: #ffffff;
-  --color-ink-850: #fafbfc;
-  --color-ink-800: #eef0f4;
-  --color-ink-700: #e2e5eb;
-  --color-ink-600: #c9ced8;
-  --color-ink-500: #9aa1ad;
-  --color-ink-400: #6b7280;
-  --color-ink-300: #4b5563;
-  --color-ink-100: #0b0d12;
+  --color-ink-950: #eef0fb;
+  --color-ink-900: rgb(255 255 255 / 0.62);
+  --color-ink-850: rgb(255 255 255 / 0.5);
+  --color-ink-800: rgb(15 23 42 / 0.06);
+  --color-ink-700: rgb(15 23 42 / 0.1);
+  --color-ink-600: rgb(15 23 42 / 0.2);
+  --color-ink-500: #8a90a6;
+  --color-ink-400: #5d6480;
+  --color-ink-300: #3c4260;
+  --color-ink-100: #0f1222;
 
-  --color-mint-300: #15803d;
-  --color-mint-400: #16a34a;
-  --color-mint-500: #15803d;
-  --color-violet: #7c3aed;
+  --color-mint-300: #0f766e;
+  --color-mint-400: #0d9488;
+  --color-mint-500: #0f766e;
+  --color-violet: #6d28d9;
   --color-hot: #e11d48;
 
   --color-rose-200: #9f1239;
@@ -94,10 +95,30 @@ body {
   /* Keep content clear of the notch when installed full screen (the page frame in
      page.tsx pads the top; the phone section bar pads the bottom). */
   padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left);
-  background: var(--color-ink-950);
+  /* Colored light behind the frosted surfaces. */
+  background:
+    radial-gradient(110% 60% at 0% 0%, rgb(43 75 216 / 0.85) 0%, transparent 55%),
+    radial-gradient(80% 55% at 100% 25%, rgb(194 24 107 / 0.7) 0%, transparent 60%),
+    radial-gradient(100% 55% at 50% 100%, rgb(15 118 110 / 0.75) 0%, transparent 60%),
+    var(--color-ink-950);
+  background-attachment: fixed;
   color: var(--color-ink-100);
-  font-family: var(--font-inter), system-ui, sans-serif;
+  font-family: var(--font-nunito), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+[data-theme="light"] body {
+  background:
+    radial-gradient(110% 60% at 0% 0%, rgb(147 197 253 / 0.8) 0%, transparent 55%),
+    radial-gradient(80% 55% at 100% 25%, rgb(249 168 212 / 0.65) 0%, transparent 60%),
+    radial-gradient(100% 55% at 50% 100%, rgb(153 246 228 / 0.75) 0%, transparent 60%),
+    var(--color-ink-950);
+}
+
+/* Frosted surfaces: cards and sheets blur what's behind them. */
+.glass {
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
 }
 
 /* Phones: the page itself never scrolls (only #scroller inside the app frame
@@ -113,7 +134,8 @@ body {
 
 /* Headings: the body face, bold and slightly tight (no all-caps). */
 .display {
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-nunito), sans-serif;
+  font-weight: 800;
   letter-spacing: -0.01em;
 }
 

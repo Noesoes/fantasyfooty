@@ -930,7 +930,7 @@ export function GameSheet({
         onTouchMove={drag.handlers.onTouchMove}
         onTouchEnd={onTouchEnd}
         onTouchCancel={drag.handlers.onTouchCancel}
-        className="relative flex h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-ink-900 shadow-2xl sm:h-auto sm:max-h-[85dvh] sm:min-h-[60dvh] sm:rounded-3xl"
+        className="relative flex h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-ink-700 bg-ink-950/85 shadow-2xl glass sm:h-auto sm:max-h-[85dvh] sm:min-h-[60dvh] sm:rounded-3xl"
         style={{ paddingBottom: "env(safe-area-inset-bottom)", ...drag.style }}
       >
         <GamePanel

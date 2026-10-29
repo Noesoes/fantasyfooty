@@ -264,7 +264,7 @@ function GameTile({
       : null;
   return (
     <div
-      className={`flex min-w-0 flex-col overflow-hidden rounded-2xl bg-ink-900 ${
+      className={`flex min-w-0 flex-col overflow-hidden rounded-2xl border border-ink-700 bg-ink-900 ${
         g.state === "in" ? "ring-1 ring-hot/50 sm:col-span-2" : ""
       }`}
     >

@@ -210,7 +210,7 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
       <div className="mt-4 flex flex-col gap-4">
         {section === "week" && (live && showLive ? <LiveScoreboard a={a} live={live} /> : <Scoreboard a={a} />)}
         <div ref={top} className="-mb-4 scroll-mt-0" />
-        <nav className="sticky top-0 z-20 -mx-4 bg-ink-950/90 px-4 pt-2 pb-2 backdrop-blur sm:mx-0 sm:px-0">
+        <nav className="glass sticky top-0 z-20 -mx-4 bg-ink-950/75 px-4 pt-2 pb-2 sm:mx-0 sm:px-0">
           {/* Sections: top bar on desktop (bottom bar on phones, below). */}
           <div className="mb-2 hidden gap-1 rounded-xl bg-ink-900 p-1 sm:flex">
             {SECTIONS.map((x) => (
@@ -268,11 +268,8 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
         {/* Phone: sections in a thumb-reach bar under the scrolling area. */}
         {navSlot &&
           createPortal(
-            <nav
-              className="border-t border-ink-800 bg-ink-900"
-              style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-            >
-              <div className="mx-auto flex max-w-md">
+            <nav className="px-3 pt-1" style={{ paddingBottom: "max(10px, env(safe-area-inset-bottom))" }}>
+              <div className="glass mx-auto flex max-w-md rounded-[30px] border border-ink-700 bg-ink-900 px-1">
                 {SECTIONS.map((x) => (
                   <button
                     key={x.id}
@@ -361,7 +358,7 @@ function MatchupCard({
   right: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl bg-ink-900 p-4 sm:p-5">
+    <section className="rounded-2xl border border-ink-700 bg-ink-900 p-4 sm:p-5">
       <div className="flex flex-col gap-3">
         {rows.map((r) => (
           <MatchupRow key={r.name} {...r} />
@@ -380,6 +377,51 @@ function MatchupCard({
   );
 }
 
+/** A ring that fills to `value` (0–1). */
+function Ring({ value, size = 112, children }: { value: number; size?: number; children: React.ReactNode }) {
+  const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
+  return (
+    <div
+      className="relative mx-auto flex shrink-0 items-center justify-center rounded-full"
+      style={{
+        width: size,
+        height: size,
+        background: `conic-gradient(var(--color-mint-400) 0 ${pct}%, var(--color-ink-700) ${pct}% 100%)`,
+      }}
+    >
+      <div
+        className="flex flex-col items-center justify-center rounded-full bg-ink-950/80 text-center"
+        style={{ width: size - 22, height: size - 22 }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Widget({
+  label,
+  children,
+  onClick,
+  className = "",
+}: {
+  label: string;
+  children: React.ReactNode;
+  onClick?: () => void;
+  className?: string;
+}) {
+  const Tag = onClick ? "button" : "section";
+  return (
+    <Tag
+      onClick={onClick}
+      className={`flex min-w-0 flex-col rounded-2xl border border-ink-700 bg-ink-900 p-4 text-left ${onClick ? "transition hover:bg-ink-800" : ""} ${className}`}
+    >
+      <span className="text-[11px] font-extrabold tracking-[0.08em] text-ink-400 uppercase">{label}</span>
+      {children}
+    </Tag>
+  );
+}
+
 function Scoreboard({ a }: { a: Analysis }) {
   const gain = Math.round((a.optimalTotal - a.currentTotal) * 10) / 10;
   const opp = a.opponent;
@@ -389,41 +431,40 @@ function Scoreboard({ a }: { a: Analysis }) {
         opp.starters.map((p) => p.weekScore),
       )
     : null;
-  const rows = [
-    {
-      avatar: a.avatar,
-      name: a.teamName,
-      sub: gain > 0 ? `Projected with your moves · +${gain}` : "Projected",
-      pts: a.optimalTotal,
-      lead: !opp || a.optimalTotal >= opp.projected,
-    },
-    ...(opp
-      ? [
-          {
-            avatar: opp.avatar,
-            name: opp.teamName,
-            sub: "Projected",
-            pts: opp.projected,
-            lead: opp.projected > a.optimalTotal,
-          },
-        ]
-      : []),
-  ];
+  const margin = opp ? Math.round((a.optimalTotal - opp.projected) * 10) / 10 : null;
   return (
-    <MatchupCard
-      rows={rows}
-      win={win}
-      left={
-        win !== null ? (
-          <>
-            <b className="text-mint-400">{Math.round(win * 100)}%</b> to win
-          </>
-        ) : (
-          "No head-to-head matchup this week"
-        )
-      }
-      right={`Week ${a.week} · ${a.league.name}`}
-    />
+    <div className="grid grid-cols-2 gap-3">
+      {win !== null && opp ? (
+        <Widget label="Win chance">
+          <div className="mt-3">
+            <Ring value={win}>
+              <span className="text-[28px] leading-none font-black">{Math.round(win * 100)}%</span>
+              <span className="mt-1 max-w-[80px] truncate text-[11px] font-bold text-ink-300">vs {opp.teamName}</span>
+            </Ring>
+          </div>
+        </Widget>
+      ) : (
+        <Widget label="Matchup">
+          <p className="mt-3 text-sm font-semibold text-ink-300">No head-to-head matchup this week.</p>
+        </Widget>
+      )}
+      <Widget label="Projected">
+        <span className="mt-2 font-mono text-[44px] leading-none font-black tracking-tight">
+          {Math.round(a.optimalTotal)}
+        </span>
+        {opp && margin !== null && (
+          <span className="mt-1.5 text-[13px] font-bold text-ink-300">
+            vs {Math.round(opp.projected)} · {margin >= 0 ? `+${margin}` : margin}
+          </span>
+        )}
+        <span className="mt-auto pt-3 text-[11px] font-extrabold tracking-[0.08em] text-ink-400 uppercase">
+          With moves
+        </span>
+        <span className={`text-[13px] font-bold ${gain > 0 ? "text-mint-400" : "text-ink-300"}`}>
+          {gain > 0 ? `+${gain} pts` : "Lineup is set"}
+        </span>
+      </Widget>
+    </div>
   );
 }
 
@@ -677,6 +718,7 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
   const done = tasks.filter((t) => checked[t.id]).length;
   const stashes = a.activeRoster.filter((p) => p.stash);
   const openPlayer = useOpenPlayer();
+  const hurt = a.optimalLineup.map((x) => x.player).filter((p): p is PlayerAnalysis => !!p?.injury);
 
   return (
     <div className="flex flex-col gap-3">
@@ -700,7 +742,7 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
         )}
       </div>
       {tasks.length === 0 ? (
-        <div className="rounded-2xl bg-ink-900 p-5 text-sm text-ink-300">
+        <div className="rounded-2xl border border-ink-700 bg-ink-900 p-5 text-sm text-ink-300">
           Your lineup is already optimal and nothing on waivers beats your roster. Enjoy the games. 🏈
         </div>
       ) : (
@@ -708,7 +750,10 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
           {tasks.map((t) => {
             const isOpen = open === t.id;
             return (
-              <li key={t.id} className={`rounded-2xl bg-ink-900 transition ${checked[t.id] ? "opacity-50" : ""}`}>
+              <li
+                key={t.id}
+                className={`rounded-2xl border border-ink-700 bg-ink-900 transition ${checked[t.id] ? "opacity-50" : ""}`}
+              >
                 <div className="flex items-center gap-3 p-3.5">
                   <button
                     onClick={() => toggle(t.id)}
@@ -799,14 +844,32 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
         </>
       )}
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">
-        <QuickLink
-          label="Recommended lineup"
-          value={`${a.optimalLineup.length} starters`}
-          onClick={() => goTo("lineup")}
-        />
-        <QuickLink label="Waiver targets" value={`${a.waivers.length} worth a claim`} onClick={() => goTo("waivers")} />
-        <QuickLink label="Your roster" value={`${a.roster.length} players`} onClick={() => goTo("roster")} />
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <Widget label="Waivers" onClick={() => goTo("waivers")}>
+          <span className="mt-2 font-mono text-4xl leading-none font-black">
+            {a.waiver.type === "faab" ? `$${a.waiver.budgetLeft ?? 0}` : `#${a.waiver.position ?? "—"}`}
+          </span>
+          <span className="mt-2 text-[13px] font-bold text-ink-300">
+            {a.waivers.length
+              ? `${a.waivers.length} claim${a.waivers.length === 1 ? "" : "s"} worth it`
+              : "Nothing worth a claim"}
+          </span>
+        </Widget>
+        <Widget label="Injuries" onClick={() => goTo("injuries")}>
+          <span
+            className={`mt-2 font-mono text-4xl leading-none font-black ${hurt.length ? "text-amber-300" : "text-mint-400"}`}
+          >
+            {hurt.length}
+          </span>
+          <span className="mt-2 truncate text-[13px] font-bold text-ink-300">
+            {hurt.length
+              ? hurt
+                  .slice(0, 2)
+                  .map((p) => `${p.name.split(" ").slice(-1)[0]} · ${p.injury?.toLowerCase()}`)
+                  .join(", ")
+              : "Starters healthy"}
+          </span>
+        </Widget>
       </div>
     </div>
   );
@@ -896,21 +959,6 @@ function WhyBreakdown({ players }: { players: PlayerAnalysis[] }) {
         </p>
       </div>
     </details>
-  );
-}
-
-function QuickLink({ label, value, onClick }: { label: string; value: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="group flex items-center justify-between rounded-2xl bg-ink-900 px-4 py-3 text-left transition hover:bg-ink-850"
-    >
-      <div>
-        <div className="text-xs text-ink-400">{label}</div>
-        <div className="text-sm font-semibold">{value}</div>
-      </div>
-      <span className="text-ink-400 transition group-hover:translate-x-0.5 group-hover:text-mint-400">→</span>
-    </button>
   );
 }
 
@@ -1024,7 +1072,7 @@ function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => v
   return (
     <div className="flex flex-col gap-5">
       <WaiverStatus a={a} />
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-ink-900 px-4 py-2.5 text-xs text-ink-400">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-ink-700 bg-ink-900 px-4 py-2.5 text-xs text-ink-400">
         <span>
           <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-mint-400" />
           Only players on no roster in this league · checked{" "}
@@ -2674,7 +2722,7 @@ function Roster({ a }: { a: Analysis }) {
         Tap a player for this week&apos;s call, the defense he faces and his workload.
       </p>
       {groups.map((g) => (
-        <section key={g.title} className="rounded-2xl bg-ink-900 p-2">
+        <section key={g.title} className="rounded-2xl border border-ink-700 bg-ink-900 p-2">
           <h2 className="px-3 pt-2 pb-1 text-[15px] font-bold">{g.title}</h2>
           <ul className="flex flex-col">
             {g.players.map((p) => (
