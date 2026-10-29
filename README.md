@@ -28,10 +28,12 @@ Everything is grouped into four sections, each with a few tabs:
 
 | Section | Tabs |
 | --- | --- |
-| **This Week** | Game plan · Games · Lineup · Injuries · Opponent (plus **Live** on game days) |
+| **Home** | Plan (your matchup, the moves to make this week, heads-up alerts) · Lineup · Injuries · Opponent (plus **Live** on game days) |
 | **Moves** | Waivers · Trades |
-| **Season** | Playoffs · Schedule (bye weeks and week-by-week projections) |
-| **My Team** | Roster · Track record |
+| **Games** | Every game this week, with a game center for each |
+| **Team** | Roster · Playoffs · Schedule (bye weeks and week-by-week projections) · Track record |
+
+**Player sheet:** tap any player (Roster, Lineup, the plan, waivers, trades) for this week's call (start, bench or out) and why, the defense he faces (where it ranks against his position, fantasy points it allows per game vs. the league average, and the Vegas line and weather), his workload (snap share, share of team carries and targets, touches and red-zone looks per game vs. his season average), every factor behind the projection, and switches for your rules.
 
 On phones the sections sit in a bottom bar. Badges show only when there's something to act on: waiver targets, or starters who are out or doubtful. The open tab is kept in the URL (e.g. `#playoffs`), so refreshing or reopening the app keeps your place.
 

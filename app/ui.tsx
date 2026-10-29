@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { describeMatchup, type MatchupGrade, type PlayerAnalysis } from "@/lib/advisor";
 import { playerPhotoUrl, teamLogoUrl } from "@/lib/sleeper";
+import { useOpenPlayer } from "./playerctx";
 
 const POS_COLOR: Record<string, string> = {
   QB: "bg-pos-qb/15 text-pos-qb ring-pos-qb/30",
@@ -38,11 +39,11 @@ export function SlotBadge({ slot }: { slot: string }) {
   const pos = slot in POS_COLOR ? slot : null;
   return (
     <span
-      className={`display inline-flex h-7 w-11 shrink-0 -skew-x-12 items-center justify-center text-sm font-extrabold ring-1 ring-inset ${
+      className={`display inline-flex h-7 w-11 shrink-0 rounded-lg items-center justify-center text-sm font-extrabold ring-1 ring-inset ${
         pos ? POS_COLOR[pos] : "bg-ink-700/60 text-ink-300 ring-ink-600"
       }`}
     >
-      <span className="skew-x-12">{SLOT_LABEL[slot] ?? slot}</span>
+      <span className="">{SLOT_LABEL[slot] ?? slot}</span>
     </span>
   );
 }
@@ -180,8 +181,29 @@ export function GameChip({ p }: { p: PlayerAnalysis }) {
 }
 
 export function PlayerLine({ p, size = 40, sub }: { p: PlayerAnalysis; size?: number; sub?: React.ReactNode }) {
+  const open = useOpenPlayer();
+  // Tappable wherever the player sheet is available. A span with a button role, since
+  // player lines often sit inside other clickable rows.
+  const tap = open
+    ? {
+        role: "button",
+        tabIndex: 0,
+        "aria-label": `${p.name}: open details`,
+        onClick: (e: React.MouseEvent) => {
+          e.stopPropagation();
+          open(p);
+        },
+        onKeyDown: (e: React.KeyboardEvent) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            e.stopPropagation();
+            open(p);
+          }
+        },
+      }
+    : {};
   return (
-    <div className="flex min-w-0 items-center gap-3">
+    <div {...tap} className={`flex min-w-0 items-center gap-3 ${open ? "cursor-pointer rounded-lg" : ""}`}>
       <Headshot p={p} size={size} />
       <div className="min-w-0">
         <div className="flex items-center gap-1.5">
@@ -220,14 +242,10 @@ export function Card({
   className?: string;
 }) {
   return (
-    <section
-      className={`min-w-0 border border-ink-700/80 bg-gradient-to-b from-ink-850 to-ink-900 shadow-[0_0_40px_rgb(25_227_255/0.05)] ${className}`}
-    >
+    <section className={`min-w-0 rounded-2xl bg-ink-900 ${className}`}>
       {title && (
-        <header className="flex items-center justify-between gap-3 border-b border-ink-700/60 px-4 py-3 sm:px-5">
-          <h2 className="display border-l-4 border-mint-400 pl-3 text-xl leading-none font-bold text-ink-100">
-            {title}
-          </h2>
+        <header className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-5">
+          <h2 className="text-[17px] leading-tight font-bold tracking-tight text-ink-100">{title}</h2>
           {action}
         </header>
       )}
@@ -237,7 +255,5 @@ export function Card({
 }
 
 export function Empty({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="rounded-xl border border-dashed border-ink-700 p-6 text-center text-sm text-ink-400">{children}</p>
-  );
+  return <p className="rounded-xl bg-ink-850 p-6 text-center text-sm text-ink-400">{children}</p>;
 }

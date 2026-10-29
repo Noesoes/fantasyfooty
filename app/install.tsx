@@ -82,19 +82,12 @@ export function InstallButton() {
         onClick={install}
         title="Install the app on your home screen"
         aria-label="Install app"
-        className="display flex h-9 shrink-0 -skew-x-12 items-center gap-1.5 bg-ink-800 px-3 text-sm font-bold text-mint-400 transition hover:bg-ink-700"
+        className="display flex h-9 shrink-0 rounded-lg items-center gap-1.5 bg-ink-800 px-3 text-sm font-bold text-mint-400 transition hover:bg-ink-700"
       >
-        <svg
-          viewBox="0 0 24 24"
-          className="h-4 w-4 skew-x-12"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.2"
-          aria-hidden
-        >
+        <svg viewBox="0 0 24 24" className="h-4 w-4 " fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
           <path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        <span className="hidden skew-x-12 whitespace-nowrap min-[400px]:inline">Get app</span>
+        <span className="hidden  whitespace-nowrap min-[400px]:inline">Get app</span>
       </button>
 
       {help && (

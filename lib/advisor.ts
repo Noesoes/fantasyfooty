@@ -61,6 +61,9 @@ export interface Matchup {
   teams: number;
   /** Opponent's points allowed per game to this position vs. the league average. */
   ratio: number;
+  /** Fantasy points per game this defense allows to the position, and the league average. */
+  allowed: number;
+  average: number;
   grade: MatchupGrade;
 }
 
@@ -332,7 +335,15 @@ function buildDefenseTable(seasonStats: StatRow[]) {
     // Early-season samples are noisy; shrink toward neutral until ~6 games.
     const confidence = Math.min(1, (gamesByTeam.get(opponent) ?? 0) / 6);
     const ratio = avg > 0 ? 1 + (mine / avg - 1) * confidence : 1;
-    return { opponent, rank, teams: all.length, ratio, grade: gradeFor(rank, all.length) };
+    return {
+      opponent,
+      rank,
+      teams: all.length,
+      ratio,
+      grade: gradeFor(rank, all.length),
+      allowed: Math.round(mine * 10) / 10,
+      average: Math.round(avg * 10) / 10,
+    };
   };
 }
 

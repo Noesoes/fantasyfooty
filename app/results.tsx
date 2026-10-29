@@ -13,10 +13,12 @@ import { buildPlayoffOdds, type PlayoffOdds, type PlayoffTeam } from "@/lib/play
 import { buildInjuryReport, type InjuryReport, type InjuryRow, type Verdict } from "@/lib/injuries";
 import { buildTrackRecord, type TrackRecord } from "@/lib/backtest";
 import { compareStart, factorsFor, FACTOR_LABELS, type FactorKey, type Tone } from "@/lib/explain";
-import { fetchLive, type LivePlayer, type LiveSide, type LiveState } from "@/lib/live";
+import { fetchLive, phi, type LivePlayer, type LiveSide, type LiveState } from "@/lib/live";
 import { GamesTab } from "./games";
 import { FillPosition, PlayerCheck } from "./playercheck";
+import { PlayerSheetProvider } from "./playersheet";
 import { RuleChip, RulesCard } from "./rules";
+import { useOpenPlayer } from "./playerctx";
 import { Card, Empty, Headshot, MatchupChip, PlayerLine, Points, PosBadge, SlotBadge } from "./ui";
 
 type Tab =
@@ -33,17 +35,16 @@ type Tab =
   | "record"
   | "roster";
 
-type Section = "week" | "moves" | "season" | "team";
+type Section = "week" | "moves" | "games" | "team";
 
 // Four sections, each with a few sub-tabs. New features go into one of
 // these rather than becoming another top-level tab.
 const SECTIONS: { id: Section; label: string; tabs: { id: Tab; label: string }[] }[] = [
   {
     id: "week",
-    label: "This Week",
+    label: "Home",
     tabs: [
-      { id: "plan", label: "Game plan" },
-      { id: "games", label: "Games" },
+      { id: "plan", label: "Plan" },
       { id: "lineup", label: "Lineup" },
       { id: "injuries", label: "Injuries" },
       { id: "scout", label: "Opponent" },
@@ -57,19 +58,14 @@ const SECTIONS: { id: Section; label: string; tabs: { id: Tab; label: string }[]
       { id: "trades", label: "Trades" },
     ],
   },
-  {
-    id: "season",
-    label: "Season",
-    tabs: [
-      { id: "playoffs", label: "Playoffs" },
-      { id: "planner", label: "Schedule" },
-    ],
-  },
+  { id: "games", label: "Games", tabs: [{ id: "games", label: "Games" }] },
   {
     id: "team",
-    label: "My Team",
+    label: "Team",
     tabs: [
       { id: "roster", label: "Roster" },
+      { id: "playoffs", label: "Playoffs" },
+      { id: "planner", label: "Schedule" },
       { id: "record", label: "Track record" },
     ],
   },
@@ -80,14 +76,14 @@ const ALL_TABS = new Set<string>(["live", ...SECTIONS.flatMap((s) => s.tabs.map(
 
 function SectionIcon({ id, className = "h-5 w-5" }: { id: Section; className?: string }) {
   const paths: Record<Section, React.ReactNode> = {
-    week: (
+    week: <path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z" />,
+    moves: <path d="M5 8h13l-3.5-3.5M19 16H6l3.5 3.5" />,
+    games: (
       <>
-        <rect x="5" y="4" width="14" height="17" rx="2" />
-        <path d="M9 3h6v3H9zM9 13l2 2 4-4" />
+        <ellipse cx="12" cy="12" rx="9" ry="6" transform="rotate(-35 12 12)" />
+        <path d="M9.5 14.5l5-5M10.5 11l2.5 2.5M12 9.5l2.5 2.5" />
       </>
     ),
-    moves: <path d="M5 8h13l-3.5-3.5M19 16H6l3.5 3.5" />,
-    season: <path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 21h8M10 17h4" />,
     team: (
       <>
         <circle cx="9" cy="8" r="3.2" />
@@ -115,8 +111,8 @@ function Badge({ n, active }: { n: number; active?: boolean }) {
   if (n <= 0) return null;
   return (
     <span
-      className={`ml-1.5 inline-flex min-w-[1.25rem] items-center justify-center px-1 font-mono text-[11px] leading-[1.1rem] font-bold ${
-        active ? "bg-ink-950/25 text-ink-950" : "bg-hot text-white"
+      className={`ml-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 font-mono text-[11px] leading-[1.1rem] font-bold ${
+        active ? "bg-ink-950/20 text-ink-950" : "bg-hot text-white"
       }`}
     >
       {n}
@@ -210,206 +206,224 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
   };
 
   return (
-    <div className="mt-6 flex flex-col gap-5">
-      <Ticker a={a} />
-      {live && showLive ? <LiveScoreboard a={a} live={live} /> : <Scoreboard a={a} />}
-      <div ref={top} className="-mb-5 scroll-mt-0" />
-      <nav className="sticky top-0 z-20 -mx-4 bg-ink-950/90 px-4 pt-2 pb-1 backdrop-blur sm:mx-0 sm:px-1">
-        {/* Sections: top bar on desktop (bottom bar on phones, below). */}
-        <div className="hidden gap-1 px-2 sm:flex">
-          {SECTIONS.map((x) => (
-            <button
-              key={x.id}
-              onClick={() => openSection(x.id)}
-              aria-current={section === x.id ? "page" : undefined}
-              className={`display flex flex-1 -skew-x-12 items-center justify-center px-4 py-2.5 text-base font-bold whitespace-nowrap transition ${
-                section === x.id
-                  ? "prime-gradient text-ink-950 shadow-[0_0_24px_rgb(25_227_255/0.35)]"
-                  : "bg-ink-800 text-ink-400 hover:bg-ink-700 hover:text-ink-100"
-              }`}
-            >
-              <span className="flex skew-x-12 items-center gap-2">
+    <PlayerSheetProvider a={a}>
+      <div className="mt-4 flex flex-col gap-4">
+        {section === "week" && (live && showLive ? <LiveScoreboard a={a} live={live} /> : <Scoreboard a={a} />)}
+        <div ref={top} className="-mb-4 scroll-mt-0" />
+        <nav className="sticky top-0 z-20 -mx-4 bg-ink-950/90 px-4 pt-2 pb-2 backdrop-blur sm:mx-0 sm:px-0">
+          {/* Sections: top bar on desktop (bottom bar on phones, below). */}
+          <div className="mb-2 hidden gap-1 rounded-xl bg-ink-900 p-1 sm:flex">
+            {SECTIONS.map((x) => (
+              <button
+                key={x.id}
+                onClick={() => openSection(x.id)}
+                aria-current={section === x.id ? "page" : undefined}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold whitespace-nowrap transition ${
+                  section === x.id ? "bg-ink-800 text-ink-100" : "text-ink-400 hover:text-ink-100"
+                }`}
+              >
                 <SectionIcon id={x.id} className="h-[18px] w-[18px]" />
                 {x.label}
                 {x.id === "week" && isLive && <span className="h-2 w-2 animate-pulse rounded-full bg-hot" />}
-                <Badge n={sectionCount(x.id)} active={section === x.id} />
-              </span>
-            </button>
-          ))}
-        </div>
-        {/* Sub-tabs for the open section. */}
-        <div className="no-scrollbar mt-1 flex gap-1 overflow-x-auto border-b border-ink-700/70 px-2 sm:mt-2">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              aria-current={tab === t.id ? "page" : undefined}
-              className={`display -mb-px shrink-0 border-b-[3px] px-3 py-2 text-[15px] font-bold whitespace-nowrap transition ${
-                tab === t.id
-                  ? t.id === "live"
-                    ? "border-hot text-hot"
-                    : "border-mint-400 text-ink-100"
-                  : "border-transparent text-ink-400 hover:text-ink-100"
-              }`}
-            >
-              {t.label}
-              <Badge n={counts[t.id] ?? 0} />
-            </button>
-          ))}
-        </div>
-      </nav>
-      {tab === "live" && live && <LiveTab live={live} />}
-      {tab === "plan" && <GamePlan a={a} goTo={setTab} />}
-      {tab === "games" && <GamesTab a={a} />}
-      {tab === "lineup" && <Lineup a={a} />}
-      {tab === "injuries" && <Injuries a={a} />}
-      {tab === "waivers" && <Waivers a={a} onRefresh={onRefresh} refreshing={refreshing} />}
-      {tab === "trades" && <Trades a={a} />}
-      {tab === "scout" && <Scout a={a} />}
-      {tab === "planner" && <Planner a={a} />}
-      {tab === "playoffs" && <Playoffs a={a} />}
-      {tab === "record" && <Record a={a} />}
-      {tab === "roster" && <Roster a={a} />}
-
-      {/* Phone: sections in a thumb-reach bar under the scrolling area. */}
-      {navSlot &&
-        createPortal(
-          <nav className="border-t border-ink-700 bg-ink-900" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-            <div className="mx-auto flex max-w-md">
-              {SECTIONS.map((x) => (
+                <Badge n={sectionCount(x.id)} />
+              </button>
+            ))}
+          </div>
+          {/* Sub-tabs for the open section, as a segmented control. */}
+          {tabs.length > 1 && (
+            <div className="no-scrollbar flex gap-1 overflow-x-auto rounded-xl bg-ink-900 p-1">
+              {tabs.map((t) => (
                 <button
-                  key={x.id}
-                  onClick={() => openSection(x.id)}
-                  aria-current={section === x.id ? "page" : undefined}
-                  className={`relative flex flex-1 flex-col items-center gap-0.5 pt-2 pb-1.5 transition ${
-                    section === x.id ? "text-mint-400" : "text-ink-400"
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  aria-current={tab === t.id ? "page" : undefined}
+                  className={`flex shrink-0 grow items-center justify-center rounded-lg px-3 py-1.5 text-[13px] font-semibold whitespace-nowrap transition ${
+                    tab === t.id
+                      ? t.id === "live"
+                        ? "bg-hot/15 text-hot"
+                        : "bg-ink-800 text-ink-100 shadow-sm"
+                      : "text-ink-400 hover:text-ink-100"
                   }`}
                 >
-                  {section === x.id && <span className="prime-gradient absolute inset-x-4 top-0 h-[3px]" />}
-                  <span className="relative">
-                    <SectionIcon id={x.id} className="h-6 w-6" />
-                    {x.id === "week" && isLive ? (
-                      <span className="absolute -top-0.5 -right-1 h-2.5 w-2.5 animate-pulse rounded-full bg-hot ring-2 ring-ink-900" />
-                    ) : (
-                      sectionCount(x.id) > 0 && (
-                        <span className="absolute -top-1.5 -right-2.5 min-w-[1.1rem] rounded-full bg-hot px-1 text-center font-mono text-[10px] leading-[1.1rem] font-bold text-white">
-                          {sectionCount(x.id)}
-                        </span>
-                      )
-                    )}
-                  </span>
-                  <span className="display text-[11px] font-bold tracking-wide uppercase">{x.label}</span>
+                  {t.label}
+                  <Badge n={counts[t.id] ?? 0} />
                 </button>
               ))}
             </div>
-          </nav>,
-          navSlot,
-        )}
-    </div>
+          )}
+        </nav>
+        {tab === "live" && live && <LiveTab live={live} />}
+        {tab === "plan" && <GamePlan a={a} goTo={setTab} />}
+        {tab === "games" && <GamesTab a={a} />}
+        {tab === "lineup" && <Lineup a={a} />}
+        {tab === "injuries" && <Injuries a={a} />}
+        {tab === "waivers" && <Waivers a={a} onRefresh={onRefresh} refreshing={refreshing} />}
+        {tab === "trades" && <Trades a={a} />}
+        {tab === "scout" && <Scout a={a} />}
+        {tab === "planner" && <Planner a={a} />}
+        {tab === "playoffs" && <Playoffs a={a} />}
+        {tab === "record" && <Record a={a} />}
+        {tab === "roster" && <Roster a={a} />}
+
+        {/* Phone: sections in a thumb-reach bar under the scrolling area. */}
+        {navSlot &&
+          createPortal(
+            <nav
+              className="border-t border-ink-800 bg-ink-950/95 backdrop-blur"
+              style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+            >
+              <div className="mx-auto flex max-w-md">
+                {SECTIONS.map((x) => (
+                  <button
+                    key={x.id}
+                    onClick={() => openSection(x.id)}
+                    aria-current={section === x.id ? "page" : undefined}
+                    className={`relative flex flex-1 flex-col items-center gap-1 pt-2.5 pb-1.5 transition ${
+                      section === x.id ? "text-ink-100" : "text-ink-500"
+                    }`}
+                  >
+                    <span className="relative">
+                      <SectionIcon id={x.id} className={`h-6 w-6 ${section === x.id ? "text-mint-400" : ""}`} />
+                      {x.id === "week" && isLive ? (
+                        <span className="absolute -top-0.5 -right-1 h-2.5 w-2.5 animate-pulse rounded-full bg-hot ring-2 ring-ink-900" />
+                      ) : (
+                        sectionCount(x.id) > 0 && (
+                          <span className="absolute -top-1.5 -right-2.5 min-w-[1.1rem] rounded-full bg-hot px-1 text-center font-mono text-[10px] leading-[1.1rem] font-bold text-white">
+                            {sectionCount(x.id)}
+                          </span>
+                        )
+                      )}
+                    </span>
+                    <span className="text-[10.5px] font-semibold">{x.label}</span>
+                  </button>
+                ))}
+              </div>
+            </nav>,
+            navSlot,
+          )}
+      </div>
+    </PlayerSheetProvider>
   );
 }
 
-function Avatar({ id, name, ring = "ring-mint-400" }: { id: string | null; name: string; ring?: string }) {
-  return id ? (
-    <img src={avatarUrl(id)} alt="" className={`h-14 w-14 shrink-0 rounded-full ring-[3px] ${ring}`} />
-  ) : (
-    <div
-      className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-ink-700 text-lg font-bold text-ink-300 ring-[3px] ${ring}`}
-    >
-      {name.charAt(0).toUpperCase()}
-    </div>
-  );
+/** Win chance from projected points, with the usual week-to-week spread (same model as Live mode). */
+function projectedWin(mine: number[], theirs: number[]): number {
+  const variance = [...mine, ...theirs].reduce((v, x) => v + (0.6 * x) ** 2, 0);
+  const sd = Math.sqrt(variance);
+  const margin = mine.reduce((s, x) => s + x, 0) - theirs.reduce((s, x) => s + x, 0);
+  return sd < 0.5 ? (margin > 0 ? 1 : margin < 0 ? 0 : 0.5) : phi(margin / sd);
 }
 
-/** Broadcast-style crawl of the week's headline facts. */
-function Ticker({ a }: { a: Analysis }) {
-  const gain = Math.round((a.optimalTotal - a.currentTotal) * 10) / 10;
-  const items = [
-    a.league.name,
-    a.scoringLabel,
-    waiverChip(a),
-    a.warnings.length ? `${a.warnings.length} lineup alert${a.warnings.length === 1 ? "" : "s"}` : "Lineup set",
-    gain > 0 ? `+${gain} with moves` : "Lineup optimal",
-    a.waivers.length ? `${a.waivers.length} waiver target${a.waivers.length === 1 ? "" : "s"}` : null,
-  ].filter(Boolean);
+function MatchupRow({
+  avatar,
+  name,
+  sub,
+  pts,
+  lead,
+}: {
+  avatar: string | null;
+  name: string;
+  sub: string;
+  pts: number;
+  lead: boolean;
+}) {
   return (
-    <div className="display flex h-9 items-stretch overflow-hidden border border-ink-700/80 bg-ink-900 text-sm font-semibold">
-      <span className="flex shrink-0 items-center bg-hot px-4 pr-6 font-extrabold whitespace-nowrap text-white [clip-path:polygon(0_0,100%_0,85%_100%,0_100%)]">
-        Prime time · Wk {a.week}
-      </span>
-      <div className="no-scrollbar flex items-center gap-6 overflow-x-auto pl-4 whitespace-nowrap text-ink-100">
-        {items.map((t) => (
-          <span key={t as string}>
-            <span className="mr-1.5 text-hot">▸</span>
-            {t}
-          </span>
-        ))}
+    <div className="flex items-center gap-3">
+      {avatar ? (
+        <img src={avatarUrl(avatar)} alt="" className="h-10 w-10 shrink-0 rounded-full" />
+      ) : (
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ink-700 font-bold text-ink-300">
+          {name.charAt(0).toUpperCase()}
+        </div>
+      )}
+      <div className="min-w-0">
+        <div className="truncate font-semibold">{name}</div>
+        <div className="truncate text-xs text-ink-400">{sub}</div>
+      </div>
+      <div
+        className={`ml-auto shrink-0 font-mono text-[34px] leading-none font-extrabold tracking-tight ${lead ? "text-ink-100" : "text-ink-400"}`}
+      >
+        {pts.toFixed(1)}
       </div>
     </div>
+  );
+}
+
+function MatchupCard({
+  rows,
+  win,
+  left,
+  right,
+}: {
+  rows: React.ComponentProps<typeof MatchupRow>[];
+  win: number | null;
+  left: React.ReactNode;
+  right: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl bg-ink-900 p-4 sm:p-5">
+      <div className="flex flex-col gap-3">
+        {rows.map((r) => (
+          <MatchupRow key={r.name} {...r} />
+        ))}
+      </div>
+      {win !== null && (
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-ink-700">
+          <div className="h-full rounded-full bg-mint-400 transition-all" style={{ width: `${win * 100}%` }} />
+        </div>
+      )}
+      <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs text-ink-400">
+        <span>{left}</span>
+        <span>{right}</span>
+      </div>
+    </section>
   );
 }
 
 function Scoreboard({ a }: { a: Analysis }) {
   const gain = Math.round((a.optimalTotal - a.currentTotal) * 10) / 10;
   const opp = a.opponent;
-  const share = opp ? a.optimalTotal / Math.max(1, a.optimalTotal + opp.projected) : 0.5;
+  const win = opp
+    ? projectedWin(
+        a.optimalLineup.map((s) => s.player?.weekScore ?? 0),
+        opp.starters.map((p) => p.weekScore),
+      )
+    : null;
+  const rows = [
+    {
+      avatar: a.avatar,
+      name: a.teamName,
+      sub: gain > 0 ? `Projected with your moves · +${gain}` : "Projected",
+      pts: a.optimalTotal,
+      lead: !opp || a.optimalTotal >= opp.projected,
+    },
+    ...(opp
+      ? [
+          {
+            avatar: opp.avatar,
+            name: opp.teamName,
+            sub: "Projected",
+            pts: opp.projected,
+            lead: opp.projected > a.optimalTotal,
+          },
+        ]
+      : []),
+  ];
   return (
-    <section className="overflow-hidden border border-ink-700/80 bg-gradient-to-b from-ink-800 to-ink-900 shadow-[0_0_48px_rgb(25_227_255/0.10)]">
-      <div className="grid grid-cols-[minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_150px_minmax(0,1fr)]">
-        <div className="flex items-center gap-4 p-5">
-          <Avatar id={a.avatar} name={a.teamName} />
-          <div className="min-w-0">
-            <div className="display truncate text-2xl leading-tight font-extrabold">{a.teamName}</div>
-            <div className="text-xs text-ink-400">
-              Current lineup {a.currentTotal.toFixed(1)}
-              {gain > 0 && <span className="text-mint-300"> · +{gain} with moves</span>}
-            </div>
-          </div>
-          <div className="glow ml-auto shrink-0 font-mono text-4xl min-[360px]:text-5xl min-[400px]:text-6xl leading-none font-black text-ink-100 tabular-nums sm:text-7xl">
-            {a.optimalTotal.toFixed(1)}
-          </div>
-        </div>
-        {opp ? (
+    <MatchupCard
+      rows={rows}
+      win={win}
+      left={
+        win !== null ? (
           <>
-            <div className="prime-gradient display flex items-center justify-center gap-3 py-2 text-ink-950 sm:flex-col sm:gap-0 sm:py-0 sm:[clip-path:polygon(14%_0,100%_0,86%_100%,0_100%)]">
-              <span className="text-[11px] font-bold tracking-[0.14em]">Projected</span>
-              <span className="font-mono text-3xl leading-none font-black sm:text-4xl">{Math.round(share * 100)}%</span>
-              <span className="text-[11px] font-bold tracking-[0.14em]">Win share</span>
-            </div>
-            <div className="flex items-center gap-4 p-5 sm:flex-row-reverse sm:text-right">
-              <Avatar id={opp.avatar} name={opp.teamName} ring="ring-hot" />
-              <div className="min-w-0">
-                <div className="display truncate text-2xl leading-tight font-extrabold">{opp.teamName}</div>
-                <div className="text-xs text-ink-400">Opponent · projected</div>
-              </div>
-              <div className="glow-hot ml-auto shrink-0 font-mono text-4xl min-[360px]:text-5xl min-[400px]:text-6xl leading-none font-black text-rose-300 tabular-nums sm:mr-auto sm:ml-0 sm:text-7xl">
-                {opp.projected.toFixed(1)}
-              </div>
-            </div>
+            <b className="text-mint-400">{Math.round(win * 100)}%</b> to win
           </>
         ) : (
-          <div className="flex items-center p-5 text-sm text-ink-400 sm:col-span-2 sm:justify-end">
-            No head-to-head matchup this week.
-          </div>
-        )}
-      </div>
-      {opp && (
-        <>
-          <div className="flex h-2">
-            <div
-              className="prime-gradient shadow-[0_0_12px_rgb(25_227_255/0.6)]"
-              style={{ width: `${share * 100}%` }}
-            />
-            <div className="flex-1 bg-hot" />
-          </div>
-          <div className="px-5 py-2.5 text-xs text-ink-400">
-            {a.optimalTotal >= opp.projected
-              ? `Projected to win by ${(a.optimalTotal - opp.projected).toFixed(1)} if you make the moves below.`
-              : `Projected to lose by ${(opp.projected - a.optimalTotal).toFixed(1)} — the waiver tab may help close the gap.`}
-          </div>
-        </>
-      )}
-    </section>
+          "No head-to-head matchup this week"
+        )
+      }
+      right={`Week ${a.week} · ${a.league.name}`}
+    />
   );
 }
 
@@ -419,72 +433,32 @@ function LiveScoreboard({ a, live }: { a: Analysis; live: LiveState }) {
   const me = live.me;
   const opp = live.opponent;
   const win = live.winProbability;
+  const sub = (s: LiveState["me"]) =>
+    `${s.remaining > 0 ? `+${s.remaining} to come · ` : ""}proj ${s.projectedFinal.toFixed(1)}`;
+  const rows = [
+    { avatar: a.avatar, name: me.teamName, sub: sub(me), pts: me.score, lead: !opp || me.score >= opp.score },
+    ...(opp
+      ? [{ avatar: opp.avatar, name: opp.teamName, sub: sub(opp), pts: opp.score, lead: opp.score > me.score }]
+      : []),
+  ];
   return (
-    <section className="overflow-hidden border border-ink-700/80 bg-gradient-to-b from-ink-800 to-ink-900 shadow-[0_0_48px_rgb(255_46_136/0.12)]">
-      <div className="grid grid-cols-[minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_150px_minmax(0,1fr)]">
-        <div className="flex items-center gap-4 p-5">
-          <Avatar id={a.avatar} name={me.teamName} />
-          <div className="min-w-0">
-            <div className="display truncate text-2xl leading-tight font-extrabold">{me.teamName}</div>
-            <div className="text-xs text-ink-400">
-              {me.remaining > 0 ? `+${me.remaining} still to come · ` : ""}proj final {me.projectedFinal.toFixed(1)}
-            </div>
-          </div>
-          <div className="glow ml-auto shrink-0 font-mono text-4xl min-[360px]:text-5xl min-[400px]:text-6xl leading-none font-black text-ink-100 tabular-nums sm:text-7xl">
-            {me.score.toFixed(1)}
-          </div>
-        </div>
-        {opp ? (
-          <>
-            <div className="prime-gradient display flex items-center justify-center gap-3 py-2 text-ink-950 sm:flex-col sm:gap-0 sm:py-0 sm:[clip-path:polygon(14%_0,100%_0,86%_100%,0_100%)]">
-              <span className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.14em]">
-                {!live.allDone && <span className="h-2 w-2 animate-pulse rounded-full bg-hot" />}
-                {live.allDone ? "Final" : "Live"}
-              </span>
-              <span className="font-mono text-3xl leading-none font-black sm:text-4xl">
-                {win === null ? "—" : `${Math.round(win * 100)}%`}
-              </span>
-              <span className="text-[11px] font-bold tracking-[0.14em]">{live.allDone ? "Result" : "Win prob"}</span>
-            </div>
-            <div className="flex items-center gap-4 p-5 sm:flex-row-reverse sm:text-right">
-              <Avatar id={opp.avatar} name={opp.teamName} ring="ring-hot" />
-              <div className="min-w-0">
-                <div className="display truncate text-2xl leading-tight font-extrabold">{opp.teamName}</div>
-                <div className="text-xs text-ink-400">
-                  {opp.remaining > 0 ? `+${opp.remaining} still to come · ` : ""}proj final{" "}
-                  {opp.projectedFinal.toFixed(1)}
-                </div>
-              </div>
-              <div className="glow-hot ml-auto shrink-0 font-mono text-4xl min-[360px]:text-5xl min-[400px]:text-6xl leading-none font-black text-rose-300 tabular-nums sm:mr-auto sm:ml-0 sm:text-7xl">
-                {opp.score.toFixed(1)}
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="flex items-center p-5 text-sm text-ink-400 sm:col-span-2 sm:justify-end">
-            No head-to-head matchup this week.
-          </div>
-        )}
-      </div>
-      {opp && win !== null && (
-        <>
-          <div className="flex h-2">
-            <div className="prime-gradient shadow-[0_0_12px_rgb(25_227_255/0.6)]" style={{ width: `${win * 100}%` }} />
-            <div className="flex-1 bg-hot" />
-          </div>
-          <div className="flex flex-wrap justify-between gap-2 px-5 py-2.5 text-xs text-ink-400">
-            <span>
-              You: {me.playing} playing · {me.yetToPlay} yet to play — {opp.teamName}: {opp.playing} playing ·{" "}
-              {opp.yetToPlay} yet to play
-            </span>
-            <span>
-              Updated {new Date(live.asOf).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-              {live.inProgress ? " · refreshes every minute" : ""}
-            </span>
-          </div>
-        </>
-      )}
-    </section>
+    <MatchupCard
+      rows={rows}
+      win={win}
+      left={
+        <span className="inline-flex items-center gap-1.5">
+          {!live.allDone && <span className="h-2 w-2 animate-pulse rounded-full bg-hot" />}
+          {live.allDone ? "Final" : "Live"}
+          {win !== null && (
+            <>
+              {" · "}
+              <b className="text-mint-400">{Math.round(win * 100)}%</b> to win
+            </>
+          )}
+        </span>
+      }
+      right={`${me.playing} playing · ${me.yetToPlay} to play · updated ${new Date(live.asOf).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}
+    />
   );
 }
 
@@ -603,6 +577,8 @@ interface Task {
   id: string;
   kind: "start" | "bench" | "add";
   title: React.ReactNode;
+  /** One line under the title. */
+  short: React.ReactNode;
   detail: string;
   players: PlayerAnalysis[];
   /** Start/sit calls: the players to break down side by side (the pick first). */
@@ -646,20 +622,21 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
         title:
           m.action === "start" ? (
             <>
-              Start <b>{m.player.name}</b>
-              {m.vs && (
-                <>
-                  {" "}
-                  over <b>{m.vs.name}</b>
-                </>
-              )}{" "}
-              at {m.slot}
+              Start {m.player.name} at {m.slot}
             </>
           ) : (
-            <>
-              Bench <b>{m.player.name}</b>
-            </>
+            <>Bench {m.player.name}</>
           ),
+        short: m.vs ? (
+          <>
+            {m.action === "start" ? "Over" : "For"} {m.vs.name} ·{" "}
+            <span className="text-mint-400">
+              +{Math.round(Math.abs(pair[0].weekScore - pair[1].weekScore) * 10) / 10} pts
+            </span>
+          </>
+        ) : (
+          m.reason
+        ),
         detail: m.vs ? compareStart(pair[0], pair[1]).headline : m.reason,
         players: pair,
         why: pair,
@@ -671,17 +648,17 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
         kind: "add",
         title: (
           <>
-            Claim <b>{w.player.name}</b>
-            {w.bid && (
-              <>
-                {" "}
-                for <b>${w.bid.suggested}</b>
-              </>
-            )}
-            {w.dropFor && (
-              <>
-                , drop <b>{w.dropFor.name}</b>
-              </>
+            Claim {w.player.name}
+            {w.bid && <> for ${w.bid.suggested}</>}
+          </>
+        ),
+        short: (
+          <>
+            {w.dropFor ? `Drop ${w.dropFor.name} · ` : ""}
+            {w.likelyClaimedBy ? (
+              <span className="text-rose-400">May go to {w.likelyClaimedBy}</span>
+            ) : (
+              <span className="text-mint-400">Likely yours</span>
             )}
           </>
         ),
@@ -696,87 +673,133 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
     return list;
   }, [a]);
   const [checked, toggle] = useChecked(`plan:${a.league.league_id}:${a.week}`);
+  const [open, setOpen] = useState<string | null>(null);
   const done = tasks.filter((t) => checked[t.id]).length;
+  const stashes = a.activeRoster.filter((p) => p.stash);
+  const openPlayer = useOpenPlayer();
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-3">
       {a.bestBall && (
-        <div className="rounded-xl border border-pos-wr/30 bg-pos-wr/10 px-4 py-3 text-sm text-ink-100">
+        <div className="rounded-2xl bg-pos-wr/10 px-4 py-3 text-sm text-ink-100">
           <b>Best-ball league:</b> Sleeper picks your highest-scoring lineup automatically each week, so there are no
           start/sit calls here. Waivers, trades and depth are what matter.
         </div>
       )}
-      {a.warnings.length > 0 && (
-        <div className="flex flex-col gap-2">
-          {a.warnings.map((w) => (
-            <div
-              key={w}
-              className="flex items-center gap-3 bg-gradient-to-r from-hot to-[#b5179e] px-4 py-3 text-sm font-semibold text-white"
-            >
-              <span className="display shrink-0 bg-ink-950 px-2 py-0.5 text-base font-black text-white">Alert</span>
-              <span>{w}</span>
-            </div>
-          ))}
-        </div>
-      )}
 
-      <Card
-        title="This week's to-do list"
-        action={
-          tasks.length > 0 && (
-            <span className="text-xs text-ink-400">
-              {done}/{tasks.length} done
-            </span>
-          )
-        }
-      >
-        {tasks.length === 0 ? (
-          <Empty>Your lineup is already optimal and nothing on waivers beats your roster. Enjoy the games. 🏈</Empty>
-        ) : (
-          <>
-            <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-ink-700">
-              <div className="h-full bg-mint-400 transition-all" style={{ width: `${(done / tasks.length) * 100}%` }} />
-            </div>
-            <ol className="flex flex-col gap-2">
-              {tasks.map((t, i) => (
-                <li key={t.id}>
+      <div className="mt-2 flex items-baseline justify-between px-1">
+        <h2 className="text-xl font-bold tracking-tight">
+          {tasks.length === 0
+            ? "Nothing to do"
+            : `Do ${tasks.length === 1 ? "this" : `these ${tasks.length}`} ${tasks.length === 1 ? "thing" : "things"}`}
+        </h2>
+        {tasks.length > 0 && (
+          <span className="text-sm text-ink-400">
+            {done}/{tasks.length} done
+          </span>
+        )}
+      </div>
+      {tasks.length === 0 ? (
+        <div className="rounded-2xl bg-ink-900 p-5 text-sm text-ink-300">
+          Your lineup is already optimal and nothing on waivers beats your roster. Enjoy the games. 🏈
+        </div>
+      ) : (
+        <ol className="flex flex-col gap-2">
+          {tasks.map((t) => {
+            const isOpen = open === t.id;
+            return (
+              <li key={t.id} className={`rounded-2xl bg-ink-900 transition ${checked[t.id] ? "opacity-50" : ""}`}>
+                <div className="flex items-center gap-3 p-3.5">
                   <button
                     onClick={() => toggle(t.id)}
-                    className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition ${
+                    aria-label={checked[t.id] ? "Mark as not done" : "Mark as done"}
+                    aria-pressed={!!checked[t.id]}
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold transition ${
                       checked[t.id]
-                        ? "border-ink-700 border-l-4 border-l-mint-400 bg-ink-850/40 opacity-55"
-                        : "border-ink-700 border-l-4 border-l-violet bg-ink-850 hover:border-ink-600"
+                        ? "border-mint-400 bg-mint-400 text-ink-950"
+                        : "border-ink-600 hover:border-mint-400"
                     }`}
                   >
-                    <span
-                      className={`w-7 shrink-0 text-center font-mono text-4xl leading-none font-black ${
-                        checked[t.id] ? "text-mint-400" : "glow text-mint-400"
-                      }`}
-                    >
-                      {checked[t.id] ? "✓" : i + 1}
-                    </span>
+                    {checked[t.id] ? "✓" : ""}
+                  </button>
+                  <button
+                    onClick={() => openPlayer?.(t.players[0])}
+                    className="shrink-0"
+                    aria-label={`${t.players[0].name}: open details`}
+                  >
+                    <Headshot p={t.players[0]} size={44} />
+                  </button>
+                  <button
+                    onClick={() => setOpen(isOpen ? null : t.id)}
+                    aria-expanded={isOpen}
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  >
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <KindTag kind={t.kind} />
-                        <span className={`text-sm ${checked[t.id] ? "line-through" : ""}`}>{t.title}</span>
+                      <div className={`text-[15px] leading-snug font-semibold ${checked[t.id] ? "line-through" : ""}`}>
+                        {t.title}
                       </div>
-                      <p className="mt-1 text-xs leading-relaxed text-ink-400">{t.detail}</p>
+                      <div className="mt-0.5 truncate text-[13px] text-ink-400">{t.short}</div>
                     </div>
-                    <div className="hidden shrink-0 -space-x-2 sm:flex">
+                    <span className={`shrink-0 text-xl text-ink-500 transition ${isOpen ? "rotate-90" : ""}`}>›</span>
+                  </button>
+                </div>
+                {isOpen && (
+                  <div className="border-t border-ink-800 px-4 pt-3 pb-4">
+                    <p className="text-sm leading-relaxed text-ink-300">{t.detail}</p>
+                    {t.why && <WhyBreakdown players={t.why} />}
+                    <div className="mt-3 flex flex-wrap gap-2">
                       {t.players.map((p) => (
-                        <Headshot key={p.id} p={p} size={36} />
+                        <button
+                          key={p.id}
+                          onClick={() => openPlayer?.(p)}
+                          className="rounded-full bg-ink-800 px-3 py-1.5 text-xs font-semibold text-ink-100 hover:bg-ink-700"
+                        >
+                          {p.name.split(" ").slice(-1)[0]}&apos;s matchup &amp; workload ›
+                        </button>
                       ))}
                     </div>
-                  </button>
-                  {t.why && !checked[t.id] && <WhyBreakdown players={t.why} />}
-                </li>
-              ))}
-            </ol>
-          </>
-        )}
-      </Card>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      )}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      {(a.warnings.length > 0 || stashes.length > 0) && (
+        <>
+          <h2 className="mt-4 px-1 text-xl font-bold tracking-tight">Heads up</h2>
+          <ul className="flex flex-col gap-2">
+            {a.warnings.map((w) => (
+              <li key={w} className="flex gap-3 rounded-2xl bg-rose-500/10 p-3.5 text-sm text-ink-100">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-400 text-xs font-black text-ink-950">
+                  !
+                </span>
+                <span>{w}</span>
+              </li>
+            ))}
+            {stashes.map((p) => (
+              <li key={p.id}>
+                <button
+                  onClick={() => openPlayer?.(p)}
+                  className="flex w-full items-center gap-3 rounded-2xl bg-violet/10 p-3.5 text-left"
+                >
+                  <Headshot p={p} size={44} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[15px] font-semibold">Keep stashing {p.name}</div>
+                    <div className="truncate text-[13px] text-ink-400">
+                      ~{Math.round(p.stash!.chance * 100)}% chance {p.stash!.starter}&apos;s job opens up
+                    </div>
+                  </div>
+                  <span className="text-xl text-ink-500">›</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
         <QuickLink
           label="Recommended lineup"
           value={`${a.optimalLineup.length} starters`}
@@ -801,7 +824,7 @@ function WhyBreakdown({ players }: { players: PlayerAnalysis[] }) {
   const factors = players.map((p) => new Map(factorsFor(p).map((f) => [f.key, f])));
   const keys = (Object.keys(FACTOR_LABELS) as FactorKey[]).filter((k) => factors.some((m) => m.has(k)));
   return (
-    <details className="group mt-1 rounded-xl border border-ink-700 bg-ink-900 text-xs">
+    <details className="group mt-3 rounded-xl bg-ink-850 text-xs">
       <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2 font-semibold text-mint-400 select-none">
         <span>Why this call?</span>
         <span className="text-ink-400 transition group-open:rotate-90">›</span>
@@ -876,21 +899,11 @@ function WhyBreakdown({ players }: { players: PlayerAnalysis[] }) {
   );
 }
 
-function KindTag({ kind }: { kind: Task["kind"] }) {
-  const style = {
-    start: "bg-mint-400 text-ink-950",
-    bench: "bg-ink-400 text-ink-950",
-    add: "bg-ink-100 text-ink-950",
-  }[kind];
-  const label = { start: "Start", bench: "Bench", add: "Waiver" }[kind];
-  return <span className={`display px-2 py-0.5 text-xs leading-none font-extrabold ${style}`}>{label}</span>;
-}
-
 function QuickLink({ label, value, onClick }: { label: string; value: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="group flex items-center justify-between rounded-xl border border-ink-700/70 bg-ink-900 px-4 py-3 text-left transition hover:border-mint-400/50"
+      className="group flex items-center justify-between rounded-2xl bg-ink-900 px-4 py-3 text-left transition hover:bg-ink-850"
     >
       <div>
         <div className="text-xs text-ink-400">{label}</div>
@@ -1093,10 +1106,8 @@ function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => v
   };
   return (
     <div className="flex flex-col gap-5">
-      <PlayerCheck ref={checkRef} a={a} selected={checking} onSelect={setChecking} />
-      <FillPosition a={a} onCheck={check} />
       <WaiverStatus a={a} />
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-700/70 bg-ink-900 px-4 py-2.5 text-xs text-ink-400">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-ink-900 px-4 py-2.5 text-xs text-ink-400">
         <span>
           <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-mint-400" />
           Only players on no roster in this league · checked{" "}
@@ -1116,10 +1127,7 @@ function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => v
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {a.waivers.map((w, i) => (
-              <article
-                key={w.player.id}
-                className="flex flex-col gap-3 rounded-xl border border-ink-700 bg-ink-850 p-4"
-              >
+              <article key={w.player.id} className="flex flex-col gap-3 rounded-xl bg-ink-850 p-4">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold tracking-wider text-ink-400 uppercase">Priority #{i + 1}</span>
                   <ClaimStatus w={w} />
@@ -1157,6 +1165,9 @@ function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => v
         )}
       </Card>
 
+      <PlayerCheck ref={checkRef} a={a} selected={checking} onSelect={setChecking} />
+      <FillPosition a={a} onCheck={check} />
+
       {a.backupTargets.length > 0 && (
         <Card title="Backup targets">
           <p className="mb-3 text-sm text-ink-400">
@@ -1165,10 +1176,7 @@ function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => v
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
             {a.backupTargets.map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center justify-between gap-3 rounded-xl border border-ink-700 bg-ink-850 px-3 py-2.5"
-              >
+              <div key={p.id} className="flex items-center justify-between gap-3 rounded-xl bg-ink-850 px-3 py-2.5">
                 <PlayerLine p={p} size={34} sub={<MatchupChip p={p} compact />} />
                 <Points value={p.weekScore} />
               </div>
@@ -1266,12 +1274,6 @@ function bidSummary(b: NonNullable<Analysis["waivers"][number]["bid"]>) {
   if (!top) return "Little competition expected.";
   if (b.toWin !== null && b.toWin > b.ceiling) return `${top.teamName} may outbid you (~$${top.estimate}).`;
   return `Should beat ${top.teamName}'s likely ~$${top.estimate}.`;
-}
-
-function waiverChip(a: Analysis) {
-  const w = a.waiver;
-  if (w.type === "faab") return `FAAB $${w.budgetLeft ?? "?"}`;
-  return `Waiver #${w.position ?? "?"}/${w.teams}`;
 }
 
 function WaiverStatus({ a }: { a: Analysis }) {
@@ -1573,10 +1575,10 @@ function TradeEvaluator({ a }: { a: Analysis }) {
       <p className="mt-2 text-[11px] text-ink-400">Numbers next to players are rest-of-season value (pts/week).</p>
 
       {result ? (
-        <div className="mt-4 border border-ink-700 bg-ink-850 p-4">
+        <div className="mt-4 rounded-xl bg-ink-850 p-4">
           <div className="flex flex-wrap items-center gap-3">
-            <span className={`display -skew-x-12 px-3 py-1 text-xl font-black ${TRADE_VERDICT_STYLE[result.verdict]}`}>
-              <span className="block skew-x-12">{result.verdict}</span>
+            <span className={`display rounded-lg px-3 py-1 text-xl font-black ${TRADE_VERDICT_STYLE[result.verdict]}`}>
+              <span className="block ">{result.verdict}</span>
             </span>
             <p className="min-w-0 flex-1 text-sm">{result.summary}</p>
           </div>
@@ -1667,7 +1669,7 @@ function Trades({ a }: { a: Analysis }) {
         ) : (
           <div className="flex flex-col gap-3">
             {report.ideas.map((t, i) => (
-              <article key={i} className="rounded-xl border border-ink-700 bg-ink-850 p-4">
+              <article key={i} className="rounded-xl bg-ink-850 p-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <span className="flex items-center gap-2 text-sm font-semibold">
                     {t.avatar ? (
@@ -1774,8 +1776,8 @@ function Scout({ a }: { a: Analysis }) {
           <ul className="mt-4 flex flex-col gap-2">
             {s.talk.map((line) => (
               <li key={line} className="flex items-start gap-3 bg-hot/10 px-3 py-2 text-sm">
-                <span className="display shrink-0 -skew-x-12 bg-hot px-2 py-0.5 text-xs font-black text-white">
-                  <span className="inline-block skew-x-12">INTEL</span>
+                <span className="display shrink-0 rounded-lg bg-hot px-2 py-0.5 text-xs font-black text-white">
+                  <span className="inline-block ">INTEL</span>
                 </span>
                 <span>{line}</span>
               </li>
@@ -1841,10 +1843,7 @@ function Scout({ a }: { a: Analysis }) {
           ) : (
             <ul className="flex flex-col gap-2">
               {s.weakSpots.map((w, i) => (
-                <li
-                  key={i}
-                  className="flex items-center justify-between gap-3 border border-ink-700 bg-ink-850 px-3 py-2"
-                >
+                <li key={i} className="flex items-center justify-between gap-3 rounded-xl bg-ink-850 px-3 py-2">
                   <div className="flex min-w-0 items-center gap-2">
                     <SlotBadge slot={w.slot} />
                     {w.player ? <PlayerLine p={w.player} size={28} /> : <span className="text-sm">Nobody</span>}
@@ -1862,10 +1861,7 @@ function Scout({ a }: { a: Analysis }) {
           ) : (
             <ul className="flex flex-col gap-2">
               {s.moves.map((m) => (
-                <li
-                  key={m.in.id}
-                  className="flex items-center justify-between gap-3 border border-ink-700 bg-ink-850 px-3 py-2"
-                >
+                <li key={m.in.id} className="flex items-center justify-between gap-3 rounded-xl bg-ink-850 px-3 py-2">
                   <div className="min-w-0">
                     <PlayerLine p={m.in} size={28} />
                     <div className="mt-0.5 ml-10 text-[11px] text-ink-400">
@@ -1902,7 +1898,7 @@ function Scout({ a }: { a: Analysis }) {
                   value: t.recentAvg === null ? "—" : `${t.recentAvg.toFixed(1)}`,
                 },
           ].map((x) => (
-            <div key={x.label} className="border border-ink-700 bg-ink-850 px-3 py-2">
+            <div key={x.label} className="rounded-xl bg-ink-850 px-3 py-2">
               <div className="text-[10px] font-bold tracking-wider text-ink-400 uppercase">{x.label}</div>
               <div className="font-mono text-xl font-bold tabular-nums">{x.value}</div>
             </div>
@@ -2058,7 +2054,7 @@ function Planner({ a }: { a: Analysis }) {
             {stashes.map((r) => (
               <div
                 key={r.player.id}
-                className="flex items-center justify-between gap-2 rounded-xl border border-ink-700 bg-ink-850 px-3 py-2.5"
+                className="flex items-center justify-between gap-2 rounded-xl bg-ink-850 px-3 py-2.5"
               >
                 <PlayerLine p={r.player} size={32} />
                 <div className="text-right">
@@ -2206,7 +2202,7 @@ function Playoffs({ a }: { a: Analysis }) {
                 ? { label: `Bye (top ${odds.byes})`, value: `${me.byePct.toFixed(0)}%` }
                 : { label: "Points for", value: me.pointsFor.toFixed(0) },
             ].map((s) => (
-              <div key={s.label} className="border border-ink-700 bg-ink-850 px-3 py-2">
+              <div key={s.label} className="rounded-xl bg-ink-850 px-3 py-2">
                 <div className="text-[10px] font-bold tracking-wider text-ink-400 uppercase">{s.label}</div>
                 <div className="font-mono text-xl font-bold tabular-nums">{s.value}</div>
               </div>
@@ -2593,9 +2589,9 @@ function Injuries({ a }: { a: Analysis }) {
           </div>
           <button
             onClick={() => setRefresh((n) => n + 1)}
-            className="display self-start -skew-x-12 bg-ink-800 px-3 py-1 text-sm font-bold text-ink-100 hover:bg-ink-700"
+            className="display self-start rounded-lg bg-ink-800 px-3 py-1 text-sm font-bold text-ink-100 hover:bg-ink-700"
           >
-            <span className="block skew-x-12">↻ Refresh reports</span>
+            <span className="block ">↻ Refresh reports</span>
           </button>
         </div>
       </div>
@@ -2678,7 +2674,7 @@ function InjurySection({
             const v = VERDICT_STYLE[r.verdict];
             const backup = pivot && r.probability < 0.6 && r.verdict !== "Bye" ? pivot(r) : undefined;
             return (
-              <li key={r.player.id} className="border border-ink-700 bg-ink-850 p-4">
+              <li key={r.player.id} className="rounded-xl bg-ink-850 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <PlayerLine
                     p={r.player}
@@ -2691,8 +2687,8 @@ function InjurySection({
                       </div>
                       <div className="display text-[10px] font-bold tracking-wider text-ink-400">to play</div>
                     </div>
-                    <span className={`display -skew-x-12 px-2.5 py-1 text-sm font-extrabold ${v.chip}`}>
-                      <span className="block skew-x-12">{r.verdict}</span>
+                    <span className={`display rounded-lg px-2.5 py-1 text-sm font-extrabold ${v.chip}`}>
+                      <span className="block ">{r.verdict}</span>
                     </span>
                   </div>
                 </div>
@@ -2748,11 +2744,39 @@ function InjurySection({
 type SortKey = "weekScore" | "seasonAvg" | "recentAvg" | "snapShare";
 
 function Roster({ a }: { a: Analysis }) {
+  const reserved = new Set(a.roster.filter((p) => !a.activeRoster.includes(p)).map((p) => p.id));
+  const starterIds = new Set(a.currentLineup.map((s) => s.player?.id).filter(Boolean));
+  const groups = [
+    { title: "Starters", players: a.currentLineup.map((s) => s.player).filter((p): p is PlayerAnalysis => !!p) },
+    { title: "Bench", players: a.activeRoster.filter((p) => !starterIds.has(p.id)) },
+    { title: "IR / reserve", players: a.roster.filter((p) => reserved.has(p.id)) },
+  ].filter((g) => g.players.length);
   return (
-    <div className="flex flex-col gap-5">
-      <Card title="Your roster">
-        <PlayerTable players={a.roster} week={a.week} showSnaps sortable />
-      </Card>
+    <div className="flex flex-col gap-4">
+      <p className="px-1 text-sm text-ink-400">
+        Tap a player for this week&apos;s call, the defense he faces and his workload.
+      </p>
+      {groups.map((g) => (
+        <section key={g.title} className="rounded-2xl bg-ink-900 p-2">
+          <h2 className="px-3 pt-2 pb-1 text-[15px] font-bold">{g.title}</h2>
+          <ul className="flex flex-col">
+            {g.players.map((p) => (
+              <li key={p.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-ink-850">
+                <div className="min-w-0 flex-1">
+                  <PlayerLine p={p} size={40} sub={<MatchupChip p={p} compact />} />
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="font-mono text-lg leading-none font-bold">
+                    {p.onBye ? "BYE" : p.weekScore.toFixed(1)}
+                  </div>
+                  <div className="mt-1 text-[11px] text-ink-400">proj</div>
+                </div>
+                <span className="text-lg text-ink-500">›</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
       <RulesCard a={a} />
     </div>
   );

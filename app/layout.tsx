@@ -1,17 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { Saira, Saira_Condensed } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
-const saira = Saira({
-  variable: "--font-saira",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
-});
-
-// Broadcast-style condensed face for headings, scores and stats.
-const sairaCondensed = Saira_Condensed({
-  variable: "--font-saira-condensed",
-  subsets: ["latin"],
-  weight: ["500", "600", "700", "800", "900"],
 });
 
 export const metadata: Metadata = {
@@ -22,7 +15,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#070a24",
+  themeColor: "#0b0d12",
   viewportFit: "cover",
 };
 
@@ -34,17 +27,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      data-theme="dark"
-      suppressHydrationWarning
-      className={`${saira.variable} ${sairaCondensed.variable} h-full antialiased`}
-    >
+    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${inter.variable} h-full antialiased`}>
       <head>
         {/* Apply the saved (or system) theme before first paint to avoid a flash. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("theme");if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.setAttribute("data-theme",t);if(t==="light"){var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content","#eef1fb")}}catch(e){}})()`,
+            __html: `(function(){try{var t=localStorage.getItem("theme");if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.setAttribute("data-theme",t);if(t==="light"){var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content","#f4f5f8")}}catch(e){}})()`,
           }}
         />
         {process.env.NODE_ENV === "production" && (

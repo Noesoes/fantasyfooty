@@ -17,7 +17,7 @@ const VERDICT_STYLE: Record<PickupVerdict, string> = {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 border border-ink-700 bg-ink-850 px-2 py-1.5 sm:px-3 sm:py-2">
+    <div className="min-w-0 rounded-xl bg-ink-850 px-2 py-1.5 sm:px-3 sm:py-2">
       <div className="truncate text-[9px] font-bold tracking-wider text-ink-400 uppercase sm:text-[10px]">{label}</div>
       <div className="font-mono text-base font-bold tabular-nums sm:text-lg">{value}</div>
     </div>
@@ -31,8 +31,8 @@ function PickupReportView({ a, p, onClose }: { a: Analysis; p: PlayerAnalysis; o
       <div className="flex flex-wrap items-start justify-between gap-3">
         <PlayerLine p={p} size={48} />
         <div className="flex items-center gap-2">
-          <span className={`display -skew-x-12 px-3 py-1 text-lg font-black ${VERDICT_STYLE[r.verdict]}`}>
-            <span className="block skew-x-12">{r.verdict}</span>
+          <span className={`display rounded-lg px-3 py-1 text-lg font-black ${VERDICT_STYLE[r.verdict]}`}>
+            <span className="block ">{r.verdict}</span>
           </span>
           <button
             onClick={onClose}
@@ -148,7 +148,7 @@ export const PlayerCheck = forwardRef<
               }}
               placeholder="Search free agents by name or team…"
               aria-label="Search free agents"
-              className="w-full border border-ink-700 bg-ink-850 py-2.5 pr-3 pl-9 text-sm text-ink-100 placeholder:text-ink-400 focus:border-mint-400 focus:outline-none"
+              className="w-full rounded-xl bg-ink-850 py-2.5 pr-3 pl-9 text-sm text-ink-100 placeholder:text-ink-400 focus:border-mint-400 focus:outline-none"
             />
           </div>
           <div className="flex gap-1">
@@ -231,11 +231,11 @@ export function FillPosition({ a, onCheck }: { a: Analysis; onCheck: (p: PlayerA
           <button
             key={k}
             onClick={() => setFill(fill === k ? null : k)}
-            className={`display -skew-x-12 px-3.5 py-1.5 text-sm font-bold transition ${
+            className={`display rounded-lg px-3.5 py-1.5 text-sm font-bold transition ${
               fill === k ? "prime-gradient text-ink-950" : "bg-ink-800 text-ink-300 hover:bg-ink-700"
             }`}
           >
-            <span className="block skew-x-12">{k === "FLEX" ? "Flex" : k}</span>
+            <span className="block ">{k === "FLEX" ? "Flex" : k}</span>
           </button>
         ))}
       </div>

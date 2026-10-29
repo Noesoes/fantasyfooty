@@ -264,16 +264,16 @@ function GameTile({
       : null;
   return (
     <div
-      className={`flex min-w-0 flex-col border bg-ink-850 ${
-        g.state === "in" ? "border-hot/40 shadow-[0_0_24px_rgb(255_46_136/0.12)] sm:col-span-2" : "border-ink-700"
+      className={`flex min-w-0 flex-col overflow-hidden rounded-2xl bg-ink-900 ${
+        g.state === "in" ? "ring-1 ring-hot/50 sm:col-span-2" : ""
       }`}
     >
-      <div className="flex items-stretch border-b border-ink-700/70">
+      <div className="flex items-stretch border-b border-ink-800">
         <button
           onClick={onPin}
           aria-pressed={pinned}
           aria-label={pinned ? `Unpin ${g.away} at ${g.home}` : `Pin ${g.away} at ${g.home} to the top`}
-          className={`shrink-0 border-r border-ink-700/70 px-2.5 text-sm hover:bg-ink-800 ${pinned ? "text-[#facc15]" : "text-ink-500 hover:text-ink-100"}`}
+          className={`shrink-0 border-r border-ink-800 px-2.5 text-sm hover:bg-ink-800 ${pinned ? "text-[#facc15]" : "text-ink-500 hover:text-ink-100"}`}
         >
           {pinned ? "★" : "☆"}
         </button>
@@ -321,13 +321,13 @@ function GameTile({
         )}
       </div>
       {c.stake && g.state !== "pre" && (
-        <div className="border-t border-ink-700/70 px-3 py-2">
+        <div className="border-t border-ink-800 px-3 py-2">
           <StakeStrip s={c.stake} winNow={winNow} compact />
         </div>
       )}
       {c.players.length > 0 && (
         <ul
-          className={`divide-y divide-ink-700/50 border-t border-ink-700/70 ${c.stake && g.state !== "pre" ? "" : "mt-auto"}`}
+          className={`divide-y divide-ink-700/50 border-t border-ink-800 ${c.stake && g.state !== "pre" ? "" : "mt-auto"}`}
         >
           {c.players.map((p) => (
             <PlayerRow
@@ -388,7 +388,7 @@ export function GamesTab({ a }: { a: Analysis }) {
               <button
                 key={id}
                 onClick={() => setFilter(id)}
-                className={`display px-2.5 py-1 transition ${filter === id ? "bg-mint-400 text-ink-950" : "bg-ink-800 text-ink-400 hover:text-ink-100"}`}
+                className={`rounded-lg px-2.5 py-1 transition ${filter === id ? "bg-mint-400 text-ink-950" : "bg-ink-800 text-ink-400 hover:text-ink-100"}`}
               >
                 {label}
               </button>
@@ -409,7 +409,7 @@ export function GamesTab({ a }: { a: Analysis }) {
               key={id}
               onClick={() => setState(id)}
               disabled={id !== "any" && count === 0}
-              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold transition disabled:opacity-40 ${
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition disabled:opacity-40 ${
                 state === id
                   ? id === "in"
                     ? "bg-hot text-white"
