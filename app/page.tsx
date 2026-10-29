@@ -18,6 +18,8 @@ import {
 import { Results } from "./results";
 import { RulesProvider } from "./rules";
 import { InstallButton } from "./install";
+import { ThemeToggle } from "./theme";
+import { CompactBar } from "./topbar";
 
 const STORAGE_KEY = "sleeper-advisor";
 
@@ -43,11 +45,6 @@ function forget() {
   } catch {
     // ignore
   }
-}
-
-function scoringOf(l: League) {
-  const rec = l.scoring_settings.rec ?? 0;
-  return rec >= 1 ? "PPR" : rec >= 0.5 ? "Half PPR" : "Std";
 }
 
 export default function Home() {
@@ -176,7 +173,20 @@ export default function Home() {
         id="scroller"
         className="flex flex-1 flex-col max-sm:min-h-0 max-sm:overflow-y-auto max-sm:overscroll-contain"
       >
-        <TopBar user={user} onSignOut={signOut} />
+        {user && leagues.length > 0 ? (
+          <CompactBar
+            user={user}
+            leagues={leagues}
+            leagueId={leagueId}
+            setLeagueId={setLeagueId}
+            week={week}
+            setWeek={setWeek}
+            currentWeek={state ? upcomingWeek(state) : week}
+            onSignOut={signOut}
+          />
+        ) : (
+          <TopBar user={user} onSignOut={signOut} />
+        )}
         <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-16">
           {!user ? (
             <Landing
@@ -188,14 +198,6 @@ export default function Home() {
             />
           ) : (
             <>
-              <Controls
-                leagues={leagues}
-                leagueId={leagueId}
-                setLeagueId={setLeagueId}
-                week={week}
-                setWeek={setWeek}
-                currentWeek={state ? upcomingWeek(state) : week}
-              />
               {error && <ErrorBox message={error} />}
               {loadingAnalysis && !analysis && <Skeleton />}
               {analysis && (
@@ -232,51 +234,6 @@ function Logo() {
       <span className="text-xl font-extrabold tracking-tight">Prime Time</span>
       <span className="hidden text-sm text-ink-400 sm:inline">Lineup advisor</span>
     </div>
-  );
-}
-
-function ThemeToggle() {
-  const [theme, setTheme] = useState<"light" | "dark">("dark");
-  useEffect(() => {
-    // The inline script in layout.tsx already applied the theme; mirror it.
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing with the DOM after hydration
-    setTheme(document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark");
-  }, []);
-  function toggle() {
-    const next = theme === "light" ? "dark" : "light";
-    setTheme(next);
-    document.documentElement.setAttribute("data-theme", next);
-    // Match the phone's status bar to the theme.
-    document
-      .querySelector('meta[name="theme-color"]')
-      ?.setAttribute("content", next === "light" ? "#eef0fb" : "#0a0b14");
-    try {
-      localStorage.setItem("theme", next);
-    } catch {
-      // The toggle still works for this visit.
-    }
-  }
-  return (
-    <button
-      onClick={toggle}
-      aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
-      title={theme === "light" ? "Dark mode" : "Light mode"}
-      className="flex h-9 w-10 rounded-lg items-center justify-center bg-ink-800 text-ink-300 transition hover:bg-ink-700 hover:text-mint-400"
-    >
-      {theme === "light" ? (
-        <svg viewBox="0 0 24 24" className="h-4 w-4 " fill="currentColor" aria-hidden>
-          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
-        </svg>
-      ) : (
-        <svg viewBox="0 0 24 24" className="h-4 w-4 " fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-          <circle cx="12" cy="12" r="4" />
-          <path
-            d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"
-            strokeLinecap="round"
-          />
-        </svg>
-      )}
-    </button>
   );
 }
 
@@ -387,80 +344,6 @@ function Landing({
             <p className="mt-1 text-sm text-ink-400">{f.text}</p>
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-function Controls({
-  leagues,
-  leagueId,
-  setLeagueId,
-  week,
-  setWeek,
-  currentWeek,
-}: {
-  leagues: League[];
-  leagueId: string;
-  setLeagueId: (id: string) => void;
-  week: number;
-  setWeek: (w: number) => void;
-  currentWeek: number;
-}) {
-  return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
-        {leagues.map((l) => {
-          const active = l.league_id === leagueId;
-          return (
-            <button
-              key={l.league_id}
-              onClick={() => setLeagueId(l.league_id)}
-              className={`flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2 text-left transition ${
-                active ? "bg-ink-900 ring-1 ring-mint-400/60" : "bg-ink-900/60 text-ink-300 hover:bg-ink-900"
-              }`}
-            >
-              <span className="flex  items-center gap-2.5">
-                {l.avatar ? (
-                  <img src={avatarUrl(l.avatar)} alt="" className="h-8 w-8 rounded-lg" />
-                ) : (
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink-700 text-sm font-bold">
-                    {l.name.charAt(0)}
-                  </span>
-                )}
-                <span>
-                  <span className="block max-w-[200px] truncate text-sm leading-tight font-semibold">{l.name}</span>
-                  <span className="block text-[11px] text-ink-400">
-                    {l.total_rosters} teams · {scoringOf(l)}
-                    {l.roster_positions.includes("SUPER_FLEX") ? " · SF" : ""}
-                  </span>
-                </span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      <div className="flex shrink-0 items-center gap-1 self-start sm:self-auto">
-        <button
-          aria-label="Previous week"
-          disabled={week <= 1}
-          onClick={() => setWeek(week - 1)}
-          className="h-9 w-8 text-2xl text-ink-300 hover:text-mint-400 disabled:opacity-30"
-        >
-          ‹
-        </button>
-        <div className="min-w-[110px] rounded-xl bg-ink-900 px-4 py-1.5 text-center">
-          <div className="text-[15px] leading-tight font-bold">Week {week}</div>
-          {week === currentWeek && <div className="text-[10px] leading-tight text-ink-400">This week</div>}
-        </div>
-        <button
-          aria-label="Next week"
-          disabled={week >= 18}
-          onClick={() => setWeek(week + 1)}
-          className="h-9 w-8 text-2xl text-ink-300 hover:text-mint-400 disabled:opacity-30"
-        >
-          ›
-        </button>
       </div>
     </div>
   );

@@ -311,73 +311,47 @@ function projectedWin(mine: number[], theirs: number[]): number {
   return sd < 0.5 ? (margin > 0 ? 1 : margin < 0 ? 0 : 0.5) : phi(margin / sd);
 }
 
-function MatchupRow({
-  avatar,
-  name,
-  sub,
-  pts,
-  lead,
+/** T1 matchup card: win ring on the left, both teams' points, one line underneath. */
+function MatchupCard({
+  win,
+  ringLabel,
+  me,
+  opp,
+  note,
 }: {
-  avatar: string | null;
-  name: string;
-  sub: string;
-  pts: number;
-  lead: boolean;
+  win: number | null;
+  ringLabel: string;
+  me: { name: string; pts: number };
+  opp: { name: string; pts: number } | null;
+  note: React.ReactNode;
 }) {
-  return (
-    <div className="flex items-center gap-3">
-      {avatar ? (
-        <img src={avatarUrl(avatar)} alt="" className="h-10 w-10 shrink-0 rounded-full" />
-      ) : (
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ink-700 font-bold text-ink-300">
-          {name.charAt(0).toUpperCase()}
-        </div>
-      )}
-      <div className="min-w-0">
-        <div className="truncate font-semibold">{name}</div>
-        <div className="truncate text-xs text-ink-400">{sub}</div>
-      </div>
-      <div
-        className={`ml-auto shrink-0 font-mono text-[34px] leading-none font-extrabold tracking-tight ${lead ? "text-ink-100" : "text-ink-400"}`}
-      >
-        {pts.toFixed(1)}
-      </div>
+  const line = (t: { name: string; pts: number }, lead: boolean) => (
+    <div className={`flex items-baseline justify-between gap-3 ${lead ? "" : "opacity-75"}`}>
+      <span className="truncate text-[15px] font-extrabold">{t.name}</span>
+      <span className="shrink-0 font-mono text-[26px] leading-tight font-black tracking-tight">{t.pts.toFixed(1)}</span>
     </div>
   );
-}
-
-function MatchupCard({
-  rows,
-  win,
-  left,
-  right,
-}: {
-  rows: React.ComponentProps<typeof MatchupRow>[];
-  win: number | null;
-  left: React.ReactNode;
-  right: React.ReactNode;
-}) {
   return (
-    <section className="rounded-2xl border border-ink-700 bg-ink-900 p-4 sm:p-5">
-      <div className="flex flex-col gap-3">
-        {rows.map((r) => (
-          <MatchupRow key={r.name} {...r} />
-        ))}
-      </div>
+    <section className="flex items-center gap-4 rounded-2xl border border-ink-700 bg-ink-900 p-4">
       {win !== null && (
-        <div className="mt-4 h-2 overflow-hidden rounded-full bg-ink-700">
-          <div className="h-full rounded-full bg-mint-400 transition-all" style={{ width: `${win * 100}%` }} />
-        </div>
+        <Ring value={win} size={84}>
+          <span className="text-[21px] leading-none font-black">{Math.round(win * 100)}%</span>
+          <span className="mt-0.5 text-[9.5px] font-extrabold tracking-wide text-ink-300 uppercase">{ringLabel}</span>
+        </Ring>
       )}
-      <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs text-ink-400">
-        <span>{left}</span>
-        <span>{right}</span>
+      <div className="min-w-0 flex-1">
+        {line(me, !opp || me.pts >= opp.pts)}
+        {opp ? (
+          line(opp, opp.pts > me.pts)
+        ) : (
+          <div className="text-sm text-ink-400">No head-to-head matchup this week</div>
+        )}
+        <div className="mt-1 text-[12.5px] font-extrabold">{note}</div>
       </div>
     </section>
   );
 }
 
-/** A ring that fills to `value` (0–1). */
 function Ring({ value, size = 112, children }: { value: number; size?: number; children: React.ReactNode }) {
   const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
   return (
@@ -425,80 +399,58 @@ function Widget({
 function Scoreboard({ a }: { a: Analysis }) {
   const gain = Math.round((a.optimalTotal - a.currentTotal) * 10) / 10;
   const opp = a.opponent;
-  const win = opp
+  const theirs = opp ? opp.starters.map((p) => p.weekScore) : [];
+  const winBest = opp
     ? projectedWin(
         a.optimalLineup.map((s) => s.player?.weekScore ?? 0),
-        opp.starters.map((p) => p.weekScore),
+        theirs,
       )
     : null;
-  const margin = opp ? Math.round((a.optimalTotal - opp.projected) * 10) / 10 : null;
+  const winNow = opp
+    ? projectedWin(
+        a.currentLineup.map((s) => s.player?.weekScore ?? 0),
+        theirs,
+      )
+    : null;
   return (
-    <div className="grid grid-cols-2 gap-3">
-      {win !== null && opp ? (
-        <Widget label="Win chance">
-          <div className="mt-3">
-            <Ring value={win}>
-              <span className="text-[28px] leading-none font-black">{Math.round(win * 100)}%</span>
-              <span className="mt-1 max-w-[80px] truncate text-[11px] font-bold text-ink-300">vs {opp.teamName}</span>
-            </Ring>
-          </div>
-        </Widget>
-      ) : (
-        <Widget label="Matchup">
-          <p className="mt-3 text-sm font-semibold text-ink-300">No head-to-head matchup this week.</p>
-        </Widget>
-      )}
-      <Widget label="Projected">
-        <span className="mt-2 font-mono text-[44px] leading-none font-black tracking-tight">
-          {Math.round(a.optimalTotal)}
-        </span>
-        {opp && margin !== null && (
-          <span className="mt-1.5 text-[13px] font-bold text-ink-300">
-            vs {Math.round(opp.projected)} · {margin >= 0 ? `+${margin}` : margin}
+    <MatchupCard
+      win={gain > 0 ? winNow : winBest}
+      ringLabel="to win"
+      me={{ name: "You", pts: gain > 0 ? a.currentTotal : a.optimalTotal }}
+      opp={opp ? { name: opp.teamName, pts: opp.projected } : null}
+      note={
+        gain > 0 ? (
+          <span className="text-mint-400">
+            Make your moves: +{gain}
+            {winBest !== null && <> → {Math.round(winBest * 100)}%</>}
           </span>
-        )}
-        <span className="mt-auto pt-3 text-[11px] font-extrabold tracking-[0.08em] text-ink-400 uppercase">
-          With moves
-        </span>
-        <span className={`text-[13px] font-bold ${gain > 0 ? "text-mint-400" : "text-ink-300"}`}>
-          {gain > 0 ? `+${gain} pts` : "Lineup is set"}
-        </span>
-      </Widget>
-    </div>
+        ) : (
+          <span className="text-ink-300">Your lineup is set · projected</span>
+        )
+      }
+    />
   );
 }
 
 // --- Live -----------------------------------------------------------------
 
-function LiveScoreboard({ a, live }: { a: Analysis; live: LiveState }) {
+function LiveScoreboard({ live }: { a: Analysis; live: LiveState }) {
   const me = live.me;
   const opp = live.opponent;
-  const win = live.winProbability;
-  const sub = (s: LiveState["me"]) =>
-    `${s.remaining > 0 ? `+${s.remaining} to come · ` : ""}proj ${s.projectedFinal.toFixed(1)}`;
-  const rows = [
-    { avatar: a.avatar, name: me.teamName, sub: sub(me), pts: me.score, lead: !opp || me.score >= opp.score },
-    ...(opp
-      ? [{ avatar: opp.avatar, name: opp.teamName, sub: sub(opp), pts: opp.score, lead: opp.score > me.score }]
-      : []),
-  ];
   return (
     <MatchupCard
-      rows={rows}
-      win={win}
-      left={
-        <span className="inline-flex items-center gap-1.5">
+      win={live.winProbability}
+      ringLabel={live.allDone ? "final" : "live"}
+      me={{ name: "You", pts: me.score }}
+      opp={opp ? { name: opp.teamName, pts: opp.score } : null}
+      note={
+        <span className="inline-flex items-center gap-1.5 text-ink-300">
           {!live.allDone && <span className="h-2 w-2 animate-pulse rounded-full bg-hot" />}
-          {live.allDone ? "Final" : "Live"}
-          {win !== null && (
-            <>
-              {" · "}
-              <b className="text-mint-400">{Math.round(win * 100)}%</b> to win
-            </>
-          )}
+          {live.allDone
+            ? "Final"
+            : `${me.remaining > 0 ? `+${me.remaining} to come` : "All done"}${opp ? ` · them +${opp.remaining}` : ""}`}
         </span>
       }
-      right={`${me.playing} playing · ${me.yetToPlay} to play · updated ${new Date(live.asOf).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}
     />
   );
 }
