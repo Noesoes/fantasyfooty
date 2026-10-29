@@ -100,6 +100,17 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Phones: the page itself never scrolls (only #scroller inside the app frame
+   does), so iOS can't drag the whole frame and the bottom bar with it. */
+@media (max-width: 639px) {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+}
+
 /* Headings: the body face, bold and slightly tight (no all-caps). */
 .display {
   font-family: var(--font-inter), sans-serif;

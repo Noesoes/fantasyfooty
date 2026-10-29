@@ -269,7 +269,7 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
         {navSlot &&
           createPortal(
             <nav
-              className="border-t border-ink-800 bg-ink-950/95 backdrop-blur"
+              className="border-t border-ink-800 bg-ink-900"
               style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
             >
               <div className="mx-auto flex max-w-md">

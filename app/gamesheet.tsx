@@ -12,6 +12,7 @@ import type { GameCard, GamePlayer } from "@/lib/gamecenter";
 import { fetchGameDetail, pointBreakdown, type DriveSummary, type GameDetail, type Highlight } from "@/lib/gamedetail";
 import type { Game } from "@/lib/scoreboard";
 import { DriveChart } from "./field";
+import { useDragToClose } from "./sheetdrag";
 import { BoxScore, Highlights, playersIn, snapText, StakeStrip } from "./gameparts";
 import { Headshot } from "./ui";
 
@@ -103,7 +104,10 @@ function SheetHeader({ g, d, onClose, nav }: { g: Game; d: GameDetail | null; on
     );
   };
   return (
-    <div className="border-b border-ink-700 px-4 pt-3 pb-4">
+    <div data-sheet-handle className="border-b border-ink-800 px-4 pt-2 pb-4">
+      <div className="mb-1 flex justify-center sm:hidden">
+        <span className="h-1.5 w-10 rounded-full bg-ink-600" />
+      </div>
       <div className="mb-2 flex items-center justify-between">
         <span
           className={`display flex items-center gap-1.5 text-sm font-black ${g.state === "in" ? "text-hot" : "text-ink-300"}`}
@@ -770,6 +774,7 @@ function GamePanel({
   winNow,
   onClose,
   nav,
+  body,
 }: {
   c: GameCard;
   a: Analysis;
@@ -779,10 +784,11 @@ function GamePanel({
   winNow: number | null;
   onClose: () => void;
   nav: SheetNav;
+  /** The scrolling content, so the sheet knows when it's at the top (for swipe-down to close). */
+  body: React.RefObject<HTMLDivElement | null>;
 }) {
   const { detail, failed } = useGameDetail(c.game);
-  const body = useRef<HTMLDivElement>(null);
-  useEffect(() => body.current?.scrollTo({ top: 0 }), [tab]);
+  useEffect(() => body.current?.scrollTo({ top: 0 }), [tab, body]);
   const tabs = TABS.filter((t) => c.game.id || t.id === "players");
   const active = tabs.some((t) => t.id === tab) ? tab : "players";
   return (
@@ -888,11 +894,15 @@ export function GameSheet({
 
   // Horizontal swipe = next / previous game (not when swiping a chart, clip row or wide table).
   const touch = useRef<{ x: number; y: number } | null>(null);
+  const body = useRef<HTMLDivElement>(null);
+  const drag = useDragToClose(onClose, body);
   const onTouchStart = (e: React.TouchEvent) => {
+    drag.handlers.onTouchStart(e);
     const t = e.touches[0];
     touch.current = (e.target as HTMLElement).closest("[data-noswipe]") ? null : { x: t.clientX, y: t.clientY };
   };
   const onTouchEnd = (e: React.TouchEvent) => {
+    drag.handlers.onTouchEnd();
     const start = touch.current;
     touch.current = null;
     if (!start) return;
@@ -909,12 +919,19 @@ export function GameSheet({
       role="dialog"
       aria-modal="true"
     >
-      <button aria-label="Close" onClick={onClose} className="absolute inset-0 bg-ink-950/75 backdrop-blur-sm" />
+      <button
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+        style={{ opacity: 1 - drag.pulled * 0.7 }}
+      />
       <div
         onTouchStart={onTouchStart}
+        onTouchMove={drag.handlers.onTouchMove}
         onTouchEnd={onTouchEnd}
-        className="relative flex h-[90dvh] w-full max-w-lg flex-col overflow-hidden border-t border-ink-700 bg-ink-850 shadow-2xl sm:h-auto sm:max-h-[85dvh] sm:min-h-[60dvh] sm:border"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        onTouchCancel={drag.handlers.onTouchCancel}
+        className="relative flex h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-ink-900 shadow-2xl sm:h-auto sm:max-h-[85dvh] sm:min-h-[60dvh] sm:rounded-3xl"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)", ...drag.style }}
       >
         <GamePanel
           key={c.game.home}
@@ -925,6 +942,7 @@ export function GameSheet({
           focus={focused}
           winNow={winNow}
           onClose={onClose}
+          body={body}
           nav={{
             index,
             count: cards.length,

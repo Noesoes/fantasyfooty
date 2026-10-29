@@ -4,13 +4,14 @@
 // bench or out) and why, the defense he faces, the game environment, his
 // workload (snaps, touches, carry and target share), and your rules for him.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Analysis, PlayerAnalysis } from "@/lib/advisor";
 import { factorsFor, type Tone } from "@/lib/explain";
 import { isNoDrop, isNoTrade } from "@/lib/prefs";
 import { PlayerSheetContext, useOpenPlayer } from "./playerctx";
 import { useRules } from "./rules";
+import { useDragToClose } from "./sheetdrag";
 import { Headshot, InjuryTag, PosBadge } from "./ui";
 
 const OUT = new Set(["Out", "IR", "PUP", "Sus", "NA", "DNR", "COV", "NFI"]);
@@ -365,6 +366,49 @@ function SheetBody({ a, p }: { a: Analysis; p: PlayerAnalysis }) {
   );
 }
 
+/** The overlay and bottom sheet; mounted only while open, so each opening starts fresh. */
+function SheetFrame({ a, p, onClose }: { a: Analysis; p: PlayerAnalysis; onClose: () => void }) {
+  const scroll = useRef<HTMLDivElement>(null);
+  const { handlers, style, pulled } = useDragToClose(onClose, scroll);
+  // A new player starts at the top.
+  useEffect(() => scroll.current?.scrollTo({ top: 0 }), [p.id]);
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label={p.name}
+    >
+      <button
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+        style={{ opacity: 1 - pulled * 0.7 }}
+      />
+      <div
+        {...handlers}
+        className="relative flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-ink-900 shadow-2xl sm:rounded-3xl"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)", ...style }}
+      >
+        {/* Grab handle: drag down from here (or from anywhere at the top of the content) to close. */}
+        <div data-sheet-handle className="flex h-8 shrink-0 items-start justify-center pt-3 sm:h-4">
+          <span className="h-1.5 w-10 rounded-full bg-ink-600 sm:hidden" />
+          <button
+            onClick={onClose}
+            aria-label="Close player"
+            className="absolute top-3 right-4 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-ink-800 text-ink-300 hover:text-ink-100"
+          >
+            ✕
+          </button>
+        </div>
+        <div ref={scroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-1">
+          <SheetBody a={a} p={p} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Provides `useOpenPlayer()` to everything inside, and renders the sheet. */
 export function PlayerSheetProvider({ a, children }: { a: Analysis; children: React.ReactNode }) {
   const [id, setId] = useState<string | null>(null);
@@ -395,36 +439,7 @@ export function PlayerSheetProvider({ a, children }: { a: Analysis; children: Re
   return (
     <PlayerSheetContext.Provider value={open}>
       {children}
-      {p &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6"
-            role="dialog"
-            aria-modal="true"
-            aria-label={p.name}
-          >
-            <button aria-label="Close" onClick={close} className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" />
-            <div
-              className="relative flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-ink-900 shadow-2xl sm:rounded-3xl"
-              style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-            >
-              <div className="flex items-center justify-between px-5 pt-3">
-                <span className="mx-auto h-1.5 w-10 rounded-full bg-ink-600 sm:hidden" />
-                <button
-                  onClick={close}
-                  aria-label="Close player"
-                  className="absolute top-3 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-ink-800 text-ink-300 hover:text-ink-100"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-4">
-                <SheetBody a={a} p={p} />
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+      {p && createPortal(<SheetFrame a={a} p={p} onClose={close} />, document.body)}
     </PlayerSheetContext.Provider>
   );
 }
