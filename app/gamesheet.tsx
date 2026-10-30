@@ -9,11 +9,11 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Analysis } from "@/lib/advisor";
 import type { GameCard, GamePlayer } from "@/lib/gamecenter";
-import { fetchGameDetail, pointBreakdown, type DriveSummary, type GameDetail, type Highlight } from "@/lib/gamedetail";
+import { fetchGameDetail, pointBreakdown, type DriveSummary, type GameDetail } from "@/lib/gamedetail";
 import type { Game } from "@/lib/scoreboard";
 import { DriveChart } from "./field";
 import { useDragToClose } from "./sheetdrag";
-import { BoxScore, Highlights, playersIn, snapText, StakeStrip } from "./gameparts";
+import { BoxScore, snapText, StakeStrip } from "./gameparts";
 import { Headshot } from "./ui";
 
 export type SheetTab = "overview" | "box" | "stats" | "drives" | "players";
@@ -350,11 +350,6 @@ function Overview({ c, d, winNow }: { c: GameCard; d: GameDetail; winNow: number
           </Section>
         )
       )}
-      {d.highlights.length > 0 && (
-        <Section title="Highlights">
-          <Highlights list={d.highlights} players={c.players} />
-        </Section>
-      )}
       {g.state === "pre" && (
         <Section title="Vegas & weather">
           <div className="grid grid-cols-3 gap-2 text-center">
@@ -585,14 +580,12 @@ function PlayerDetail({
   p,
   a,
   game,
-  clips,
   open,
   onToggle,
 }: {
   p: GamePlayer;
   a: Analysis;
   game: Game;
-  clips: Highlight[];
   open: boolean;
   onToggle: () => void;
 }) {
@@ -619,14 +612,9 @@ function PlayerDetail({
           <div className="truncate text-[11px] text-ink-400">
             {pre ? `${p.player.position} · projected ${p.player.weekScore.toFixed(1)}` : p.line || "No stats yet"}
           </div>
-          {(snaps || clips.length > 0) && (
+          {snaps && (
             <div className="flex items-center gap-2 text-[10px] text-ink-400">
-              {snaps && <span>{snaps}</span>}
-              {clips.length > 0 && (
-                <span className="display bg-violet/20 px-1 font-bold text-violet">
-                  ▶ {clips.length} clip{clips.length > 1 ? "s" : ""}
-                </span>
-              )}
+              <span>{snaps}</span>
             </div>
           )}
         </div>
@@ -685,28 +673,13 @@ function PlayerDetail({
               </ul>
             </>
           )}
-          {clips.length > 0 && (
-            <div className="mt-3">
-              <Highlights list={clips} players={[p]} />
-            </div>
-          )}
         </div>
       )}
     </li>
   );
 }
 
-function Players({
-  c,
-  a,
-  focus,
-  highlights,
-}: {
-  c: GameCard;
-  a: Analysis;
-  focus: string | null;
-  highlights: Highlight[];
-}) {
+function Players({ c, a, focus }: { c: GameCard; a: Analysis; focus: string | null }) {
   const [open, setOpen] = useState<string | null>(focus);
   if (!c.players.length)
     return <p className="text-sm text-ink-400">None of your or your opponent&apos;s players are in this game.</p>;
@@ -722,7 +695,6 @@ function Players({
           p={p}
           a={a}
           game={c.game}
-          clips={highlights.filter((h) => playersIn(h.headline, [p]).length > 0)}
           open={open === p.player.id}
           onToggle={() => setOpen(open === p.player.id ? null : p.player.id)}
         />
@@ -810,7 +782,7 @@ function GamePanel({
       </div>
       <div ref={body} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
         {active === "players" ? (
-          <Players c={c} a={a} focus={focus} highlights={detail?.highlights ?? []} />
+          <Players c={c} a={a} focus={focus} />
         ) : !detail ? (
           failed ? (
             <p className="text-sm text-ink-400">Couldn&apos;t load this game from ESPN. Retrying…</p>
@@ -892,7 +864,7 @@ export function GameSheet({
     };
   }, [onClose]);
 
-  // Horizontal swipe = next / previous game (not when swiping a chart, clip row or wide table).
+  // Horizontal swipe = next / previous game (not when swiping a chart or wide table).
   const touch = useRef<{ x: number; y: number } | null>(null);
   const body = useRef<HTMLDivElement>(null);
   const drag = useDragToClose(onClose, body);

@@ -14,7 +14,7 @@ export function useDragToClose(onClose: () => void, scrollRef: React.RefObject<H
 
   const onTouchStart = (e: React.TouchEvent) => {
     const target = e.target as HTMLElement;
-    // Charts, clip rows and wide tables handle their own gestures.
+    // Charts and wide tables handle their own gestures.
     if (target.closest("[data-noswipe]")) {
       drag.current = null;
       return;

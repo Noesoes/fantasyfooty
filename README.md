@@ -37,8 +37,6 @@ Everything is grouped into four sections, each with a few tabs:
 
 **What changed:** the app keeps a small snapshot of your roster and matchup per league and week on your device. When you come back, Home lists what's different (injury status, chance to play, projections that moved 2+ pts, players added or dropped, win chance, stash odds) until you tap *Got it*.
 
-**Your highlights:** Home shows a row of ESPN highlight clips featuring your players from this week's games (newest first, playable in the app), and each player's sheet has his own clips. Clips are matched by name within that player's game, rechecked every two minutes while one of his games is on, and stay up on ESPN for about two days.
-
 **Start X or Y?** (Lineup tab): pick any two of your players, or one of yours and a free agent, for the call plus the edges on each side and every factor side by side.
 
 **Waivers tab extras:** a *Last waiver run* recap (each of your claims: won, or who beat you and by how much in FAAB; the league's biggest adds; your priority or budget now) and *Stash candidates*: free agents next in line behind a starter who's hurt or in trade rumors (RBs, TEs and receivers), each with a one-tap pickup check.
@@ -115,11 +113,11 @@ It also names the drop and, in FAAB leagues, a suggested bid. Search covers ever
 **Game center (Games tab):** tap any game, or any player in it, to open its game center. Swipe sideways (or use the arrows / arrow keys) to move between games. ☆ pins a game to the top of the list on this device. Filter the list by Live / Upcoming / Final.
 
 - **Your stake:** each game card shows what that game means for your fantasy matchup: your starters' points there and what's still to come, your opponent's, the net, and how much a big game or a dud from those players would move your win chance (same model as Live mode).
-- **Overview:** your stake, a win-probability chart you can drag across to see who was favored at any point (or ESPN's matchup predictor before kickoff), highlight clips that play right in the app (tagged when they feature your or your opponent's players), score by quarter, the scoring summary and team leaders. Before kickoff it shows the spread, over/under and weather instead.
+- **Overview:** your stake, a win-probability chart you can drag across to see who was favored at any point (or ESPN's matchup predictor before kickoff), score by quarter, the scoring summary and team leaders. Before kickoff it shows the spread, over/under and weather instead.
 - **Box:** the full box score for both teams (passing, rushing, receiving, kicking, defense), with your and your opponent's players marked.
 - **Stats:** side-by-side bars for yards, passing, rushing, first downs, 3rd down, red zone, turnovers, penalties and time of possession.
 - **Drives:** the current drive chart, then every drive as a bar on a mini field from where it started to where it ended, colored by result. Tap a drive for plays, yards and time, or filter to one team.
-- **Players:** your players (and your opponent's starters) in that game, with snap counts (once Sleeper posts them; the recent snap share until then) and their highlight clips. Tap one to see where their fantasy points came from under your league's scoring.
+- **Players:** your players (and your opponent's starters) in that game, with snap counts (once Sleeper posts them; the recent snap share until then) Tap one to see where their fantasy points came from under your league's scoring.
 
 It refreshes every 30 seconds while the game is live. Data comes from ESPN's game summary.
 
@@ -172,7 +170,7 @@ WEEK=6 SLEEPER_USERNAME=yourname npm run report
 The app is a static site with no backend, accounts or database, so there's no server of ours to attack, no user data we hold, and no passwords or API keys anywhere (none in the code or the repo history either).
 
 - **Data:** your browser talks to Sleeper and ESPN directly and reads only public league data. Your username, rules, checklists, pinned games, "what changed" snapshots and a small error log are kept in this browser only. *Privacy & data* in the league/settings sheet explains this and has **Clear my data on this device**.
-- **Untrusted content:** React escapes everything rendered; links from news and video feeds are used only if they're plain `https://` URLs; saved data is validated when it's loaded, so damaged data can't crash the app.
+- **Untrusted content:** React escapes everything rendered; links from news feeds are used only if they're plain `https://` URLs; saved data is validated when it's loaded, so damaged data can't crash the app.
 - **Errors:** a crash screen (with *Try again*, *Reload* and *Copy error details*) replaces a blank page, and errors are logged on the device only. Nothing is sent anywhere unless you copy and share it.
 - **Supply chain:** dependencies are pinned in `package-lock.json` (`npm audit`: 0 vulnerabilities), GitHub Actions are pinned to commit SHAs, Dependabot opens weekly update PRs, and every PR runs lint, type checks and a build (`checks.yml`). The deploy runs the same checks before publishing.
 
@@ -200,7 +198,6 @@ lib/prefs.ts               your rules (don't trade / don't drop / backup for), s
 lib/teamcolors.ts          NFL team colors for team-tinted player sheets
 lib/recap.ts               last waiver run recap from league transactions
 lib/changes.ts             'what changed since you last looked' snapshots
-lib/clips.ts               highlight clips of your players from this week's games
 lib/errorlog.ts            on-device error log, crash report text, clear-my-data
 lib/stash.ts               stash value for backups (trade rumors, injuries, handcuff news)
 lib/explain.ts             factor breakdown and start-over-sit comparison behind each Game plan call
@@ -217,8 +214,8 @@ lib/playbyplay.ts          drive charts for live games (ESPN play feed), your pl
 app/field.tsx              football field drive chart
 app/games.tsx              Games tab: live scoreboard with your players' stat lines
 app/gamesheet.tsx          game center sheet: win probability, team stats, drives, points breakdown, swipe between games
-app/gameparts.tsx          your stake in a game, highlight clips, full box score
-lib/gamedetail.ts          ESPN game summary parsing (incl. highlights, box score) and fantasy points breakdown
+app/gameparts.tsx          your stake in a game, full box score
+lib/gamedetail.ts          ESPN game summary parsing (incl. box score) and fantasy points breakdown
 lib/url.ts                 https-only guard for links from outside feeds
 lib/gamecenter.ts          every game this week + your players' live stats
 lib/pickup.ts              should-I-pick-him-up verdicts and best-available-by-position rankings

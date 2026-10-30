@@ -3,7 +3,6 @@
 // summary and team leaders. Used by the game sheet on the Games tab.
 
 import type { Game } from "./scoreboard";
-import { safeUrl } from "./url";
 
 const SUMMARY = "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/summary";
 
@@ -47,21 +46,6 @@ export interface Leader {
   line: string;
 }
 
-export interface Highlight {
-  id: string;
-  headline: string;
-  thumbnail: string | null;
-  /** Direct MP4 for inline playback. */
-  video: string | null;
-  /** Adaptive stream (plays natively on iPhone, lighter on cell data). */
-  hls: string | null;
-  /** ESPN's page for the clip. */
-  page: string | null;
-  duration: number;
-  /** When ESPN posted it (ms), for newest-first lists. */
-  published: number;
-}
-
 export interface BoxCategory {
   /** "Passing", "Rushing", … */
   name: string;
@@ -82,7 +66,6 @@ export interface GameDetail {
   drives: DriveSummary[];
   scoring: ScoringPlay[];
   leaders: Leader[];
-  highlights: Highlight[];
   /** Full box score per team (keyed by team abbreviation). */
   box: Record<string, BoxCategory[]>;
   asOf: number;
@@ -236,17 +219,6 @@ export async function fetchGameDetail(game: Game): Promise<GameDetail> {
     }
   }
 
-  const highlights: Highlight[] = (d.videos ?? []).map((v: Json) => ({
-    id: String(v.id),
-    headline: String(v.headline ?? ""),
-    thumbnail: safeUrl(v.thumbnail),
-    video: safeUrl(v.links?.source?.HD?.href ?? v.links?.source?.href),
-    hls: safeUrl(v.links?.source?.HLS?.href),
-    page: safeUrl(v.links?.web?.href),
-    duration: Number(v.duration) || 0,
-    published: Date.parse(v.originalPublishDate ?? v.lastModified ?? "") || 0,
-  }));
-
   const box: Record<string, BoxCategory[]> = {};
   for (const t of d.boxscore?.players ?? []) {
     box[abbr(t.team)] = (t.statistics ?? [])
@@ -275,7 +247,6 @@ export async function fetchGameDetail(game: Game): Promise<GameDetail> {
     drives,
     scoring,
     leaders,
-    highlights,
     box,
     asOf: Date.now(),
   };

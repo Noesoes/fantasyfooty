@@ -17,7 +17,6 @@ import { fetchLive, phi, type LivePlayer, type LiveSide, type LiveState } from "
 import { GamesTab } from "./games";
 import { FillPosition, PlayerCheck } from "./playercheck";
 import { diffSnapshots, loadSeen, saveSeen, snapshotOf, type Change } from "@/lib/changes";
-import { YourHighlights } from "./clipsui";
 import { StashTargets, WaiverRecapCard } from "./movesparts";
 import { PlayerSheetProvider } from "./playersheet";
 import { RuleChip, RulesCard } from "./rules";
@@ -767,8 +766,6 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
           })}
         </ol>
       )}
-
-      <YourHighlights a={a} />
 
       {(a.warnings.length > 0 || stashes.length > 0) && (
         <>

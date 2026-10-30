@@ -99,8 +99,7 @@ body {
   background:
     radial-gradient(110% 60% at 0% 0%, rgb(43 75 216 / 0.85) 0%, transparent 55%),
     radial-gradient(80% 55% at 100% 25%, rgb(194 24 107 / 0.7) 0%, transparent 60%),
-    radial-gradient(100% 55% at 50% 100%, rgb(15 118 110 / 0.75) 0%, transparent 60%),
-    var(--color-ink-950);
+    radial-gradient(100% 55% at 50% 100%, rgb(15 118 110 / 0.75) 0%, transparent 60%), var(--color-ink-950);
   background-attachment: fixed;
   color: var(--color-ink-100);
   font-family: var(--font-nunito), system-ui, sans-serif;
@@ -111,8 +110,7 @@ body {
   background:
     radial-gradient(110% 60% at 0% 0%, rgb(147 197 253 / 0.8) 0%, transparent 55%),
     radial-gradient(80% 55% at 100% 25%, rgb(249 168 212 / 0.65) 0%, transparent 60%),
-    radial-gradient(100% 55% at 50% 100%, rgb(153 246 228 / 0.75) 0%, transparent 60%),
-    var(--color-ink-950);
+    radial-gradient(100% 55% at 50% 100%, rgb(153 246 228 / 0.75) 0%, transparent 60%), var(--color-ink-950);
 }
 
 /* Frosted surfaces: cards and sheets blur what's behind them. */
@@ -163,12 +161,7 @@ body {
 }
 
 .skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--color-ink-800) 0px,
-    var(--color-ink-700) 160px,
-    var(--color-ink-800) 320px
-  );
+  background: linear-gradient(90deg, var(--color-ink-800) 0px, var(--color-ink-700) 160px, var(--color-ink-800) 320px);
   background-size: 800px 100%;
   animation: shimmer 1.4s linear infinite;
 }

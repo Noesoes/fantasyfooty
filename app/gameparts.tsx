@@ -1,12 +1,11 @@
 "use client";
 
 // Pieces of the game center that also show up elsewhere: your stake in a
-// game, highlight clips and the full box score.
+// game and the full box score.
 
 import { useState } from "react";
 import type { GamePlayer, Stake } from "@/lib/gamecenter";
-import type { BoxCategory, Highlight } from "@/lib/gamedetail";
-import { namedIn } from "@/lib/clips";
+import type { BoxCategory } from "@/lib/gamedetail";
 import type { Game } from "@/lib/scoreboard";
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
@@ -16,11 +15,6 @@ const norm = (s: string) =>
     .replace(/[^a-z ]/g, "")
     .replace(/\b(jr|sr|ii|iii|iv)\b/g, "")
     .trim();
-
-/** Players named in a highlight headline (full name, or last name when it's distinctive). */
-export function playersIn<T extends Pick<GamePlayer, "player">>(text: string, players: T[]): T[] {
-  return players.filter((p) => namedIn(text, p.player.name));
-}
 
 // --- Stake --------------------------------------------------------------------
 
@@ -54,94 +48,6 @@ export function StakeStrip({ s, winNow, compact }: { s: Stake; winNow: number | 
           {!compact && winNow !== null && <span className="text-ink-400"> (now {pct(winNow)})</span>}
         </div>
       )}
-    </div>
-  );
-}
-
-// --- Highlights ---------------------------------------------------------------
-
-export function Highlights({ list, players }: { list: Highlight[]; players: Pick<GamePlayer, "player" | "role">[] }) {
-  const [playing, setPlaying] = useState<string | null>(null);
-  const [failed, setFailed] = useState<Set<string>>(new Set());
-  if (!list.length) return null;
-  return (
-    <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1" data-noswipe>
-      {list.map((h) => {
-        const mine = playersIn(h.headline, players);
-        return (
-          <div key={h.id} className="w-60 shrink-0 snap-start">
-            <div className="relative aspect-video overflow-hidden bg-ink-900">
-              {playing === h.id && (h.video || h.hls) && !failed.has(h.id) ? (
-                <video
-                  poster={h.thumbnail ?? undefined}
-                  controls
-                  autoPlay
-                  playsInline
-                  className="h-full w-full bg-black"
-                >
-                  {/* The browser plays the first one it supports: the stream on iPhone, the MP4 elsewhere. */}
-                  {h.hls && (
-                    <source
-                      src={h.hls}
-                      type="application/vnd.apple.mpegurl"
-                      onError={() => !h.video && setFailed((f) => new Set(f).add(h.id))}
-                    />
-                  )}
-                  {h.video && (
-                    // Errors land on the last <source> once nothing could play.
-                    <source src={h.video} type="video/mp4" onError={() => setFailed((f) => new Set(f).add(h.id))} />
-                  )}
-                </video>
-              ) : (
-                <button
-                  onClick={() =>
-                    (h.video || h.hls) && !failed.has(h.id)
-                      ? setPlaying(h.id)
-                      : h.page && window.open(h.page, "_blank", "noopener")
-                  }
-                  className="group relative block h-full w-full"
-                  aria-label={`Play: ${h.headline}`}
-                >
-                  {h.thumbnail && (
-                    // eslint-disable-next-line @next/next/no-img-element -- remote ESPN thumbnail in a static export
-                    <img src={h.thumbnail} alt="" loading="lazy" className="h-full w-full object-cover" />
-                  )}
-                  <span className="absolute inset-0 flex items-center justify-center bg-ink-950/25 transition group-hover:bg-ink-950/10">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-full bg-ink-950/80 text-lg text-white">
-                      ▶
-                    </span>
-                  </span>
-                  {h.duration > 0 && (
-                    <span className="absolute right-1.5 bottom-1.5 bg-ink-950/85 px-1 font-mono text-[10px] text-white">
-                      {Math.floor(h.duration / 60)}:{String(h.duration % 60).padStart(2, "0")}
-                    </span>
-                  )}
-                </button>
-              )}
-            </div>
-            <p className="mt-1.5 line-clamp-2 text-xs leading-snug text-ink-100">{h.headline}</p>
-            {failed.has(h.id) && h.page && (
-              <a href={h.page} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-mint-400">
-                Can&apos;t play here — watch on ESPN ↗
-              </a>
-            )}
-            {mine.length > 0 && (
-              <div className="mt-1 flex flex-wrap gap-1">
-                {mine.map((p) => (
-                  <span
-                    key={p.player.id}
-                    className={`display px-1 text-[10px] font-black ${
-                      p.role === "opponent" ? "bg-rose-500/15 text-rose-300" : "bg-mint-400 text-ink-950"
-                    }`}
-                  >
-                    {p.role === "opponent" ? "OPP" : "YOURS"} · {p.player.name.split(" ").slice(-1)[0]}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
     </div>
   );
 }

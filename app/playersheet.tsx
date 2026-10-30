@@ -10,7 +10,6 @@ import type { Analysis, PlayerAnalysis } from "@/lib/advisor";
 import { factorsFor, type Tone } from "@/lib/explain";
 import { isNoDrop, isNoTrade } from "@/lib/prefs";
 import { PlayerSheetContext, useOpenPlayer } from "./playerctx";
-import { PlayerHighlights } from "./clipsui";
 import { useRules } from "./rules";
 import { useDragToClose } from "./sheetdrag";
 import { teamColor } from "@/lib/teamcolors";
@@ -200,8 +199,6 @@ function SheetBody({ a, p }: { a: Analysis; p: PlayerAnalysis }) {
           }
         />
       </div>
-
-      <PlayerHighlights a={a} p={p} />
 
       {/* The defense */}
       {m && (
