@@ -19,6 +19,7 @@ import { Results } from "./results";
 import { RulesProvider } from "./rules";
 import { InstallButton } from "./install";
 import { ThemeToggle } from "./theme";
+import { installErrorLogging } from "@/lib/errorlog";
 import { CompactBar } from "./topbar";
 
 const STORAGE_KEY = "sleeper-advisor";
@@ -48,6 +49,8 @@ function forget() {
 }
 
 export default function Home() {
+  // Keep a local log of errors outside rendering (failed requests, event handlers).
+  useEffect(() => installErrorLogging(), []);
   const [username, setUsername] = useState("");
   const [user, setUser] = useState<SleeperUser | null>(null);
   const [state, setState] = useState<NflState | null>(null);

@@ -167,6 +167,17 @@ SLEEPER_USERNAME=yourname npm run report      # print the weekly report as Markd
 WEEK=6 SLEEPER_USERNAME=yourname npm run report
 ```
 
+## Privacy & security
+
+The app is a static site with no backend, accounts or database, so there's no server of ours to attack, no user data we hold, and no passwords or API keys anywhere (none in the code or the repo history either).
+
+- **Data:** your browser talks to Sleeper and ESPN directly and reads only public league data. Your username, rules, checklists, pinned games, "what changed" snapshots and a small error log are kept in this browser only. *Privacy & data* in the league/settings sheet explains this and has **Clear my data on this device**.
+- **Untrusted content:** React escapes everything rendered; links from news and video feeds are used only if they're plain `https://` URLs; saved data is validated when it's loaded, so damaged data can't crash the app.
+- **Errors:** a crash screen (with *Try again*, *Reload* and *Copy error details*) replaces a blank page, and errors are logged on the device only. Nothing is sent anywhere unless you copy and share it.
+- **Supply chain:** dependencies are pinned in `package-lock.json` (`npm audit`: 0 vulnerabilities), GitHub Actions are pinned to commit SHAs, Dependabot opens weekly update PRs, and every PR runs lint, type checks and a build (`checks.yml`). The deploy runs the same checks before publishing.
+
+If the app ever gets accounts or a backend (e.g. a native iPhone app with synced rules), that's when server-side items (auth and MFA, rate limiting, database security and backups, secrets management, server logging) come into play.
+
 ## Data sources
 
 Everything comes from Sleeper's public, keyless API:
@@ -190,6 +201,7 @@ lib/teamcolors.ts          NFL team colors for team-tinted player sheets
 lib/recap.ts               last waiver run recap from league transactions
 lib/changes.ts             'what changed since you last looked' snapshots
 lib/clips.ts               highlight clips of your players from this week's games
+lib/errorlog.ts            on-device error log, crash report text, clear-my-data
 lib/stash.ts               stash value for backups (trade rumors, injuries, handcuff news)
 lib/explain.ts             factor breakdown and start-over-sit comparison behind each Game plan call
 lib/report.ts              Markdown rendering for the weekly issue

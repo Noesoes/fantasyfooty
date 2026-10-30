@@ -113,7 +113,21 @@ const KEY = (leagueId: string, week: number) => `seen:${leagueId}:${week}`;
 export function loadSeen(leagueId: string, week: number): Snapshot | null {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY(leagueId, week)) ?? "null");
-    return raw && typeof raw === "object" && typeof raw.at === "number" && raw.players ? (raw as Snapshot) : null;
+    if (
+      !raw ||
+      typeof raw !== "object" ||
+      typeof raw.at !== "number" ||
+      !raw.players ||
+      typeof raw.players !== "object"
+    )
+      return null;
+    // Saved data can be old or damaged: keep only well-formed player entries.
+    const players: Snapshot["players"] = {};
+    for (const [id, p] of Object.entries(raw.players as Record<string, unknown>)) {
+      const x = p as Snapshot["players"][string] | null;
+      if (x && typeof x === "object" && typeof x.name === "string" && typeof x.proj === "number") players[id] = x;
+    }
+    return { at: raw.at, win: typeof raw.win === "number" ? raw.win : null, players };
   } catch {
     return null;
   }

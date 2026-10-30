@@ -1,0 +1,16 @@
+# Weekly dependency updates as pull requests. Each PR runs the same lint and
+# type checks as the deploy, so a breaking update shows up before it's merged.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

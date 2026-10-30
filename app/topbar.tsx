@@ -12,6 +12,7 @@ import { avatarUrl, type League, type SleeperUser } from "@/lib/sleeper";
 import { InstallButton } from "./install";
 import { useDragToClose } from "./sheetdrag";
 import { ThemeToggle } from "./theme";
+import { clearLocalData, errorReport, readErrors } from "@/lib/errorlog";
 
 function scoringOf(l: League) {
   const rec = l.scoring_settings.rec ?? 0;
@@ -127,6 +128,12 @@ function MenuSheet({
               Switch account
             </button>
           </div>
+          <PrivacyBox
+            onCleared={() => {
+              onClose();
+              onSignOut();
+            }}
+          />
           <div className="mt-3 flex items-center justify-between gap-3 text-xs font-bold text-ink-400">
             <span className="truncate">Signed in as {user.display_name}</span>
             <InstallButton />
@@ -135,6 +142,48 @@ function MenuSheet({
       </div>
     </div>,
     document.body,
+  );
+}
+
+/** What the app keeps (and doesn't), plus copy-error-log and clear-my-data. */
+function PrivacyBox({ onCleared }: { onCleared: () => void }) {
+  const [errors] = useState(() => readErrors().length);
+  const [copied, setCopied] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  return (
+    <details className="mt-4 rounded-2xl border border-ink-700 bg-ink-900 px-4 py-3 text-sm">
+      <summary className="cursor-pointer font-extrabold">Privacy &amp; data</summary>
+      <p className="mt-2 text-[13px] leading-relaxed text-ink-300">
+        No account, no tracking, no server of ours: the app talks to Sleeper and ESPN directly from your phone, and
+        reads only public league data. Your username, rules, checklists, pinned games and &ldquo;what changed&rdquo;
+        snapshots are saved on this device only.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {errors > 0 && (
+          <button
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(errorReport());
+                setCopied(true);
+              } catch {}
+            }}
+            className="rounded-full border border-ink-700 px-3 py-1.5 text-xs font-extrabold"
+          >
+            {copied ? "Copied" : `Copy error log (${errors})`}
+          </button>
+        )}
+        <button
+          onClick={() => {
+            if (!confirm) return setConfirm(true);
+            clearLocalData();
+            onCleared();
+          }}
+          className={`rounded-full px-3 py-1.5 text-xs font-extrabold ${confirm ? "bg-rose-400 text-ink-950" : "border border-ink-700 text-rose-300"}`}
+        >
+          {confirm ? "Tap again to erase" : "Clear my data on this device"}
+        </button>
+      </div>
+    </details>
   );
 }
 
