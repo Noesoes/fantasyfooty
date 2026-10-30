@@ -25,10 +25,17 @@ export interface Stash {
 
 const NEWS_DAYS = 21;
 // Rough chance a starter misses real time over the rest of a season.
-const BASE_HAZARD: Record<string, number> = { RB: 0.15, TE: 0.08, QB: 0.08 };
+const BASE_HAZARD: Record<string, number> = { RB: 0.15, WR: 0.1, TE: 0.08, QB: 0.08 };
 // Share of the starter's production a clear backup inherits (a committee splits it).
-const HANDCUFF_SHARE = 0.75;
-const COMMITTEE_SHARE = 0.4;
+// A receiver who moves up the depth chart gets a bigger role, not the top guy's whole one.
+const SHARE: Record<string, { clear: number; committee: number }> = {
+  RB: { clear: 0.75, committee: 0.4 },
+  TE: { clear: 0.75, committee: 0.4 },
+  QB: { clear: 0.75, committee: 0.4 },
+  WR: { clear: 0.5, committee: 0.3 },
+};
+/** Positions with a stash premium. */
+export const STASH_POSITIONS = ["RB", "WR", "TE", "QB"];
 // The NFL trade deadline falls after week 9 or 10; rumors don't matter after it.
 const LAST_TRADE_WEEK = 10;
 
@@ -128,7 +135,8 @@ export async function assessStashes(
     }
 
     chance = Math.min(0.85, chance);
-    const share = clearBackup || buzz.length > 0 ? HANDCUFF_SHARE : COMMITTEE_SHARE;
+    const sh = SHARE[p.position] ?? SHARE.RB;
+    const share = clearBackup || buzz.length > 0 ? sh.clear : sh.committee;
     const ifStarter = s.rosValue * share;
     const value = chance * Math.max(0, ifStarter - p.rosValue);
     // Only worth flagging when there's a real reason beyond "starters get hurt sometimes".
@@ -147,4 +155,74 @@ export async function assessStashes(
 /** "Stash: ~55% chance Jonathan Taylor's job opens up — worth ~13 pts/game if it does." */
 export function stashNote(p: PlayerAnalysis, s: Stash): string {
   return `Stash: ~${Math.round(s.chance * 100)}% chance ${s.starter}'s job opens up — ${p.name.split(" ").slice(-1)[0]} would be worth ~${s.ifStarter} pts/game if it does. ${s.reasons[0]}`;
+}
+
+/**
+ * Pair a player with the teammate whose job he'd take: the top-projected player at
+ * his position on his team. `mates` is that position group, best first.
+ * RB/TE/QB: the #2 is the clear backup. WR: the #4 (he'd step into the top three).
+ */
+export function stashPairing(
+  p: { id: string; position: string; projection: number },
+  mates: { id: string; pts: number }[],
+): { starterId: string; clearBackup: boolean } | null {
+  const top = mates[0];
+  if (!top || top.id === p.id || top.pts < 5) return null;
+  // Already sharing the job (or the "starter" is barely ahead): no stash premium.
+  if (p.projection >= top.pts * 0.6) return null;
+  const rank = mates.findIndex((m) => m.id === p.id);
+  if (p.position === "WR") {
+    // WR2s and WR3s already play; a stash is the next receiver in line.
+    if (rank >= 0 && rank < 3) return null;
+    return { starterId: top.id, clearBackup: rank === 3 };
+  }
+  return { starterId: top.id, clearBackup: rank === 1 };
+}
+
+export interface StashTarget {
+  player: PlayerAnalysis;
+  stash: Stash;
+}
+
+/**
+ * Free agents worth stashing: backups whose starter is hurt or in trade rumors.
+ * News is fetched for a short list (starter hurt, clear backup, or being added
+ * across Sleeper) to keep it to a couple dozen requests.
+ */
+export async function findWaiverStashes(
+  freeAgents: PlayerAnalysis[],
+  everyone: PlayerAnalysis[],
+  week: number,
+  limit = 10,
+): Promise<StashTarget[]> {
+  const groups = new Map<string, PlayerAnalysis[]>();
+  for (const p of everyone) {
+    if (!p.team || !STASH_POSITIONS.includes(p.position)) continue;
+    const key = `${p.team}|${p.position}`;
+    groups.set(key, [...(groups.get(key) ?? []), p]);
+  }
+  for (const list of groups.values()) list.sort((a, b) => b.projection - a.projection);
+  const byId = new Map(everyone.map((p) => [p.id, p]));
+  const candidates: (StashCandidate & { priority: number })[] = [];
+  for (const p of freeAgents) {
+    if (!p.team || p.position === "QB" || !STASH_POSITIONS.includes(p.position)) continue;
+    if (p.injury && ["IR", "Out", "PUP", "Sus"].includes(p.injury)) continue;
+    const mates = groups.get(`${p.team}|${p.position}`) ?? [];
+    const pair = stashPairing(
+      p,
+      mates.map((m) => ({ id: m.id, pts: m.projection })),
+    );
+    const starter = pair && byId.get(pair.starterId);
+    if (!pair || !starter || starter.rosValue < 8) continue;
+    const hurt = starter.injury ? 3 : 0;
+    const priority = hurt + (pair.clearBackup ? 2 : 0) + Math.log10(1 + p.trendingAdds);
+    candidates.push({ player: p, starter, clearBackup: pair.clearBackup, priority });
+  }
+  const short = candidates.sort((a, b) => b.priority - a.priority).slice(0, 14);
+  const stashes = await assessStashes(short, week);
+  return short
+    .filter((c) => stashes.has(c.player.id))
+    .map((c) => ({ player: c.player, stash: stashes.get(c.player.id)! }))
+    .sort((a, b) => b.stash.value - a.stash.value)
+    .slice(0, limit);
 }

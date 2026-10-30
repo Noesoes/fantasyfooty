@@ -135,7 +135,11 @@ export interface Transaction {
   adds: Record<string, number> | null;
   drops: Record<string, number> | null;
   created: number;
+  /** When it was processed (the waiver run time for claims). */
+  status_updated?: number;
   settings?: { waiver_bid?: number } | null;
+  /** e.g. { notes: "This player was claimed by another owner." } */
+  metadata?: { notes?: string } | null;
 }
 
 /** Completed and failed adds, drops and trades for one week ("round"). */

@@ -16,6 +16,8 @@ import { compareStart, factorsFor, FACTOR_LABELS, type FactorKey, type Tone } fr
 import { fetchLive, phi, type LivePlayer, type LiveSide, type LiveState } from "@/lib/live";
 import { GamesTab } from "./games";
 import { FillPosition, PlayerCheck } from "./playercheck";
+import { diffSnapshots, loadSeen, saveSeen, snapshotOf, type Change } from "@/lib/changes";
+import { StashTargets, WaiverRecapCard } from "./movesparts";
 import { PlayerSheetProvider } from "./playersheet";
 import { RuleChip, RulesCard } from "./rules";
 import { useOpenPlayer } from "./playerctx";
@@ -681,6 +683,8 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
         </div>
       )}
 
+      <WhatChanged a={a} />
+
       <div className="mt-2 flex items-baseline justify-between px-1">
         <h2 className="text-xl font-bold tracking-tight">
           {tasks.length === 0
@@ -834,12 +838,12 @@ const TONE_CLASS: Record<Tone, string> = {
 };
 
 /** Expandable "why": the edges behind a start/sit call and every factor, side by side. */
-function WhyBreakdown({ players }: { players: PlayerAnalysis[] }) {
+function WhyBreakdown({ players, open = false }: { players: PlayerAnalysis[]; open?: boolean }) {
   const cmp = players.length === 2 ? compareStart(players[0], players[1]) : null;
   const factors = players.map((p) => new Map(factorsFor(p).map((f) => [f.key, f])));
   const keys = (Object.keys(FACTOR_LABELS) as FactorKey[]).filter((k) => factors.some((m) => m.has(k)));
   return (
-    <details className="group mt-3 rounded-xl bg-ink-850 text-xs">
+    <details open={open} className="group mt-3 rounded-xl bg-ink-850 text-xs">
       <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2 font-semibold text-mint-400 select-none">
         <span>Why this call?</span>
         <span className="text-ink-400 transition group-open:rotate-90">›</span>
@@ -916,6 +920,152 @@ function WhyBreakdown({ players }: { players: PlayerAnalysis[] }) {
 
 // --- Lineup ----------------------------------------------------------------
 
+/** Changes since you last looked at this league and week (kept on this device until you dismiss them). */
+function WhatChanged({ a }: { a: Analysis }) {
+  const [state, setState] = useState<{ changes: Change[]; since: number } | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const openPlayer = useOpenPlayer();
+  const current = useMemo(() => {
+    const win = a.opponent
+      ? projectedWin(
+          a.currentLineup.map((s) => s.player?.weekScore ?? 0),
+          a.opponent.starters.map((p) => p.weekScore),
+        )
+      : null;
+    return snapshotOf(a, win);
+  }, [a]);
+  useEffect(() => {
+    const base = loadSeen(a.league.league_id, a.week);
+    const changes = base ? diffSnapshots(base, current) : [];
+    if (!base || !changes.length) {
+      // First visit (or nothing new): this becomes the baseline for next time.
+      saveSeen(a.league.league_id, a.week, current);
+      return;
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- comparing with what's saved on this device
+    setState({ changes, since: base.at });
+  }, [a, current]);
+  if (!state) return null;
+  const dismiss = () => {
+    saveSeen(a.league.league_id, a.week, current);
+    setState(null);
+  };
+  const shown = showAll ? state.changes : state.changes.slice(0, 4);
+  const since = new Date(state.since).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
+  return (
+    <section className="mt-2 rounded-2xl border border-ink-700 bg-ink-900 p-4">
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <h2 className="text-[17px] font-black tracking-tight">What changed</h2>
+        <span className="text-xs font-bold text-ink-400">since {since}</span>
+      </div>
+      <ul className="flex flex-col gap-1.5">
+        {shown.map((c) => {
+          const p = c.playerId ? a.roster.find((x) => x.id === c.playerId) : undefined;
+          const dot = c.tone === "good" ? "bg-mint-400" : c.tone === "bad" ? "bg-rose-400" : "bg-ink-500";
+          const body = (
+            <>
+              <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dot}`} />
+              <span className="min-w-0 flex-1">{c.text}</span>
+              {p && <span className="shrink-0 text-ink-500">›</span>}
+            </>
+          );
+          return (
+            <li key={c.key}>
+              {p ? (
+                <button onClick={() => openPlayer?.(p)} className="flex w-full gap-2.5 text-left text-sm">
+                  {body}
+                </button>
+              ) : (
+                <div className="flex gap-2.5 text-sm">{body}</div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          onClick={dismiss}
+          className="rounded-full bg-mint-400 px-4 py-1.5 text-xs font-black text-ink-950 hover:opacity-90"
+        >
+          Got it
+        </button>
+        {state.changes.length > 4 && (
+          <button onClick={() => setShowAll((v) => !v)} className="px-2 text-xs font-bold text-ink-400">
+            {showAll ? "Show less" : `+${state.changes.length - 4} more`}
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** "Start X or Y?": pick any two players (yours or free agents) and get the call with the reasons. */
+function StartOrSit({ a }: { a: Analysis }) {
+  const [ids, setIds] = useState<[string, string]>(["", ""]);
+  const mine = [...a.roster].sort((x, y) => x.position.localeCompare(y.position) || y.weekScore - x.weekScore);
+  const fas = [...a.freeAgentPool]
+    .filter((p) => p.team && p.weekScore > 0)
+    .sort((x, y) => y.weekScore - x.weekScore)
+    .slice(0, 40);
+  const lookup = new Map([...mine, ...fas].map((p) => [p.id, p]));
+  const picked = ids.map((id) => lookup.get(id)).filter((p): p is PlayerAnalysis => !!p);
+  const [pick, other] =
+    picked.length === 2 ? [...picked].sort((x, y) => y.weekScore - x.weekScore) : [undefined, undefined];
+  const cmp = pick && other ? compareStart(pick, other) : null;
+  const close = pick && other && Math.abs(pick.weekScore - other.weekScore) < 1;
+  const select = (i: 0 | 1) => (
+    <select
+      value={ids[i]}
+      onChange={(e) => setIds((prev) => (i === 0 ? [e.target.value, prev[1]] : [prev[0], e.target.value]))}
+      className="min-w-0 flex-1 rounded-xl border border-ink-700 bg-ink-850 px-3 py-2.5 text-sm font-semibold"
+      aria-label={i === 0 ? "First player" : "Second player"}
+    >
+      <option value="">{i === 0 ? "Pick a player…" : "…or this one"}</option>
+      <optgroup label="Your team">
+        {mine.map((p) => (
+          <option key={p.id} value={p.id} disabled={ids[1 - i] === p.id}>
+            {p.position} · {p.name}
+          </option>
+        ))}
+      </optgroup>
+      <optgroup label="Free agents">
+        {fas.map((p) => (
+          <option key={p.id} value={p.id} disabled={ids[1 - i] === p.id}>
+            {p.position} · {p.name} (FA)
+          </option>
+        ))}
+      </optgroup>
+    </select>
+  );
+  return (
+    <Card title="Start X or Y?">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        {select(0)}
+        <span className="text-center text-xs font-extrabold text-ink-400">or</span>
+        {select(1)}
+      </div>
+      {pick && other && cmp && (
+        <div className="mt-4">
+          <div className="rounded-2xl bg-mint-400/10 p-4 ring-1 ring-mint-400/30">
+            <div className="text-lg font-black text-mint-400">
+              {close ? "Coin flip — lean " : "Start "}
+              {pick.name}
+            </div>
+            <p className="mt-1 text-sm text-ink-300">{cmp.headline}</p>
+          </div>
+          <WhyBreakdown players={[pick, other]} open />
+        </div>
+      )}
+      {picked.length < 2 && (
+        <p className="mt-3 text-xs text-ink-400">
+          Compare any two of your players, or one of yours against a free agent: defense faced, workload, Vegas, health
+          and form, side by side.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 function Lineup({ a }: { a: Analysis }) {
   const optimalIds = new Set(a.optimalLineup.map((s) => s.player?.id));
   const currentIds = new Set(a.currentLineup.map((s) => s.player?.id).filter(Boolean));
@@ -924,6 +1074,7 @@ function Lineup({ a }: { a: Analysis }) {
   const max = Math.max(1, ...a.roster.map((p) => p.weekScore));
   return (
     <div className="flex flex-col gap-5">
+      <StartOrSit a={a} />
       <Card
         title="Recommended starters"
         action={
@@ -1023,6 +1174,7 @@ function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => v
   };
   return (
     <div className="flex flex-col gap-5">
+      <WaiverRecapCard a={a} />
       <WaiverStatus a={a} />
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-ink-700 bg-ink-900 px-4 py-2.5 text-xs text-ink-400">
         <span>
@@ -1082,6 +1234,7 @@ function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => v
         )}
       </Card>
 
+      <StashTargets a={a} onCheck={check} />
       <PlayerCheck ref={checkRef} a={a} selected={checking} onSelect={setChecking} />
       <FillPosition a={a} onCheck={check} />
 

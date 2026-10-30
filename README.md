@@ -35,6 +35,12 @@ Everything is grouped into four sections, each with a few tabs:
 
 **Look:** "Glass": frosted, translucent cards over colored light, big rounded numbers, and a floating tab bar (light and dark). Home opens with widgets for your win chance and projected score, then the moves to make, heads-up alerts, and Waivers and Injuries widgets. A player's sheet is tinted with his team's color and shows usage as rings.
 
+**What changed:** the app keeps a small snapshot of your roster and matchup per league and week on your device. When you come back, Home lists what's different (injury status, chance to play, projections that moved 2+ pts, players added or dropped, win chance, stash odds) until you tap *Got it*.
+
+**Start X or Y?** (Lineup tab): pick any two of your players, or one of yours and a free agent, for the call plus the edges on each side and every factor side by side.
+
+**Waivers tab extras:** a *Last waiver run* recap (each of your claims: won, or who beat you and by how much in FAAB; the league's biggest adds; your priority or budget now) and *Stash candidates*: free agents next in line behind a starter who's hurt or in trade rumors (RBs, TEs and receivers), each with a one-tap pickup check.
+
 **Player sheet:** tap any player (Roster, Lineup, the plan, waivers, trades) for this week's call (start, bench or out) and why, the defense he faces (where it ranks against his position, fantasy points it allows per game vs. the league average, and the Vegas line and weather), his workload (snap share, share of team carries and targets, touches and red-zone looks per game vs. his season average), every factor behind the projection, and switches for your rules.
 
 On phones the sections sit in a bottom bar. Badges show only when there's something to act on: waiver targets, or starters who are out or doubtful. The open tab is kept in the URL (e.g. `#playoffs`), so refreshing or reopening the app keeps your place.
@@ -179,6 +185,8 @@ lib/sleeper.ts             Sleeper API client + "which week is upcoming" logic
 lib/advisor.ts             scoring, lineup optimizer, drop & waiver logic
 lib/prefs.ts               your rules (don't trade / don't drop / backup for), saved per league
 lib/teamcolors.ts          NFL team colors for team-tinted player sheets
+lib/recap.ts               last waiver run recap from league transactions
+lib/changes.ts             'what changed since you last looked' snapshots
 lib/stash.ts               stash value for backups (trade rumors, injuries, handcuff news)
 lib/explain.ts             factor breakdown and start-over-sit comparison behind each Game plan call
 lib/report.ts              Markdown rendering for the weekly issue

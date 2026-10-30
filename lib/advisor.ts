@@ -28,7 +28,7 @@ import {
 import { OUT_STATUSES } from "./status";
 import { assessInjuries } from "./injuries";
 import { isNoDrop, type Prefs } from "./prefs";
-import { assessStashes, stashNote, type Stash, type StashCandidate } from "./stash";
+import { assessStashes, stashNote, stashPairing, STASH_POSITIONS, type Stash, type StashCandidate } from "./stash";
 import { gameOutlook, getWeekGames, type Game, type GameOutlook } from "./scoreboard";
 
 const RECENT_WEEKS = 3;
@@ -684,7 +684,7 @@ async function applyStashes(active: PlayerAnalysis[], inputs: Inputs, week: numb
   const byTeamPos = new Map<string, { id: string; pts: number }[]>();
   for (const r of inputs.projections) {
     const pos = r.player?.position;
-    if (!r.team || !pos || !["RB", "TE", "QB"].includes(pos)) continue;
+    if (!r.team || !pos || !STASH_POSITIONS.includes(pos)) continue;
     const key = `${r.team}|${pos}`;
     const list = byTeamPos.get(key) ?? [];
     list.push({ id: r.player_id, pts: points(r.stats, scoring, pos) });
@@ -692,15 +692,11 @@ async function applyStashes(active: PlayerAnalysis[], inputs: Inputs, week: numb
   }
   const pending: { player: PlayerAnalysis; starterId: string; clearBackup: boolean }[] = [];
   for (const p of active) {
-    if (!p.team || !["RB", "TE", "QB"].includes(p.position)) continue;
+    if (!p.team || !STASH_POSITIONS.includes(p.position)) continue;
     const mates = [...(byTeamPos.get(`${p.team}|${p.position}`) ?? [])].sort((a, b) => b.pts - a.pts);
-    const top = mates[0];
-    if (!top || top.id === p.id || top.pts < 5) continue;
-    // Already sharing the job (or the "starter" is barely ahead): no stash premium.
-    if (p.projection >= top.pts * 0.6) continue;
     // Your own starter ahead of him is a handcuff you already own the upside of; still counts.
-    const others = mates.filter((m) => m.id !== top.id);
-    pending.push({ player: p, starterId: top.id, clearBackup: others[0]?.id === p.id });
+    const pair = stashPairing(p, mates);
+    if (pair) pending.push({ player: p, ...pair });
   }
   if (!pending.length) return;
   const starters = analyzePlayers([...new Set(pending.map((x) => x.starterId))], inputs, new Map());
