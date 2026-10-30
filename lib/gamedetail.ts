@@ -58,6 +58,8 @@ export interface Highlight {
   /** ESPN's page for the clip. */
   page: string | null;
   duration: number;
+  /** When ESPN posted it (ms), for newest-first lists. */
+  published: number;
 }
 
 export interface BoxCategory {
@@ -242,6 +244,7 @@ export async function fetchGameDetail(game: Game): Promise<GameDetail> {
     hls: safeUrl(v.links?.source?.HLS?.href),
     page: safeUrl(v.links?.web?.href),
     duration: Number(v.duration) || 0,
+    published: Date.parse(v.originalPublishDate ?? v.lastModified ?? "") || 0,
   }));
 
   const box: Record<string, BoxCategory[]> = {};

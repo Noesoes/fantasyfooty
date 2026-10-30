@@ -37,6 +37,8 @@ Everything is grouped into four sections, each with a few tabs:
 
 **What changed:** the app keeps a small snapshot of your roster and matchup per league and week on your device. When you come back, Home lists what's different (injury status, chance to play, projections that moved 2+ pts, players added or dropped, win chance, stash odds) until you tap *Got it*.
 
+**Your highlights:** Home shows a row of ESPN highlight clips featuring your players from this week's games (newest first, playable in the app), and each player's sheet has his own clips. Clips are matched by name within that player's game, rechecked every two minutes while one of his games is on, and stay up on ESPN for about two days.
+
 **Start X or Y?** (Lineup tab): pick any two of your players, or one of yours and a free agent, for the call plus the edges on each side and every factor side by side.
 
 **Waivers tab extras:** a *Last waiver run* recap (each of your claims: won, or who beat you and by how much in FAAB; the league's biggest adds; your priority or budget now) and *Stash candidates*: free agents next in line behind a starter who's hurt or in trade rumors (RBs, TEs and receivers), each with a one-tap pickup check.
@@ -187,6 +189,7 @@ lib/prefs.ts               your rules (don't trade / don't drop / backup for), s
 lib/teamcolors.ts          NFL team colors for team-tinted player sheets
 lib/recap.ts               last waiver run recap from league transactions
 lib/changes.ts             'what changed since you last looked' snapshots
+lib/clips.ts               highlight clips of your players from this week's games
 lib/stash.ts               stash value for backups (trade rumors, injuries, handcuff news)
 lib/explain.ts             factor breakdown and start-over-sit comparison behind each Game plan call
 lib/report.ts              Markdown rendering for the weekly issue

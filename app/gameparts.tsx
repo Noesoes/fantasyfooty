@@ -6,6 +6,7 @@
 import { useState } from "react";
 import type { GamePlayer, Stake } from "@/lib/gamecenter";
 import type { BoxCategory, Highlight } from "@/lib/gamedetail";
+import { namedIn } from "@/lib/clips";
 import type { Game } from "@/lib/scoreboard";
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
@@ -16,14 +17,9 @@ const norm = (s: string) =>
     .replace(/\b(jr|sr|ii|iii|iv)\b/g, "")
     .trim();
 
-/** Your players named in a highlight headline (full name, or last name when it's distinctive). */
-export function playersIn(text: string, players: GamePlayer[]): GamePlayer[] {
-  const t = ` ${norm(text)} `;
-  return players.filter((p) => {
-    const full = norm(p.player.name);
-    const last = full.split(" ").slice(-1)[0];
-    return t.includes(` ${full} `) || (last.length >= 5 && t.includes(` ${last} `));
-  });
+/** Players named in a highlight headline (full name, or last name when it's distinctive). */
+export function playersIn<T extends Pick<GamePlayer, "player">>(text: string, players: T[]): T[] {
+  return players.filter((p) => namedIn(text, p.player.name));
 }
 
 // --- Stake --------------------------------------------------------------------
@@ -64,7 +60,7 @@ export function StakeStrip({ s, winNow, compact }: { s: Stake; winNow: number | 
 
 // --- Highlights ---------------------------------------------------------------
 
-export function Highlights({ list, players }: { list: Highlight[]; players: GamePlayer[] }) {
+export function Highlights({ list, players }: { list: Highlight[]; players: Pick<GamePlayer, "player" | "role">[] }) {
   const [playing, setPlaying] = useState<string | null>(null);
   const [failed, setFailed] = useState<Set<string>>(new Set());
   if (!list.length) return null;
