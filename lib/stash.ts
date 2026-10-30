@@ -10,6 +10,7 @@
 
 import type { PlayerAnalysis } from "./advisor";
 import { getPlayerNews, type NewsItem } from "./sleeper";
+import { lastName } from "./names";
 
 export interface Stash {
   /** Extra rest-of-season points/game credited for the upside (chance × what he'd gain). */
@@ -46,7 +47,8 @@ const TRADE_DENIED =
 const STASH_TALK =
   /\bstash\b|\bhandcuff\b|\bnext man up\b|\btake over\b|\b(lead|No\. 1|RB1|starting) (back|role|job)\b|\bascend\b|\b(bigger|expanded|increased) role\b|\busage (was |has been )?(scaled|ticked|ramped) up\b/i;
 
-const lastName = (name: string) =>
+// Lowercase last name, for matching inside news text.
+const lastLower = (name: string) =>
   name
     .replace(/\b(Jr|Sr|II|III|IV)\.?$/i, "")
     .trim()
@@ -88,7 +90,7 @@ export async function assessStashes(
 
     // Trade rumors about the starter (articles that name him), counted by day.
     if (week <= LAST_TRADE_WEEK) {
-      const sLast = lastName(s.name);
+      const sLast = lastLower(s.name);
       const rumors = starterNews.filter((n) => {
         const t = textOf(n);
         return fresh(n, now) && t.toLowerCase().includes(sLast) && TRADE.test(t) && !TRADE_DENIED.test(t);
@@ -98,7 +100,7 @@ export async function assessStashes(
         chance += days.length >= 3 ? 0.4 : days.length === 2 ? 0.3 : 0.2;
         const since = day(Math.min(...rumors.map((n) => n.published)));
         reasons.push(
-          `${s.name} is in trade rumors (${rumors.length} report${rumors.length > 1 ? "s" : ""} since ${since}) — if he's dealt, ${p.name.split(" ").slice(-1)[0]} is next in line`,
+          `${s.name} is in trade rumors (${rumors.length} report${rumors.length > 1 ? "s" : ""} since ${since}) — if he's dealt, ${lastName(p.name)} is next in line`,
         );
       }
     }
@@ -117,7 +119,7 @@ export async function assessStashes(
     }
 
     // Analysts calling him a stash / the next man up.
-    const pLast = lastName(p.name);
+    const pLast = lastLower(p.name);
     const buzz = ownNews.filter(
       (n) => fresh(n, now) && textOf(n).toLowerCase().includes(pLast) && STASH_TALK.test(textOf(n)),
     );
@@ -154,7 +156,7 @@ export async function assessStashes(
 
 /** "Stash: ~55% chance Jonathan Taylor's job opens up — worth ~13 pts/game if it does." */
 export function stashNote(p: PlayerAnalysis, s: Stash): string {
-  return `Stash: ~${Math.round(s.chance * 100)}% chance ${s.starter}'s job opens up — ${p.name.split(" ").slice(-1)[0]} would be worth ~${s.ifStarter} pts/game if it does. ${s.reasons[0]}`;
+  return `Stash: ~${Math.round(s.chance * 100)}% chance ${s.starter}'s job opens up — ${lastName(p.name)} would be worth ~${s.ifStarter} pts/game if it does. ${s.reasons[0]}`;
 }
 
 /**

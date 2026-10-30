@@ -8,6 +8,7 @@ import { createContext, useContext, useState } from "react";
 import type { Analysis, PlayerAnalysis } from "@/lib/advisor";
 import { isNoDrop, isNoTrade, type PlayerRule, type Prefs } from "@/lib/prefs";
 import { Card, Headshot, PosBadge } from "./ui";
+import { lastName } from "@/lib/names";
 
 interface RulesApi {
   prefs: Prefs;
@@ -18,7 +19,7 @@ const RulesContext = createContext<RulesApi>({ prefs: {}, setRule: () => {} });
 export const RulesProvider = RulesContext.Provider;
 export const useRules = () => useContext(RulesContext);
 
-const last = (name: string) => name.split(" ").slice(-1)[0];
+const last = lastName;
 
 /** One-tap "Not trading him" / "Keep him" chip for trade and waiver cards. */
 export function RuleChip({ p, kind }: { p: PlayerAnalysis; kind: "noTrade" | "noDrop" }) {

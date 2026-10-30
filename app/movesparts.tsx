@@ -8,6 +8,7 @@ import type { Analysis, PlayerAnalysis } from "@/lib/advisor";
 import { fetchWaiverRecap, type WaiverRecap } from "@/lib/recap";
 import { findWaiverStashes, type StashTarget } from "@/lib/stash";
 import { Card, PlayerLine } from "./ui";
+import { lastName } from "@/lib/names";
 
 const when = (ms: number) => new Date(ms).toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
 
@@ -136,7 +137,7 @@ export function StashTargets({ a, onCheck }: { a: Analysis; onCheck: (p: PlayerA
               </span>
             </div>
             <p className="mt-2 text-[13px] text-ink-300">
-              {s.reasons[0]}. Worth ~{s.ifStarter} pts/game if {s.starter.split(" ").slice(-1)[0]}&apos;s job opens up.
+              {s.reasons[0]}. Worth ~{s.ifStarter} pts/game if {lastName(s.starter)}&apos;s job opens up.
             </p>
             <button
               onClick={() => onCheck(p)}

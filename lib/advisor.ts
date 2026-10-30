@@ -254,6 +254,8 @@ export interface Analysis {
   roster: PlayerAnalysis[];
   /** Your roster minus IR/taxi — the players who can be started or traded. */
   activeRoster: PlayerAnalysis[];
+  /** How a defense has done against a position this season (for any week's opponent). */
+  defenseVs: (opponent: string, position: string) => Matchup | null;
   /** Every other team, modeled like yours (for trades). */
   otherTeams: OtherTeam[];
   drops: DropCandidate[];
@@ -1367,6 +1369,7 @@ export async function analyzeLeague(opts: {
     warnings: bestBall ? [] : warnings,
     roster,
     activeRoster: active,
+    defenseVs: buildDefenseTable(seasonStats),
     prefs,
     otherTeams: others.map((t) => ({
       rosterId: t.roster.roster_id,

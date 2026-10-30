@@ -12,6 +12,7 @@ import { DriveChart } from "./field";
 import { StakeStrip } from "./gameparts";
 import { GameSheet, type SheetTab } from "./gamesheet";
 import { Card, Empty, Headshot } from "./ui";
+import { lastName } from "@/lib/names";
 
 /** Live scoreboard + your players' stats, every 30s while games are on (5 min otherwise). */
 function useGameCenter(a: Analysis) {
@@ -444,7 +445,7 @@ export function GamesTab({ a }: { a: Analysis }) {
                 className="flex items-center gap-1.5 bg-ink-800 py-0.5 pr-2 pl-0.5 text-xs transition hover:bg-ink-700"
               >
                 <Headshot p={p.player} size={22} />
-                <b>{p.player.name.split(" ").slice(-1)[0]}</b>
+                <b>{lastName(p.player.name)}</b>
                 <span className="font-mono text-mint-400 tabular-nums">{p.yards} yds</span>
               </button>
             ))}

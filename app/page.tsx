@@ -186,6 +186,8 @@ export default function Home() {
             setWeek={setWeek}
             currentWeek={state ? upcomingWeek(state) : week}
             onSignOut={signOut}
+            season={state ? (state.league_season ?? state.season) : ""}
+            analysis={analysis}
           />
         ) : (
           <TopBar user={user} onSignOut={signOut} />

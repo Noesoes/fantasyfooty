@@ -8,6 +8,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { analyzeLeague, type Analysis } from "@/lib/advisor";
+import { glance, type LeagueGlance } from "@/lib/insights";
+import { loadPrefs } from "@/lib/prefs";
 import { avatarUrl, type League, type SleeperUser } from "@/lib/sleeper";
 import { InstallButton } from "./install";
 import { useDragToClose } from "./sheetdrag";
@@ -43,6 +46,65 @@ function LeagueAvatar({ l, size = 30 }: { l: League; size?: number }) {
   );
 }
 
+// Glances survive closing the sheet, so reopening it is instant.
+const glanceCache = new Map<string, LeagueGlance>();
+
+/** Every league's matchup at a glance, analyzed one league at a time (the open one is reused). */
+function useGlances(leagues: League[], userId: string, season: string, week: number, current: Analysis | null) {
+  const [, bump] = useState(0);
+  // The open league is already analyzed: use it right away.
+  if (current && !glanceCache.has(`${current.league.league_id}:${current.week}`)) {
+    glanceCache.set(`${current.league.league_id}:${current.week}`, glance(current));
+  }
+  useEffect(() => {
+    let alive = true;
+    // Three at a time: quick for a couple of leagues, polite to Sleeper for many.
+    const queue = leagues.filter((l) => !glanceCache.has(`${l.league_id}:${week}`));
+    const worker = async () => {
+      for (let l = queue.shift(); l && alive; l = queue.shift()) {
+        try {
+          const a = await analyzeLeague({
+            leagueId: l.league_id,
+            userId,
+            season,
+            week,
+            prefs: loadPrefs(l.league_id),
+          });
+          glanceCache.set(`${l.league_id}:${week}`, glance(a));
+        } catch {
+          // One league failing shouldn't stop the rest.
+        }
+        if (alive) bump((n) => n + 1);
+      }
+    };
+    void Promise.all([worker(), worker(), worker()]);
+    return () => {
+      alive = false;
+    };
+  }, [leagues, userId, season, week, current]);
+  return (leagueId: string) => glanceCache.get(`${leagueId}:${week}`);
+}
+
+function GlanceBadge({ g }: { g: LeagueGlance | undefined }) {
+  if (!g) return <span className="skeleton h-9 w-14 shrink-0 rounded-xl" aria-label="Loading" />;
+  const win = g.win;
+  return (
+    <span className="flex shrink-0 flex-col items-end">
+      {win !== null ? (
+        <span className={`font-mono text-lg leading-none font-black ${win >= 0.5 ? "text-mint-400" : "text-rose-400"}`}>
+          {Math.round(win * 100)}%
+        </span>
+      ) : (
+        <span className="text-xs font-bold text-ink-400">No game</span>
+      )}
+      <span className="mt-1 text-[11px] font-bold text-ink-400">
+        {g.todo ? `${g.todo} to do` : "All set"}
+        {g.trouble ? <span className="text-amber-300"> · {g.trouble} ⚠</span> : null}
+      </span>
+    </span>
+  );
+}
+
 function MenuSheet({
   leagues,
   leagueId,
@@ -50,6 +112,9 @@ function MenuSheet({
   user,
   onSignOut,
   onClose,
+  season,
+  week,
+  current,
 }: {
   leagues: League[];
   leagueId: string;
@@ -57,7 +122,11 @@ function MenuSheet({
   user: SleeperUser;
   onSignOut: () => void;
   onClose: () => void;
+  season: string;
+  week: number;
+  current: Analysis | null;
 }) {
+  const glanceOf = useGlances(leagues, user.user_id, season, week, current);
   const scroll = useRef<HTMLDivElement>(null);
   const { handlers, style, pulled } = useDragToClose(onClose, scroll);
   useEffect(() => {
@@ -87,7 +156,10 @@ function MenuSheet({
           <span className="h-1.5 w-10 rounded-full bg-ink-600" />
         </div>
         <div ref={scroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5">
-          <h2 className="mb-3 text-xl font-black">Your leagues</h2>
+          <div className="mb-3 flex items-baseline justify-between">
+            <h2 className="text-xl font-black">Your leagues</h2>
+            <span className="text-xs font-bold text-ink-400">Week {week} · win chance</span>
+          </div>
           <ul className="flex flex-col gap-2">
             {leagues.map((l) => {
               const active = l.league_id === leagueId;
@@ -109,8 +181,13 @@ function MenuSheet({
                         {l.total_rosters} teams · {scoringOf(l)}
                         {l.roster_positions.includes("SUPER_FLEX") ? " · SF" : ""}
                       </span>
+                      {glanceOf(l.league_id)?.oppName && (
+                        <span className="block truncate text-xs font-bold text-ink-300">
+                          {glanceOf(l.league_id)!.me} vs {glanceOf(l.league_id)!.opp} · {glanceOf(l.league_id)!.oppName}
+                        </span>
+                      )}
                     </span>
-                    {active && <span className="text-sm font-black text-mint-400">✓</span>}
+                    <GlanceBadge g={glanceOf(l.league_id)} />
                   </button>
                 </li>
               );
@@ -196,6 +273,8 @@ export function CompactBar({
   setWeek,
   currentWeek,
   onSignOut,
+  season,
+  analysis,
 }: {
   user: SleeperUser;
   leagues: League[];
@@ -205,6 +284,8 @@ export function CompactBar({
   setWeek: (w: number) => void;
   currentWeek: number;
   onSignOut: () => void;
+  season: string;
+  analysis: Analysis | null;
 }) {
   const [menu, setMenu] = useState(false);
   const league = leagues.find((l) => l.league_id === leagueId);
@@ -266,6 +347,9 @@ export function CompactBar({
           user={user}
           onSignOut={onSignOut}
           onClose={() => setMenu(false)}
+          season={season}
+          week={week}
+          current={analysis && analysis.week === week ? analysis : null}
         />
       )}
     </header>

@@ -37,6 +37,16 @@ Everything is grouped into four sections, each with a few tabs:
 
 **What changed:** the app keeps a small snapshot of your roster and matchup per league and week on your device. When you come back, Home lists what's different (injury status, chance to play, projections that moved 2+ pts, players added or dropped, win chance, stash odds) until you tap *Got it*.
 
+**Ask** (top of Home): type a question in plain English and get the answer with reasons, using the same logic as the rest of the app (no AI service). It understands "Gibbs or Taylor?" (start/sit with a confidence %), "should I pick up Goodson?" (pickup verdict), "trade Metcalf for Achane?" (trade grade), "who should I drop?", or just a player's name. Names can be full, last or distinctive first names; a last name shared by several players resolves to yours, or the app asks which one you mean.
+
+**Confidence and ranges:** start/sit calls show how sure the pick is (the chance one player outscores the other, given each position's usual week-to-week swing), and every player sheet shows a realistic range for the week (the 1-in-5 bad week to the 1-in-5 good week).
+
+**All your leagues:** the league switcher shows every league's win chance, score vs opponent and how many moves are waiting, analyzed three leagues at a time in the background.
+
+**Power rankings** (Team tab): every team's rest-of-season strength (best lineup plus bench depth), its rank at each position, and your best trade partners: teams that are deep where you're thin and thin where you're deep.
+
+**Streaming planner** (Waivers tab): for QB, K and DEF (whichever your league starts), the best free agents over the next three weeks by opponent, next to your own, with each week colored by how easy the matchup is.
+
 **Start X or Y?** (Lineup tab): pick any two of your players, or one of yours and a free agent, for the call plus the edges on each side and every factor side by side.
 
 **Waivers tab extras:** a *Last waiver run* recap (each of your claims: won, or who beat you and by how much in FAAB; the league's biggest adds; your priority or budget now) and *Stash candidates*: free agents next in line behind a starter who's hurt or in trade rumors (RBs, TEs and receivers), each with a one-tap pickup check.
@@ -199,6 +209,9 @@ lib/teamcolors.ts          NFL team colors for team-tinted player sheets
 lib/recap.ts               last waiver run recap from league transactions
 lib/changes.ts             'what changed since you last looked' snapshots
 lib/errorlog.ts            on-device error log, crash report text, clear-my-data
+lib/insights.ts            ranges and confidence, power rankings, streaming planner, league glance
+lib/ask.ts                 plain-English questions routed to the app's logic
+lib/names.ts               short player names (skips Jr., Sr., II)
 lib/stash.ts               stash value for backups (trade rumors, injuries, handcuff news)
 lib/explain.ts             factor breakdown and start-over-sit comparison behind each Game plan call
 lib/report.ts              Markdown rendering for the weekly issue

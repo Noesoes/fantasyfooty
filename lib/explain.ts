@@ -3,6 +3,7 @@
 
 import type { PlayerAnalysis } from "./advisor";
 import { OUT_STATUSES } from "./status";
+import { lastName } from "./names";
 
 export type Tone = "good" | "bad" | "neutral";
 
@@ -178,7 +179,7 @@ export interface Comparison {
   against: string[];
 }
 
-const first = (name: string) => name.split(" ").slice(-1)[0];
+const first = lastName;
 
 /** Why `pick` is the better start than `other`, biggest edges first. */
 export function compareStart(pick: PlayerAnalysis, other: PlayerAnalysis): Comparison {

@@ -8,16 +8,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Analysis, PlayerAnalysis } from "@/lib/advisor";
 import { factorsFor, type Tone } from "@/lib/explain";
+import { playerRange } from "@/lib/insights";
 import { isNoDrop, isNoTrade } from "@/lib/prefs";
 import { PlayerSheetContext, useOpenPlayer } from "./playerctx";
 import { useRules } from "./rules";
 import { useDragToClose } from "./sheetdrag";
 import { teamColor } from "@/lib/teamcolors";
 import { Headshot, InjuryTag, PosBadge } from "./ui";
+import { lastName } from "@/lib/names";
 
 const OUT = new Set(["Out", "IR", "PUP", "Sus", "NA", "DNR", "COV", "NFI"]);
 const pct = (n: number) => `${Math.round(n * 100)}%`;
-const last = (name: string) => name.split(" ").slice(-1)[0];
+const last = lastName;
 const posWord = (pos: string) => (pos === "DEF" ? "D/STs" : pos === "K" ? "kickers" : `${pos}s`);
 const ordinal = (n: number) => {
   const s = ["th", "st", "nd", "rd"];
@@ -199,6 +201,18 @@ function SheetBody({ a, p }: { a: Analysis; p: PlayerAnalysis }) {
           }
         />
       </div>
+
+      {p.weekScore > 0 && (
+        <div className="mt-2 flex items-center justify-between gap-3 rounded-2xl border border-ink-700 bg-ink-900 px-4 py-2.5 text-sm">
+          <span className="text-ink-400">Realistic range</span>
+          <span className="font-mono font-bold">
+            <span className="text-rose-300">{playerRange(p).floor}</span>
+            <span className="text-ink-500"> – </span>
+            <span className="text-mint-400">{playerRange(p).ceiling}</span>
+            <span className="ml-1 text-xs font-semibold text-ink-400">pts</span>
+          </span>
+        </div>
+      )}
 
       {/* The defense */}
       {m && (

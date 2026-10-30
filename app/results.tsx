@@ -13,15 +13,18 @@ import { buildPlayoffOdds, type PlayoffOdds, type PlayoffTeam } from "@/lib/play
 import { buildInjuryReport, type InjuryReport, type InjuryRow, type Verdict } from "@/lib/injuries";
 import { buildTrackRecord, type TrackRecord } from "@/lib/backtest";
 import { compareStart, factorsFor, FACTOR_LABELS, type FactorKey, type Tone } from "@/lib/explain";
-import { fetchLive, phi, type LivePlayer, type LiveSide, type LiveState } from "@/lib/live";
+import { fetchLive, type LivePlayer, type LiveSide, type LiveState } from "@/lib/live";
 import { GamesTab } from "./games";
 import { FillPosition, PlayerCheck } from "./playercheck";
+import { confidenceWord, projectedWin, startConfidence } from "@/lib/insights";
 import { diffSnapshots, loadSeen, saveSeen, snapshotOf, type Change } from "@/lib/changes";
+import { AskBox, PowerRankings, StreamingPlanner } from "./insightsui";
 import { StashTargets, WaiverRecapCard } from "./movesparts";
 import { PlayerSheetProvider } from "./playersheet";
 import { RuleChip, RulesCard } from "./rules";
 import { useOpenPlayer } from "./playerctx";
 import { Card, Empty, Headshot, MatchupChip, PlayerLine, Points, PosBadge, SlotBadge } from "./ui";
+import { lastName } from "@/lib/names";
 
 type Tab =
   | "live"
@@ -35,6 +38,7 @@ type Tab =
   | "planner"
   | "playoffs"
   | "record"
+  | "power"
   | "roster";
 
 type Section = "week" | "moves" | "games" | "team";
@@ -66,6 +70,7 @@ const SECTIONS: { id: Section; label: string; tabs: { id: Tab; label: string }[]
     label: "Team",
     tabs: [
       { id: "roster", label: "Roster" },
+      { id: "power", label: "Rankings" },
       { id: "playoffs", label: "Playoffs" },
       { id: "planner", label: "Schedule" },
       { id: "record", label: "Track record" },
@@ -266,6 +271,7 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
         {tab === "playoffs" && <Playoffs a={a} />}
         {tab === "record" && <Record a={a} />}
         {tab === "roster" && <Roster a={a} />}
+        {tab === "power" && <PowerRankings a={a} onTrades={() => setTab("trades")} />}
 
         {/* Phone: sections in a thumb-reach bar under the scrolling area. */}
         {navSlot &&
@@ -303,14 +309,6 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
       </div>
     </PlayerSheetProvider>
   );
-}
-
-/** Win chance from projected points, with the usual week-to-week spread (same model as Live mode). */
-function projectedWin(mine: number[], theirs: number[]): number {
-  const variance = [...mine, ...theirs].reduce((v, x) => v + (0.6 * x) ** 2, 0);
-  const sd = Math.sqrt(variance);
-  const margin = mine.reduce((s, x) => s + x, 0) - theirs.reduce((s, x) => s + x, 0);
-  return sd < 0.5 ? (margin > 0 ? 1 : margin < 0 ? 0 : 0.5) : phi(margin / sd);
 }
 
 /** T1 matchup card: win ring on the left, both teams' points, one line underneath. */
@@ -628,6 +626,8 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
             <span className="text-mint-400">
               +{Math.round(Math.abs(pair[0].weekScore - pair[1].weekScore) * 10) / 10} pts
             </span>
+            {" · "}
+            {Math.round(startConfidence(pair[0], pair[1]) * 100)}% sure
           </>
         ) : (
           m.reason
@@ -683,6 +683,7 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
         </div>
       )}
 
+      <AskBox a={a} />
       <WhatChanged a={a} />
 
       <div className="mt-2 flex items-baseline justify-between px-1">
@@ -755,7 +756,7 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
                           onClick={() => openPlayer?.(p)}
                           className="rounded-full bg-ink-800 px-3 py-1.5 text-xs font-semibold text-ink-100 hover:bg-ink-700"
                         >
-                          {p.name.split(" ").slice(-1)[0]}&apos;s matchup &amp; workload ›
+                          {lastName(p.name)}&apos;s matchup &amp; workload ›
                         </button>
                       ))}
                     </div>
@@ -821,7 +822,7 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
             {hurt.length
               ? hurt
                   .slice(0, 2)
-                  .map((p) => `${p.name.split(" ").slice(-1)[0]} · ${p.injury?.toLowerCase()}`)
+                  .map((p) => `${lastName(p.name)} · ${p.injury?.toLowerCase()}`)
                   .join(", ")
               : "Starters healthy"}
           </span>
@@ -1012,7 +1013,7 @@ function StartOrSit({ a }: { a: Analysis }) {
   const [pick, other] =
     picked.length === 2 ? [...picked].sort((x, y) => y.weekScore - x.weekScore) : [undefined, undefined];
   const cmp = pick && other ? compareStart(pick, other) : null;
-  const close = pick && other && Math.abs(pick.weekScore - other.weekScore) < 1;
+  const close = pick && other && confidenceWord(startConfidence(pick, other)) === "Coin flip";
   const select = (i: 0 | 1) => (
     <select
       value={ids[i]}
@@ -1047,9 +1048,14 @@ function StartOrSit({ a }: { a: Analysis }) {
       {pick && other && cmp && (
         <div className="mt-4">
           <div className="rounded-2xl bg-mint-400/10 p-4 ring-1 ring-mint-400/30">
-            <div className="text-lg font-black text-mint-400">
-              {close ? "Coin flip — lean " : "Start "}
-              {pick.name}
+            <div className="flex items-baseline justify-between gap-3">
+              <div className="text-lg font-black text-mint-400">
+                {close ? "Coin flip — lean " : "Start "}
+                {pick.name}
+              </div>
+              <span className="shrink-0 text-xs font-extrabold text-ink-300">
+                {Math.round(startConfidence(pick, other) * 100)}% · {confidenceWord(startConfidence(pick, other))}
+              </span>
             </div>
             <p className="mt-1 text-sm text-ink-300">{cmp.headline}</p>
           </div>
@@ -1235,6 +1241,7 @@ function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => v
       </Card>
 
       <StashTargets a={a} onCheck={check} />
+      <StreamingPlanner a={a} />
       <PlayerCheck ref={checkRef} a={a} selected={checking} onSelect={setChecking} />
       <FillPosition a={a} onCheck={check} />
 
@@ -1271,9 +1278,8 @@ function Waivers({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: () => v
                     <div className="mt-1.5 ml-[46px] text-xs">
                       <p className="text-ink-100">
                         <b className="text-violet">~{Math.round(st.chance * 100)}% chance</b> {st.starter}&apos;s job
-                        opens up — {p.name.split(" ").slice(-1)[0]} would be worth{" "}
-                        <b className="font-mono">~{st.ifStarter}</b> pts/game if it does (
-                        <span className="font-mono">{p.rosValue}</span> now).
+                        opens up — {lastName(p.name)} would be worth <b className="font-mono">~{st.ifStarter}</b>{" "}
+                        pts/game if it does (<span className="font-mono">{p.rosValue}</span> now).
                       </p>
                       <ul className="mt-1 flex flex-col gap-0.5 text-ink-400">
                         {st.reasons.map((r) => (
@@ -2797,7 +2803,7 @@ function InjurySection({
                       : `Backup plan: start ${backup.player.name}`}{" "}
                     ({backup.player.position}, {backup.player.weekScore.toFixed(1)} proj
                     {backup.freeAgent ? ", free agent — add them first" : ""})
-                    {r.verdict === "Out" ? "." : ` if ${r.player.name.split(" ").slice(-1)[0]} is ruled out.`}
+                    {r.verdict === "Out" ? "." : ` if ${lastName(r.player.name)} is ruled out.`}
                   </p>
                 )}
               </li>

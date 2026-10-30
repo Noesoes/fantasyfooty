@@ -5,6 +5,7 @@
 // always attacks to the right.
 
 import type { DriveView, FieldMove } from "@/lib/playbyplay";
+import { lastName } from "@/lib/names";
 
 const RESULT_COLOR: Record<FieldMove["result"], string> = {
   gain: "var(--color-mint-400)",
@@ -196,7 +197,7 @@ export function DriveChart({ d }: { d: DriveView }) {
               className={mine ? "display fill-mint-300" : "fill-ink-300"}
               style={{ fontSize: mine ? 32 : 26, fontWeight: mine ? 800 : 600 }}
             >
-              {mine ? `${p.player!.name.split(" ").slice(-1)[0]}: ${p.label}` : p.label}
+              {mine ? `${lastName(p.player!.name)}: ${p.label}` : p.label}
               {mine && p.points !== null && p.points !== 0 ? ` (${p.points > 0 ? "+" : ""}${p.points.toFixed(1)})` : ""}
             </text>
           </g>

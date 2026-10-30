@@ -15,6 +15,7 @@ import {
   type WaiverTarget,
 } from "./advisor";
 import { ordinal } from "./scouting";
+import { lastName } from "./names";
 
 export type PickupVerdict = "Pick up" | "Stream" | "Stash" | "Pass";
 
@@ -34,7 +35,7 @@ export interface PickupReport {
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 const pct = (n: number) => `${Math.round(n * 100)}%`;
-const last = (name: string) => name.split(" ").slice(-1)[0];
+const last = lastName;
 
 export function evaluatePickup(a: Analysis, p: PlayerAnalysis): PickupReport {
   const pros: string[] = [];

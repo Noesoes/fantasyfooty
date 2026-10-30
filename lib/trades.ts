@@ -42,7 +42,7 @@ export interface TradeReport {
 }
 
 /** Starter slots ordered most-restrictive first (QB before FLEX before SUPER_FLEX). */
-function lineupSlots(rosterPositions: string[]) {
+export function lineupSlots(rosterPositions: string[]) {
   return rosterPositions
     .filter((s) => s in SLOT_ELIGIBILITY)
     .map((s) => SLOT_ELIGIBILITY[s])
@@ -50,7 +50,7 @@ function lineupSlots(rosterPositions: string[]) {
 }
 
 /** Greedy best lineup by rest-of-season value. `players` must be sorted by rosValue, best first. */
-function bestLineup(slots: string[][], players: PlayerAnalysis[]) {
+export function bestLineup(slots: string[][], players: PlayerAnalysis[]) {
   const used = new Set<string>();
   const starters: PlayerAnalysis[] = [];
   for (const eligible of slots) {
@@ -63,7 +63,7 @@ function bestLineup(slots: string[][], players: PlayerAnalysis[]) {
   return { starters, bench: players.filter((p) => !used.has(p.id)) };
 }
 
-function teamValue(slots: string[][], players: PlayerAnalysis[]): number {
+export function teamValue(slots: string[][], players: PlayerAnalysis[]): number {
   const { starters, bench } = bestLineup(slots, players);
   let v = 0;
   for (const p of starters) v += p.rosValue;
@@ -85,7 +85,7 @@ function combos<T>(items: T[]): [T, T][] {
 }
 
 /** Rest-of-season value of starters at each core position, per team. */
-function positionValues(slots: string[][], players: PlayerAnalysis[]) {
+export function positionValues(slots: string[][], players: PlayerAnalysis[]) {
   const { starters } = bestLineup(slots, [...players].sort(byValue));
   const out: Record<string, number> = {};
   for (const pos of CORE_POSITIONS) out[pos] = 0;

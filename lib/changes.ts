@@ -4,6 +4,7 @@
 // chance, stash odds) are listed until you dismiss them.
 
 import type { Analysis } from "./advisor";
+import { lastName } from "./names";
 
 export interface Snapshot {
   at: number;
@@ -25,7 +26,7 @@ export interface Change {
 
 const SEVERITY: Record<string, number> = { Questionable: 1, Doubtful: 2, Out: 3, IR: 4, PUP: 4, Sus: 3 };
 const sev = (s: string | null) => (s ? (SEVERITY[s] ?? 2) : 0);
-const last = (name: string) => name.split(" ").slice(-1)[0];
+const last = lastName;
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
 export function snapshotOf(a: Analysis, win: number | null): Snapshot {
