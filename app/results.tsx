@@ -19,12 +19,13 @@ import { FillPosition, PlayerCheck } from "./playercheck";
 import { projectedWin, startConfidence } from "@/lib/insights";
 import { diffSnapshots, loadSeen, saveSeen, snapshotOf, type Change } from "@/lib/changes";
 import { Faceoff } from "./faceoff";
+import { MatchupAnalyzer } from "./matchupui";
 import { AskBox, PowerRankings, StreamingPlanner } from "./insightsui";
 import { StashTargets, WaiverRecapCard } from "./movesparts";
 import { PlayerSheetProvider } from "./playersheet";
 import { RuleChip, RulesCard } from "./rules";
 import { useOpenPlayer } from "./playerctx";
-import { Card, Empty, Headshot, MatchupChip, PlayerLine, Points, PosBadge, SlotBadge } from "./ui";
+import { Card, Empty, Headshot, MatchupChip, PlayerLine, Points, PosBadge, Ring, SlotBadge } from "./ui";
 import { lastName } from "@/lib/names";
 
 type Tab =
@@ -54,7 +55,7 @@ const SECTIONS: { id: Section; label: string; tabs: { id: Tab; label: string }[]
       { id: "plan", label: "Plan" },
       { id: "lineup", label: "Lineup" },
       { id: "injuries", label: "Injuries" },
-      { id: "scout", label: "Opponent" },
+      { id: "scout", label: "Matchup" },
     ],
   },
   {
@@ -353,27 +354,6 @@ function MatchupCard({
   );
 }
 
-function Ring({ value, size = 112, children }: { value: number; size?: number; children: React.ReactNode }) {
-  const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
-  return (
-    <div
-      className="relative mx-auto flex shrink-0 items-center justify-center rounded-full"
-      style={{
-        width: size,
-        height: size,
-        background: `conic-gradient(var(--color-mint-400) 0 ${pct}%, var(--color-ink-700) ${pct}% 100%)`,
-      }}
-    >
-      <div
-        className="flex flex-col items-center justify-center rounded-full bg-ink-950/80 text-center"
-        style={{ width: size - 22, height: size - 22 }}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-
 function Widget({
   label,
   children,
@@ -400,16 +380,16 @@ function Widget({
 function Scoreboard({ a }: { a: Analysis }) {
   const gain = Math.round((a.optimalTotal - a.currentTotal) * 10) / 10;
   const opp = a.opponent;
-  const theirs = opp ? opp.starters.map((p) => p.weekScore) : [];
+  const theirs = opp?.starters ?? [];
   const winBest = opp
     ? projectedWin(
-        a.optimalLineup.map((s) => s.player?.weekScore ?? 0),
+        a.optimalLineup.map((s) => s.player),
         theirs,
       )
     : null;
   const winNow = opp
     ? projectedWin(
-        a.currentLineup.map((s) => s.player?.weekScore ?? 0),
+        a.currentLineup.map((s) => s.player),
         theirs,
       )
     : null;
@@ -930,8 +910,8 @@ function WhatChanged({ a }: { a: Analysis }) {
   const current = useMemo(() => {
     const win = a.opponent
       ? projectedWin(
-          a.currentLineup.map((s) => s.player?.weekScore ?? 0),
-          a.opponent.starters.map((p) => p.weekScore),
+          a.currentLineup.map((s) => s.player),
+          a.opponent.starters,
         )
       : null;
     return snapshotOf(a, win);
@@ -1809,11 +1789,17 @@ function ScoutPlayer({ p, align }: { p: PlayerAnalysis | null; align: "left" | "
 function Scout({ a }: { a: Analysis }) {
   const { data: s, error } = useAsync<Scouting | null>(() => buildScouting(a), [a]);
   if (!a.opponent) return <Empty>No opponent this week (bye or playoffs).</Empty>;
-  if (error) return <Empty>Couldn&apos;t load the scouting report: {error}</Empty>;
+  if (error)
+    return (
+      <div className="flex flex-col gap-5">
+        <MatchupAnalyzer a={a} />
+        <Empty>Couldn&apos;t load the scouting report: {error}</Empty>
+      </div>
+    );
   if (!s) {
     return (
-      <div className="flex flex-col gap-3" aria-busy="true">
-        <div className="skeleton h-40 rounded-2xl" />
+      <div className="flex flex-col gap-5" aria-busy="true">
+        <MatchupAnalyzer a={a} />
         <div className="skeleton h-96 rounded-2xl" />
       </div>
     );
@@ -1824,6 +1810,7 @@ function Scout({ a }: { a: Analysis }) {
   const rec = `${s.record.wins}-${s.record.losses}${s.record.ties ? `-${s.record.ties}` : ""}`;
   return (
     <div className="flex flex-col gap-5">
+      <MatchupAnalyzer a={a} />
       <Card title="Scouting report">
         <div className="flex flex-wrap items-center gap-4">
           <TeamMark t={s} size={56} />

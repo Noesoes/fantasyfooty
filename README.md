@@ -28,7 +28,7 @@ Everything is grouped into four sections, each with a few tabs:
 
 | Section | Tabs |
 | --- | --- |
-| **Home** | Plan (your matchup, the moves to make this week, heads-up alerts) · Lineup · Injuries · Opponent (plus **Live** on game days) |
+| **Home** | Plan (your matchup, the moves to make this week, heads-up alerts) · Lineup · Injuries · Matchup (plus **Live** on game days) |
 | **Moves** | Waivers · Trades |
 | **Games** | Every game this week, with a game center for each |
 | **Team** | Roster · Playoffs · Schedule (bye weeks and week-by-week projections) · Track record |
@@ -111,7 +111,14 @@ It also names the drop and, in FAAB leagues, a suggested bid. Search covers ever
 
 **Live mode (Live tab):** once the week's games kick off, the scoreboard switches to live scoring and a Live tab opens. It shows both lineups with real points from Sleeper, each player's game status and clock, and "still to come" points (projection × share of the game left, using ESPN's game clock). It also shows a live win probability (assuming player scores vary by about ±60% of projection) and late-swap tips: a bench player or free agent whose game hasn't started and would beat a starter who won't play or is projected lower. It refreshes every minute while games are on.
 
-**Opponent scouting (Scout tab):** a report on this week's opponent:
+**Matchup analyzer (Matchup tab):** this week's head-to-head, in four views:
+
+- **Outcome:** your win chance, both teams' score curves, and floor / projected / upside (a 1-in-10 bad and great week) for each side, plus what your suggested moves would add, with a plain-English preview.
+- **Positions:** expected points slot by slot (QB, RB, WR, TE, FLEX, K, DEF) and who has the edge.
+- **Time:** points each side has in each kickoff window (Thursday night, Sunday early / late / night, Monday night) and the running margin after each.
+- **Stacks:** your starters on the same NFL team (QB stacks raise your upside and lower your floor) and games where your players face your opponent's.
+
+**Opponent scouting (below the analyzer):** a report on this week's opponent:
 - **Tale of the tape:** your best lineup against the lineup they've set, slot by slot, with who has the edge. If they haven't set their best lineup yet, it says how much better it could be.
 - **Weak spots:** starters who are out, on bye, questionable or not projected, plus empty slots.
 - **Moves to expect:** bench players they should swap in and free agents who'd upgrade them.
@@ -235,6 +242,7 @@ lib/gamecenter.ts          every game this week + your players' live stats
 lib/pickup.ts              should-I-pick-him-up verdicts and best-available-by-position rankings
 app/playercheck.tsx        Player check search and verdict card
 lib/playoffs.ts            playoff odds simulation
+lib/matchup.ts             weekly matchup analyzer (outcome, positions, time windows, stacks)
 lib/scouting.ts            opponent scouting report
 scripts/fetch-snapshots.mjs ESPN injury + scoreboard snapshots used by the deploy workflow
 scripts/weekly-report.ts   CLI entry point used by the weekly GitHub Action

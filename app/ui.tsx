@@ -257,3 +257,25 @@ export function Card({
 export function Empty({ children }: { children: React.ReactNode }) {
   return <p className="rounded-xl bg-ink-850 p-6 text-center text-sm text-ink-400">{children}</p>;
 }
+
+/** Win-chance ring: a mint arc for the share, with a label inside. */
+export function Ring({ value, size = 112, children }: { value: number; size?: number; children: React.ReactNode }) {
+  const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
+  return (
+    <div
+      className="relative mx-auto flex shrink-0 items-center justify-center rounded-full"
+      style={{
+        width: size,
+        height: size,
+        background: `conic-gradient(var(--color-mint-400) 0 ${pct}%, var(--color-ink-700) ${pct}% 100%)`,
+      }}
+    >
+      <div
+        className="flex flex-col items-center justify-center rounded-full bg-ink-950/80 text-center"
+        style={{ width: size - 22, height: size - 22 }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}

@@ -222,11 +222,27 @@ export async function streamingPlan(a: Analysis, position: string, span = 3): Pr
 
 // --- All leagues at a glance ---------------------------------------------------
 
-/** Win chance from projected points, with the usual week-to-week spread (same model as Live mode). */
-export function projectedWin(mine: number[], theirs: number[]): number {
-  const variance = [...mine, ...theirs].reduce((v, x) => v + (0.6 * x) ** 2, 0);
-  const sd = Math.sqrt(variance);
-  const margin = mine.reduce((s, x) => s + x, 0) - theirs.reduce((s, x) => s + x, 0);
+/** A lineup's expected total and its week-to-week spread (players' swings combined). */
+export function teamOutcome(players: (PlayerAnalysis | null | undefined)[]): { mean: number; sd: number } {
+  let mean = 0;
+  let variance = 0;
+  for (const p of players) {
+    if (!p) continue;
+    mean += p.weekScore;
+    variance += playerRange(p).sd ** 2;
+  }
+  return { mean, sd: Math.sqrt(variance) };
+}
+
+/** Win chance from two lineups' expected points and each position's usual week-to-week swing. */
+export function projectedWin(
+  mine: (PlayerAnalysis | null | undefined)[],
+  theirs: (PlayerAnalysis | null | undefined)[],
+): number {
+  const a = teamOutcome(mine);
+  const b = teamOutcome(theirs);
+  const sd = Math.sqrt(a.sd ** 2 + b.sd ** 2);
+  const margin = a.mean - b.mean;
   return sd < 0.5 ? (margin > 0 ? 1 : margin < 0 ? 0 : 0.5) : phi(margin / sd);
 }
 
@@ -245,9 +261,9 @@ export interface LeagueGlance {
 }
 
 export function glance(a: Analysis): LeagueGlance {
-  const theirs = a.opponent ? a.opponent.starters.map((p) => p.weekScore) : [];
-  const now = a.currentLineup.map((s) => s.player?.weekScore ?? 0);
-  const best = a.optimalLineup.map((s) => s.player?.weekScore ?? 0);
+  const theirs = a.opponent?.starters ?? [];
+  const now = a.currentLineup.map((s) => s.player);
+  const best = a.optimalLineup.map((s) => s.player);
   const covered = new Set(a.moves.filter((m) => m.action === "start" && m.vs).map((m) => m.vs!.id));
   const lineupMoves = a.moves.filter((m) => !(m.action === "bench" && covered.has(m.player.id))).length;
   return {
