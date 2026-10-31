@@ -39,6 +39,8 @@ Everything is grouped into four sections, each with a few tabs:
 
 **Ask** (top of Home): type a question in plain English and get the answer with reasons, using the same logic as the rest of the app (no AI service). It understands "Gibbs or Taylor?" (start/sit with a confidence %), "should I pick up Goodson?" (pickup verdict), "trade Metcalf for Achane?" (trade grade), "who should I drop?", or just a player's name. News questions are answered from the player's Sleeper news feed (RotoWire, RotoBaller, FantasyPros) with the headlines listed and linked: "is Taylor getting traded?" weighs trade rumors against reports he's staying (newer reports count more) and tags each one; "is Gibbs hurt?" / "will Puka play?" gives his status and the latest injury headlines; "latest on X" lists recent news. Names can be full (small first-name typos are fine), last or distinctive first names; a last name shared by several players resolves to yours, or the app asks which one you mean.
 
+**Ask, answered by Claude** (optional): add your own Anthropic API key in the menu (tap your avatar → Claude for Ask) and Ask takes any question about your league ("how does my matchup next week look?", "is my RB depth good enough for the playoffs?"), with follow-ups. Questions go from your phone straight to Claude Haiku 5.5, which calls the app's own models as tools: your lineup, any week's matchup, player lookups, news, start/sit, trade grades, waivers and the league outlook. So answers quote the same numbers as the rest of the app, and a question costs a fraction of a cent. The key is saved on that device only (never in the code, on GitHub or on a server) and is removed by "Clear my data". Without a key, Ask uses the built-in answers above.
+
 **Confidence and ranges:** start/sit calls show how sure the pick is (the chance one player outscores the other, given each position's usual week-to-week swing), and every player sheet shows a realistic range for the week (the 1-in-5 bad week to the 1-in-5 good week).
 
 **All your leagues:** the league switcher shows every league's win chance, score vs opponent and how many moves are waiting, analyzed three leagues at a time in the background.
@@ -242,6 +244,7 @@ lib/gamecenter.ts          every game this week + your players' live stats
 lib/pickup.ts              should-I-pick-him-up verdicts and best-available-by-position rankings
 app/playercheck.tsx        Player check search and verdict card
 lib/playoffs.ts            playoff odds simulation
+lib/claude.ts              Ask answered by Claude Haiku 5.5 with the app's models as tools (your own key, stored on-device)
 lib/asknews.ts             news questions for Ask (trade rumors, injuries, latest)
 lib/tradetalk.ts           sorts trade headlines into rumors vs. "he's staying" (used by Ask and stash odds)
 lib/matchup.ts             weekly matchup analyzer (outcome, positions, time windows, stacks)

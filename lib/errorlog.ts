@@ -69,7 +69,7 @@ export function installErrorLogging(): () => void {
 
 // Everything the app keeps in this browser (prefixes and exact keys).
 const PREFIXES = ["rules:", "seen:", "pins:", "plan:"];
-const KEYS = ["sleeper-advisor", "theme", LOG_KEY];
+const KEYS = ["sleeper-advisor", "theme", "claude-api-key", LOG_KEY];
 
 /** Remove the app's saved data from this device (username, rules, checklists, pins, snapshots, error log). */
 export function clearLocalData(keepTheme = true) {

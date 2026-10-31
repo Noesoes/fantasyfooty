@@ -230,6 +230,8 @@ export interface Analysis {
   prefs: Prefs;
   teamName: string;
   myRosterId: number;
+  /** Your Sleeper user id (to re-run the analysis for another week). */
+  userId: string;
   /** Best-ball league: Sleeper sets the lineup automatically, so no start/sit advice. */
   bestBall: boolean;
   /** Sleeper avatar id of the team owner, if set. */
@@ -1367,6 +1369,7 @@ export async function analyzeLeague(opts: {
     backupTargets,
     teamName,
     myRosterId: mine.roster_id,
+    userId,
     avatar: owner?.avatar ?? null,
     season,
     week,

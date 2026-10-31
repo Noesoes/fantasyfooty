@@ -16,6 +16,7 @@ import { InstallButton } from "./install";
 import { useDragToClose } from "./sheetdrag";
 import { ThemeToggle } from "./theme";
 import { clearLocalData, errorReport, readErrors } from "@/lib/errorlog";
+import { checkClaudeKey, CLAUDE_MODEL_NAME, getClaudeKey, KEY_EVENT, setClaudeKey } from "@/lib/claude";
 
 function scoringOf(l: League) {
   const rec = l.scoring_settings.rec ?? 0;
@@ -205,6 +206,7 @@ function MenuSheet({
               Switch account
             </button>
           </div>
+          <ClaudeKeyBox />
           <PrivacyBox
             onCleared={() => {
               onClose();
@@ -222,6 +224,103 @@ function MenuSheet({
   );
 }
 
+/**
+ * Your own Anthropic API key, for Ask answered by Claude. Saved on this device
+ * only; checked before saving.
+ */
+function ClaudeKeyBox() {
+  const [saved, setSaved] = useState<string | null>(() => getClaudeKey());
+  const [draft, setDraft] = useState("");
+  const [status, setStatus] = useState<"idle" | "checking" | "invalid" | "offline">("idle");
+  useEffect(() => {
+    const sync = () => setSaved(getClaudeKey());
+    window.addEventListener(KEY_EVENT, sync);
+    return () => window.removeEventListener(KEY_EVENT, sync);
+  }, []);
+  const save = async () => {
+    const key = draft.trim();
+    if (!key) return;
+    setStatus("checking");
+    const result = await checkClaudeKey(key);
+    if (result === "ok") {
+      setClaudeKey(key);
+      setDraft("");
+      setStatus("idle");
+    } else setStatus(result);
+  };
+  return (
+    <details className="mt-4 rounded-2xl border border-ink-700 bg-ink-900 px-4 py-3 text-sm" open={!saved || undefined}>
+      <summary className="cursor-pointer font-extrabold">
+        Claude for Ask{" "}
+        <span className={`text-xs ${saved ? "text-mint-400" : "text-ink-400"}`}>{saved ? "· connected" : "· off"}</span>
+      </summary>
+      <p className="mt-2 text-[13px] leading-relaxed text-ink-300">
+        With your own Anthropic API key, Ask answers any question about your league with {CLAUDE_MODEL_NAME} (a fraction
+        of a cent a question, billed to your Anthropic account). The key is saved on this device only and sent nowhere
+        but Anthropic. Questions and the team data needed to answer them go to Anthropic too.
+      </p>
+      {saved ? (
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <span className="font-mono text-xs text-ink-300">Key …{saved.slice(-4)}</span>
+          <button
+            onClick={() => setClaudeKey(null)}
+            className="rounded-full border border-ink-700 px-3 py-1.5 text-xs font-extrabold"
+          >
+            Remove key
+          </button>
+        </div>
+      ) : (
+        <form
+          className="mt-3 flex flex-col gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            save();
+          }}
+        >
+          <input
+            type="password"
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              setStatus("idle");
+            }}
+            placeholder="sk-ant-…"
+            autoComplete="off"
+            spellCheck={false}
+            aria-label="Anthropic API key"
+            className="rounded-xl border border-ink-700 bg-ink-850 px-3 py-2 font-mono text-[13px] focus:border-mint-400 focus:outline-none"
+          />
+          <div className="flex items-center justify-between gap-3">
+            <a
+              href="https://console.anthropic.com/settings/keys"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-bold text-mint-400"
+            >
+              Get a key ›
+            </a>
+            <button
+              type="submit"
+              disabled={!draft.trim() || status === "checking"}
+              className="rounded-full bg-mint-400 px-4 py-1.5 text-xs font-black text-ink-950 disabled:opacity-40"
+            >
+              {status === "checking" ? "Checking…" : "Save key"}
+            </button>
+          </div>
+          {status === "invalid" && (
+            <p className="text-xs font-bold text-rose-400">That key was rejected. Copy it again from the Console.</p>
+          )}
+          {status === "offline" && (
+            <p className="text-xs font-bold text-rose-400">
+              Couldn&apos;t reach Anthropic to check the key. Try again.
+            </p>
+          )}
+        </form>
+      )}
+    </details>
+  );
+}
+
 /** What the app keeps (and doesn't), plus copy-error-log and clear-my-data. */
 function PrivacyBox({ onCleared }: { onCleared: () => void }) {
   const [errors] = useState(() => readErrors().length);
@@ -232,8 +331,9 @@ function PrivacyBox({ onCleared }: { onCleared: () => void }) {
       <summary className="cursor-pointer font-extrabold">Privacy &amp; data</summary>
       <p className="mt-2 text-[13px] leading-relaxed text-ink-300">
         No account, no tracking, no server of ours: the app talks to Sleeper and ESPN directly from your phone, and
-        reads only public league data. Your username, rules, checklists, pinned games and &ldquo;what changed&rdquo;
-        snapshots are saved on this device only.
+        reads only public league data. If you add a Claude key, Ask questions go from your phone to Anthropic. Your
+        username, rules, checklists, pinned games and &ldquo;what changed&rdquo; snapshots are saved on this device
+        only.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         {errors > 0 && (
