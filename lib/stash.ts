@@ -11,6 +11,7 @@
 import type { PlayerAnalysis } from "./advisor";
 import { getPlayerNews, type NewsItem } from "./sleeper";
 import { lastName } from "./names";
+import { LAST_TRADE_WEEK, readTradeTalk } from "./tradetalk";
 
 export interface Stash {
   /** Extra rest-of-season points/game credited for the upside (chance × what he'd gain). */
@@ -37,13 +38,6 @@ const SHARE: Record<string, { clear: number; committee: number }> = {
 };
 /** Positions with a stash premium. */
 export const STASH_POSITIONS = ["RB", "WR", "TE", "QB"];
-// The NFL trade deadline falls after week 9 or 10; rumors don't matter after it.
-const LAST_TRADE_WEEK = 10;
-
-const TRADE =
-  /\btrad(e|ed|ing)\b|\bdealt\b|\bsuitors?\b|\blinked to\b|\bon the (trade )?block\b|\bshopping\b|\btrade deadline\b|\bfuture (remains |is )?uncertain\b/i;
-const TRADE_DENIED =
-  /\b(not|never) (be(ing)? )?(traded|dealt|available)\b|\boff the table\b|\bno plans to (trade|move|deal)\b|\b(signed|agreed to) (an? )?(contract )?extension\b/i;
 const STASH_TALK =
   /\bstash\b|\bhandcuff\b|\bnext man up\b|\btake over\b|\b(lead|No\. 1|RB1|starting) (back|role|job)\b|\bascend\b|\b(bigger|expanded|increased) role\b|\busage (was |has been )?(scaled|ticked|ramped) up\b/i;
 
@@ -90,17 +84,16 @@ export async function assessStashes(
 
     // Trade rumors about the starter (articles that name him), counted by day.
     if (week <= LAST_TRADE_WEEK) {
-      const sLast = lastLower(s.name);
-      const rumors = starterNews.filter((n) => {
-        const t = textOf(n);
-        return fresh(n, now) && t.toLowerCase().includes(sLast) && TRADE.test(t) && !TRADE_DENIED.test(t);
-      });
+      const talk = readTradeTalk(starterNews, lastLower(s.name), now, NEWS_DAYS);
+      const rumors = talk.rumors;
       const days = [...new Set(rumors.map((n) => day(n.published)))];
       if (days.length) {
-        chance += days.length >= 3 ? 0.4 : days.length === 2 ? 0.3 : 0.2;
+        // Newer reports that he's staying put (or never asked out) take some air out of the rumors.
+        const cooling = talk.lean < 0;
+        chance += (days.length >= 3 ? 0.4 : days.length === 2 ? 0.3 : 0.2) * (cooling ? 0.5 : 1);
         const since = day(Math.min(...rumors.map((n) => n.published)));
         reasons.push(
-          `${s.name} is in trade rumors (${rumors.length} report${rumors.length > 1 ? "s" : ""} since ${since}) — if he's dealt, ${lastName(p.name)} is next in line`,
+          `${s.name} is in trade rumors (${rumors.length} report${rumors.length > 1 ? "s" : ""} since ${since}${cooling ? ", though the latest say he's likely staying" : ""}) — if he's dealt, ${lastName(p.name)} is next in line`,
         );
       }
     }

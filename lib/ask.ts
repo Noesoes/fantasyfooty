@@ -6,6 +6,8 @@
 //   "trade Metcalf for Achane?"   -> trade grade
 //   "who should I drop?"          -> your most expendable player
 //   "Gibbs" / "how's Gibbs?"      -> that player's call this week
+//   "is Taylor getting traded?"   -> trade rumors vs. denials from his news feed
+//   "is Gibbs hurt?" / "latest on Puka" -> injury status / recent headlines
 
 import { keepValue, type Analysis, type PlayerAnalysis } from "./advisor";
 import { compareStart } from "./explain";
@@ -14,8 +16,19 @@ import { evaluatePickup } from "./pickup";
 import { isNoDrop } from "./prefs";
 import { evaluateTrade } from "./trades";
 import { lastName } from "./names";
+import { answerNews, newsKind } from "./asknews";
 
 export type AskTone = "good" | "bad" | "neutral";
+
+/** A news headline behind an answer. */
+export interface AskSource {
+  title: string;
+  url?: string;
+  source: string;
+  date: string;
+  /** Trade questions: whether this report is a rumor or says he's staying. */
+  stance: "rumor" | "cooling" | null;
+}
 
 export interface AskAnswer {
   /** Short verdict, e.g. "Start Jahmyr Gibbs". */
@@ -27,6 +40,8 @@ export interface AskAnswer {
   players: PlayerAnalysis[];
   /** Start/sit questions: the two players, for the side-by-side view. */
   compare?: [PlayerAnalysis, PlayerAnalysis];
+  /** News questions: the headlines the answer is based on, newest first. */
+  sources?: AskSource[];
 }
 
 const norm = (s: string) =>
@@ -37,6 +52,49 @@ const norm = (s: string) =>
     .replace(/\b(jr|sr|ii|iii|iv)\b/g, "")
     .replace(/\s+/g, " ")
     .trim();
+
+/** Edit distance, for misspelled first names ("Johnathan" for "Jonathan"). */
+function editDistance(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++)
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/** How close the word before `last` in the text is to `first` (Infinity if it's not there or too far off). */
+function firstNameMiss(t: string, first: string, last: string): number {
+  const m = t.match(new RegExp(` ([a-z]+) ${last} `));
+  if (!m || first.length < 4 || m[1].length < 3) return Infinity;
+  const d = editDistance(m[1], first);
+  return d <= 2 ? d : Infinity;
+}
+
+// First names that are also everyday words in a question ("will he play?").
+const WORDY_FIRST = new Set([
+  "will",
+  "mark",
+  "drew",
+  "cash",
+  "jack",
+  "case",
+  "rich",
+  "chip",
+  "chase",
+  "hunter",
+  "frank",
+  "grant",
+  "lane",
+  "king",
+  "deal",
+  "play",
+  "pick",
+  "start",
+  "trade",
+]);
 
 interface Found {
   player: PlayerAnalysis;
@@ -58,8 +116,11 @@ export function ambiguousNames(
   }
   for (const [last, ps] of byLast) {
     if (ps.length < 2 || last.length < 3 || !t.includes(` ${last} `)) continue;
-    // A full name, or a single match on your own roster, settles it.
+    // A full name (even slightly misspelled), or a single match on your own roster, settles it.
     if (ps.some((p) => t.includes(` ${norm(p.name)} `))) continue;
+    const misses = ps.map((p) => firstNameMiss(t, norm(p.name).split(" ")[0], last));
+    const best = Math.min(...misses);
+    if (best < Infinity && misses.filter((d) => d === best).length === 1) continue;
     if (mine.filter((p) => norm(p.name).split(" ").slice(-1)[0] === last).length === 1) continue;
     out.set(last, ps.sort((x, y) => y.rosValue - x.rosValue).slice(0, 4));
   }
@@ -93,14 +154,28 @@ export function findPlayers(text: string, candidates: PlayerAnalysis[], mine: Pl
     const last = parts[parts.length - 1];
     const first = parts[0];
     let at = t.indexOf(` ${full} `);
+    // A close misspelling of the first name with the right last name ("Johnathan Taylor"),
+    // if no other player with that last name is as close.
+    if (at < 0 && parts.length >= 2) {
+      const miss = firstNameMiss(t, first, last);
+      if (miss < Infinity) {
+        const rivals = candidates.filter(
+          (c) =>
+            c.id !== p.id &&
+            norm(c.name).split(" ").slice(-1)[0] === last &&
+            firstNameMiss(t, norm(c.name).split(" ")[0], last) <= miss,
+        );
+        if (!rivals.length) at = t.indexOf(` ${last} `);
+      }
+    }
     // "Taylor" alone only counts if just one candidate is named Taylor; otherwise ask for a first name.
     if (at < 0 && last.length >= 3) {
       const uniqueMine = mineIds.has(p.id) && mineLast.get(last) === 1;
       const uniqueAll = lastCount.get(last) === 1 && !mineLast.get(last);
       if (uniqueMine || uniqueAll) at = t.indexOf(` ${last} `);
     }
-    // First names work too when they're distinctive ("Kyren", "Jahmyr").
-    if (at < 0 && first.length >= 5) {
+    // First names work too when they're distinctive ("Kyren", "Jahmyr", "Puka").
+    if (at < 0 && first.length >= 4 && !WORDY_FIRST.has(first)) {
       const sameFirst = candidates.filter((c) => norm(c.name).split(" ")[0] === first).length;
       if (sameFirst === 1) at = t.indexOf(` ${first} `);
     }
@@ -161,6 +236,7 @@ const HELP: AskAnswer = {
     "“Should I pick up Goodson?” — pickup verdict",
     "“Trade Metcalf for Achane?” — trade grade",
     "“Who should I drop?”",
+    "“Is Taylor getting traded?” / “Is Gibbs hurt?” — from the news",
     "Or just a player's name for his call this week.",
   ],
   players: [],
@@ -234,7 +310,10 @@ export function answer(a: Analysis, question: string): AskAnswer {
     const c = startConfidence(pick, other);
     const cmp = compareStart(pick, other);
     const word = confidenceWord(c);
-    const fa = [pick, other].filter((p) => !mine.some((m) => m.id === p.id));
+    const fa = [pick, other].filter((p) => a.freeAgentPool.some((f) => f.id === p.id));
+    const elsewhere = [pick, other]
+      .map((p) => ({ p, team: a.otherTeams.find((t) => t.players.some((x) => x.id === p.id)) }))
+      .filter((x) => x.team);
     return {
       title: `${word === "Coin flip" ? "Coin flip — lean" : "Start"} ${pick.name}`,
       tone: word === "Coin flip" ? "neutral" : "good",
@@ -244,9 +323,12 @@ export function answer(a: Analysis, question: string): AskAnswer {
         ...cmp.against.slice(0, 1).map((e) => `− ${e}`),
         ...(fa.length
           ? [
-              `${fa.map((p) => p.name).join(" and ")} ${fa.length > 1 ? "are" : "is"} a free agent — you'd have to add him first.`,
+              fa.length > 1
+                ? `${fa.map((p) => p.name).join(" and ")} are free agents — you'd have to add them first.`
+                : `${fa[0].name} is a free agent — you'd have to add him first.`,
             ]
           : []),
+        ...elsewhere.map(({ p, team }) => `${p.name} is on ${team!.teamName}'s roster.`),
       ],
       players: [pick, other],
       compare: [x, y],
@@ -275,4 +357,19 @@ export function answer(a: Analysis, question: string): AskAnswer {
     ...HELP,
     title: named.length === 0 && q.length > 2 ? "I couldn't find a player in that" : HELP.title,
   };
+}
+
+/**
+ * Answer any question, including news questions ("is X getting traded?",
+ * "is X hurt?", "latest on X") that need the player's news feed.
+ */
+export async function ask(a: Analysis, question: string): Promise<AskAnswer> {
+  const kind = newsKind(norm(question));
+  if (!kind) return answer(a, question);
+  const mine = a.roster;
+  const everyone = [...mine, ...a.freeAgentPool, ...a.otherTeams.flatMap((t) => t.players)];
+  if (ambiguousNames(question, mine, everyone).size) return answer(a, question);
+  const named = findPlayers(question, everyone, mine);
+  if (named.length !== 1) return answer(a, question);
+  return answerNews(a, named[0], kind);
 }

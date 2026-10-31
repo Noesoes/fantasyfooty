@@ -37,7 +37,7 @@ Everything is grouped into four sections, each with a few tabs:
 
 **What changed:** the app keeps a small snapshot of your roster and matchup per league and week on your device. When you come back, Home lists what's different (injury status, chance to play, projections that moved 2+ pts, players added or dropped, win chance, stash odds) until you tap *Got it*.
 
-**Ask** (top of Home): type a question in plain English and get the answer with reasons, using the same logic as the rest of the app (no AI service). It understands "Gibbs or Taylor?" (start/sit with a confidence %), "should I pick up Goodson?" (pickup verdict), "trade Metcalf for Achane?" (trade grade), "who should I drop?", or just a player's name. Names can be full, last or distinctive first names; a last name shared by several players resolves to yours, or the app asks which one you mean.
+**Ask** (top of Home): type a question in plain English and get the answer with reasons, using the same logic as the rest of the app (no AI service). It understands "Gibbs or Taylor?" (start/sit with a confidence %), "should I pick up Goodson?" (pickup verdict), "trade Metcalf for Achane?" (trade grade), "who should I drop?", or just a player's name. News questions are answered from the player's Sleeper news feed (RotoWire, RotoBaller, FantasyPros) with the headlines listed and linked: "is Taylor getting traded?" weighs trade rumors against reports he's staying (newer reports count more) and tags each one; "is Gibbs hurt?" / "will Puka play?" gives his status and the latest injury headlines; "latest on X" lists recent news. Names can be full (small first-name typos are fine), last or distinctive first names; a last name shared by several players resolves to yours, or the app asks which one you mean.
 
 **Confidence and ranges:** start/sit calls show how sure the pick is (the chance one player outscores the other, given each position's usual week-to-week swing), and every player sheet shows a realistic range for the week (the 1-in-5 bad week to the 1-in-5 good week).
 
@@ -242,6 +242,8 @@ lib/gamecenter.ts          every game this week + your players' live stats
 lib/pickup.ts              should-I-pick-him-up verdicts and best-available-by-position rankings
 app/playercheck.tsx        Player check search and verdict card
 lib/playoffs.ts            playoff odds simulation
+lib/asknews.ts             news questions for Ask (trade rumors, injuries, latest)
+lib/tradetalk.ts           sorts trade headlines into rumors vs. "he's staying" (used by Ask and stash odds)
 lib/matchup.ts             weekly matchup analyzer (outcome, positions, time windows, stacks)
 lib/scouting.ts            opponent scouting report
 scripts/fetch-snapshots.mjs ESPN injury + scoreboard snapshots used by the deploy workflow

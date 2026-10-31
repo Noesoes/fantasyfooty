@@ -3,9 +3,9 @@
 // Screens for the competitor-style features: Ask, power rankings and the
 // streaming planner.
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Analysis } from "@/lib/advisor";
-import { answer, type AskAnswer } from "@/lib/ask";
+import { ask as askQuestion, type AskAnswer } from "@/lib/ask";
 import { powerRankings, STREAM_POSITIONS, streamingPlan, type StreamPlan, type StreamWeek } from "@/lib/insights";
 import { avatarUrl } from "@/lib/sleeper";
 import { Faceoff } from "./faceoff";
@@ -17,15 +17,33 @@ import { lastName } from "@/lib/names";
 
 // --- Ask ---------------------------------------------------------------------
 
-const EXAMPLES = ["Who should I drop?", "Gibbs or Taylor?", "Should I pick up Goodson?"];
+const EXAMPLES = ["Who should I drop?", "Gibbs or Taylor?", "Is Taylor getting traded?", "Should I pick up Goodson?"];
 
 export function AskBox({ a }: { a: Analysis }) {
   const [q, setQ] = useState("");
   const [res, setRes] = useState<{ q: string; a: AskAnswer } | null>(null);
+  const [busy, setBusy] = useState(false);
+  // Only the latest question's answer is shown, even if an earlier one finishes later.
+  const latest = useRef(0);
   const openPlayer = useOpenPlayer();
   const ask = (text: string) => {
     setQ(text);
-    setRes({ q: text, a: answer(a, text) });
+    const id = ++latest.current;
+    setBusy(true);
+    askQuestion(a, text)
+      .then((ans) => {
+        if (id === latest.current) setRes({ q: text, a: ans });
+      })
+      .catch(() => {
+        if (id === latest.current)
+          setRes({
+            q: text,
+            a: { title: "Something went wrong", tone: "neutral", lines: ["Try asking again."], players: [] },
+          });
+      })
+      .finally(() => {
+        if (id === latest.current) setBusy(false);
+      });
   };
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -48,13 +66,18 @@ export function AskBox({ a }: { a: Analysis }) {
         />
         <button
           type="submit"
-          disabled={!q.trim()}
+          disabled={!q.trim() || busy}
           className="shrink-0 rounded-full bg-mint-400 px-3.5 py-1.5 text-xs font-black text-ink-950 disabled:opacity-30"
         >
           Ask
         </button>
       </form>
-      {!res && (
+      {busy && (
+        <div className="mt-3 border-t border-ink-800 pt-3 text-sm font-bold text-ink-400" aria-busy="true">
+          Checking…
+        </div>
+      )}
+      {!res && !busy && (
         <div className="no-scrollbar mt-2 flex gap-1.5 overflow-x-auto">
           {EXAMPLES.map((x) => (
             <button
@@ -67,7 +90,7 @@ export function AskBox({ a }: { a: Analysis }) {
           ))}
         </div>
       )}
-      {res && (
+      {res && !busy && (
         <div className="mt-3 border-t border-ink-800 pt-3" aria-live="polite">
           <div className={`text-[17px] font-black ${tone}`}>{res.a.title}</div>
           <ul className="mt-1.5 flex flex-col gap-1 text-[13.5px] leading-snug text-ink-300">
@@ -75,6 +98,45 @@ export function AskBox({ a }: { a: Analysis }) {
               <li key={l}>{l}</li>
             ))}
           </ul>
+          {res.a.sources && res.a.sources.length > 0 && (
+            <ul className="mt-2.5 flex flex-col gap-1.5">
+              {res.a.sources.map((s, i) => {
+                const head = (
+                  <>
+                    <span className="flex items-center gap-1.5 text-[11px] font-bold text-ink-400">
+                      {s.stance && (
+                        <span
+                          className={`rounded-full px-1.5 py-px text-[10px] font-extrabold uppercase ${
+                            s.stance === "rumor" ? "bg-hot/15 text-hot" : "bg-mint-400/15 text-mint-400"
+                          }`}
+                        >
+                          {s.stance === "rumor" ? "Rumor" : "Cooling"}
+                        </span>
+                      )}
+                      {s.date} · {s.source}
+                    </span>
+                    <span className="block text-[13px] leading-snug font-semibold text-ink-100">{s.title}</span>
+                  </>
+                );
+                return (
+                  <li key={i}>
+                    {s.url ? (
+                      <a
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block rounded-xl bg-ink-850 px-3 py-2 hover:bg-ink-800"
+                      >
+                        {head}
+                      </a>
+                    ) : (
+                      <div className="rounded-xl bg-ink-850 px-3 py-2">{head}</div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
           {res.a.compare && (
             <details className="group mt-3">
               <summary className="cursor-pointer list-none text-sm font-extrabold text-mint-400">
