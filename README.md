@@ -47,7 +47,7 @@ Everything is grouped into four sections, each with a few tabs:
 
 **Streaming planner** (Waivers tab): for QB, K and DEF (whichever your league starts), the best free agents over the next three weeks by opponent, next to your own, with each week colored by how easy the matchup is.
 
-**Start X or Y?** (Lineup tab): pick any two of your players, or one of yours and a free agent, for the call plus the edges on each side and every factor side by side.
+**Start X or Y?** (Lineup tab, and *Compare side by side* on any start/sit answer in Ask): a face-off of two players (yours or a free agent). The pick is highlighted with its confidence and the main reasons, then row by row: the opposing defense (where it ranks against the position, points allowed per game vs the league average), the game (home or away, implied team total, line, over/under, weather), workload (snap, carry and target share, touches and red-zone looks per game), form, this week's range and health. The better side of each row is in green.
 
 **Waivers tab extras:** a *Last waiver run* recap (each of your claims: won, or who beat you and by how much in FAAB; the league's biggest adds; your priority or budget now) and *Stash candidates*: free agents next in line behind a starter who's hurt or in trade rumors (RBs, TEs and receivers), each with a one-tap pickup check.
 
@@ -212,6 +212,7 @@ lib/errorlog.ts            on-device error log, crash report text, clear-my-data
 lib/insights.ts            ranges and confidence, power rankings, streaming planner, league glance
 lib/ask.ts                 plain-English questions routed to the app's logic
 lib/names.ts               short player names (skips Jr., Sr., II)
+app/faceoff.tsx            side-by-side start/sit face-off
 lib/stash.ts               stash value for backups (trade rumors, injuries, handcuff news)
 lib/explain.ts             factor breakdown and start-over-sit comparison behind each Game plan call
 lib/report.ts              Markdown rendering for the weekly issue

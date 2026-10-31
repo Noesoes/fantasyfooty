@@ -25,6 +25,8 @@ export interface AskAnswer {
   lines: string[];
   /** Players to offer a "details" link for. */
   players: PlayerAnalysis[];
+  /** Start/sit questions: the two players, for the side-by-side view. */
+  compare?: [PlayerAnalysis, PlayerAnalysis];
 }
 
 const norm = (s: string) =>
@@ -247,6 +249,7 @@ export function answer(a: Analysis, question: string): AskAnswer {
           : []),
       ],
       players: [pick, other],
+      compare: [x, y],
     };
   }
 

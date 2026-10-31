@@ -279,6 +279,11 @@ export async function getWeekGames(season: string, week: number): Promise<WeekGa
 
 export interface GameOutlook {
   opponent: string;
+  /** Playing at home. */
+  home: boolean;
+  /** Kickoff (ms) and whether the time (not just the date) is known. */
+  kickoff: number;
+  kickoffKnown: boolean;
   /** Points Vegas expects this player's team to score. */
   implied: number | null;
   /** Team's line: negative = favored by that many. */
@@ -365,6 +370,9 @@ export function gameOutlook(game: Game | undefined, team: string | null, positio
   const pctMove = Math.round((factor - 1) * 100);
   return {
     opponent,
+    home: game.home === team,
+    kickoff: game.kickoff,
+    kickoffKnown: game.kickoffKnown,
     implied,
     spread,
     overUnder: game.overUnder,

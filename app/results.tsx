@@ -16,8 +16,9 @@ import { compareStart, factorsFor, FACTOR_LABELS, type FactorKey, type Tone } fr
 import { fetchLive, type LivePlayer, type LiveSide, type LiveState } from "@/lib/live";
 import { GamesTab } from "./games";
 import { FillPosition, PlayerCheck } from "./playercheck";
-import { confidenceWord, projectedWin, startConfidence } from "@/lib/insights";
+import { projectedWin, startConfidence } from "@/lib/insights";
 import { diffSnapshots, loadSeen, saveSeen, snapshotOf, type Change } from "@/lib/changes";
+import { Faceoff } from "./faceoff";
 import { AskBox, PowerRankings, StreamingPlanner } from "./insightsui";
 import { StashTargets, WaiverRecapCard } from "./movesparts";
 import { PlayerSheetProvider } from "./playersheet";
@@ -1012,8 +1013,6 @@ function StartOrSit({ a }: { a: Analysis }) {
   const picked = ids.map((id) => lookup.get(id)).filter((p): p is PlayerAnalysis => !!p);
   const [pick, other] =
     picked.length === 2 ? [...picked].sort((x, y) => y.weekScore - x.weekScore) : [undefined, undefined];
-  const cmp = pick && other ? compareStart(pick, other) : null;
-  const close = pick && other && confidenceWord(startConfidence(pick, other)) === "Coin flip";
   const select = (i: 0 | 1) => (
     <select
       value={ids[i]}
@@ -1045,21 +1044,9 @@ function StartOrSit({ a }: { a: Analysis }) {
         <span className="text-center text-xs font-extrabold text-ink-400">or</span>
         {select(1)}
       </div>
-      {pick && other && cmp && (
+      {pick && other && (
         <div className="mt-4">
-          <div className="rounded-2xl bg-mint-400/10 p-4 ring-1 ring-mint-400/30">
-            <div className="flex items-baseline justify-between gap-3">
-              <div className="text-lg font-black text-mint-400">
-                {close ? "Coin flip — lean " : "Start "}
-                {pick.name}
-              </div>
-              <span className="shrink-0 text-xs font-extrabold text-ink-300">
-                {Math.round(startConfidence(pick, other) * 100)}% · {confidenceWord(startConfidence(pick, other))}
-              </span>
-            </div>
-            <p className="mt-1 text-sm text-ink-300">{cmp.headline}</p>
-          </div>
-          <WhyBreakdown players={[pick, other]} open />
+          <Faceoff x={picked[0]} y={picked[1]} />
         </div>
       )}
       {picked.length < 2 && (

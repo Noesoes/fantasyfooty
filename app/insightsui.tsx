@@ -8,6 +8,7 @@ import type { Analysis } from "@/lib/advisor";
 import { answer, type AskAnswer } from "@/lib/ask";
 import { powerRankings, STREAM_POSITIONS, streamingPlan, type StreamPlan, type StreamWeek } from "@/lib/insights";
 import { avatarUrl } from "@/lib/sleeper";
+import { Faceoff } from "./faceoff";
 import { useOpenPlayer } from "./playerctx";
 import { Card, Headshot, PosBadge } from "./ui";
 import { lastName } from "@/lib/names";
@@ -74,6 +75,16 @@ export function AskBox({ a }: { a: Analysis }) {
               <li key={l}>{l}</li>
             ))}
           </ul>
+          {res.a.compare && (
+            <details className="group mt-3">
+              <summary className="cursor-pointer list-none text-sm font-extrabold text-mint-400">
+                Compare side by side <span className="inline-block transition group-open:rotate-90">›</span>
+              </summary>
+              <div className="mt-3">
+                <Faceoff x={res.a.compare[0]} y={res.a.compare[1]} />
+              </div>
+            </details>
+          )}
           <div className="mt-2.5 flex flex-wrap gap-1.5">
             {res.a.players.map((p) => (
               <button
