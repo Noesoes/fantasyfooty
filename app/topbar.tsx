@@ -16,7 +16,14 @@ import { InstallButton } from "./install";
 import { useDragToClose } from "./sheetdrag";
 import { ThemeToggle } from "./theme";
 import { clearLocalData, errorReport, readErrors } from "@/lib/errorlog";
-import { checkClaudeKey, CLAUDE_MODEL_NAME, getClaudeKey, KEY_EVENT, setClaudeKey } from "@/lib/claude";
+import {
+  CLAUDE_ASK_ENABLED,
+  checkClaudeKey,
+  CLAUDE_MODEL_NAME,
+  getClaudeKey,
+  KEY_EVENT,
+  setClaudeKey,
+} from "@/lib/claude";
 
 function scoringOf(l: League) {
   const rec = l.scoring_settings.rec ?? 0;
@@ -206,7 +213,7 @@ function MenuSheet({
               Switch account
             </button>
           </div>
-          <ClaudeKeyBox />
+          {CLAUDE_ASK_ENABLED && <ClaudeKeyBox />}
           <PrivacyBox
             onCleared={() => {
               onClose();
@@ -331,9 +338,8 @@ function PrivacyBox({ onCleared }: { onCleared: () => void }) {
       <summary className="cursor-pointer font-extrabold">Privacy &amp; data</summary>
       <p className="mt-2 text-[13px] leading-relaxed text-ink-300">
         No account, no tracking, no server of ours: the app talks to Sleeper and ESPN directly from your phone, and
-        reads only public league data. If you add a Claude key, Ask questions go from your phone to Anthropic. Your
-        username, rules, checklists, pinned games and &ldquo;what changed&rdquo; snapshots are saved on this device
-        only.
+        reads only public league data. Your username, rules, checklists, pinned games and &ldquo;what changed&rdquo;
+        snapshots are saved on this device only.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         {errors > 0 && (

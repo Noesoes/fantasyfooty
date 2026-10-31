@@ -23,6 +23,13 @@ import { evaluateTrade } from "./trades";
 export const CLAUDE_MODEL = "claude-haiku-5-5";
 export const CLAUDE_MODEL_NAME = "Claude Haiku 5.5";
 
+/**
+ * Off for now: the owner doesn't want an API key in the app. With this false,
+ * the menu has no key box and Ask ignores any saved key (built-in answers only).
+ * The plan for turning it on is a small server that holds the key (see README).
+ */
+export const CLAUDE_ASK_ENABLED = false;
+
 // --- The key, on this device only ----------------------------------------------
 
 const KEY = "claude-api-key";

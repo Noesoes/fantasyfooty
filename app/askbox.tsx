@@ -8,7 +8,15 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { Analysis } from "@/lib/advisor";
 import { ask as askBuiltIn, type AskAnswer } from "@/lib/ask";
-import { askClaude, ClaudeError, CLAUDE_MODEL_NAME, getClaudeKey, KEY_EVENT, type ClaudeTurn } from "@/lib/claude";
+import {
+  askClaude,
+  CLAUDE_ASK_ENABLED,
+  ClaudeError,
+  CLAUDE_MODEL_NAME,
+  getClaudeKey,
+  KEY_EVENT,
+  type ClaudeTurn,
+} from "@/lib/claude";
 import { lastName } from "@/lib/names";
 import { Faceoff } from "./faceoff";
 import { useOpenPlayer } from "./playerctx";
@@ -71,7 +79,8 @@ function Markdown({ text }: { text: string }) {
 }
 
 export function AskBox({ a }: { a: Analysis }) {
-  const claudeKey = useClaudeKey();
+  const savedKey = useClaudeKey();
+  const claudeKey = CLAUDE_ASK_ENABLED ? savedKey : null;
   const [q, setQ] = useState("");
   const [res, setRes] = useState<{ q: string; a: AskAnswer } | null>(null);
   const [turns, setTurns] = useState<ClaudeTurn[]>([]);
@@ -279,10 +288,6 @@ export function AskBox({ a }: { a: Analysis }) {
               Clear
             </button>
           </div>
-          <p className="mt-2.5 text-[11.5px] text-ink-400">
-            Want any question answered, like &ldquo;how does next week look?&rdquo; Add a Claude key in the menu (tap
-            your avatar).
-          </p>
         </div>
       )}
     </section>
