@@ -501,8 +501,9 @@ function analyzePlayers(ids: Iterable<string>, inputs: Inputs, extraInfo: Map<st
     // Prior for small samples. A projection is the best guess at a player's
     // role; a healthy player on a team that plays but gets no projection
     // probably isn't expected to play, so the prior is zero. Byes and
-    // injuries say nothing about role, so fall back to the raw averages.
-    const prior = projection > 0 ? projection : onBye || isOut || injury ? (recentAvg ?? seasonAvg ?? 0) : 0;
+    // injuries say nothing about role, so fall back to his season average
+    // (a couple of quiet games before a bye shouldn't define a starter).
+    const prior = projection > 0 ? projection : onBye || isOut || injury ? (seasonAvg ?? recentAvg ?? 0) : 0;
     // A single spot start shouldn't read as "27 pts/game": observed averages
     // are shrunk toward the prior until there's a real sample.
     const seasonForm = shrink(seasonPts, gamesPlayed, prior, 2);
@@ -1049,9 +1050,20 @@ export async function analyzeLeague(opts: {
     return have - 1 >= need;
   };
 
+  // Your best lineup on rest-of-season value: who you'd start in a normal
+  // week. They're never drops, even when on bye or hurt this week.
+  const rosCore = new Set(
+    optimizeLineup(
+      league.roster_positions,
+      active.map((p) => ({ ...p, weekScore: keepValue(p) })),
+      currentLineup,
+    )
+      .map((s) => s.player?.id)
+      .filter(Boolean),
+  );
   // Players you've said to keep are never suggested as drops.
   const dropPool = benchPlayers
-    .filter((p) => canDrop(p) && !isNoDrop(prefs, p.id))
+    .filter((p) => canDrop(p) && !isNoDrop(prefs, p.id) && !rosCore.has(p.id))
     .sort((a, b) => holdValue(a) - holdValue(b));
   // Only flag players at or below what the waiver wire offers at their spot.
   const drops: DropCandidate[] = dropPool
