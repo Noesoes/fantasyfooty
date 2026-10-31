@@ -120,74 +120,83 @@ const rankTone = (rank: number, teams: number) =>
       ? "bg-rose-500/15 text-rose-400"
       : "bg-ink-800 text-ink-300";
 
-export function PowerRankings({ a, onTrades }: { a: Analysis; onTrades: () => void }) {
+/** Each team's record and playoff chance, when the season simulation has run. */
+export type Standings = Map<number, { record: string; playoffPct: number }>;
+
+const oddsText = (pct: number) => `${pct >= 99.5 ? ">99" : pct < 0.5 ? "<1" : Math.round(pct)}% playoffs`;
+const oddsColor = (pct: number) => (pct >= 75 ? "text-mint-400" : pct >= 40 ? "text-amber-300" : "text-rose-400");
+
+export function PowerRankings({ a, standings }: { a: Analysis; standings?: Standings }) {
   const teams = powerRankings(a);
   const n = teams.length;
-  const partners = teams
+  return (
+    <Card title="Power rankings" action={<span className="text-xs text-ink-400">rest of season</span>}>
+      <p className="mb-3 text-sm text-ink-400">
+        Every team&apos;s best lineup for the rest of the season, plus bench depth, in points per week, with each
+        team&apos;s record and playoff chance. Chips show its league rank at each position.
+      </p>
+      <ol className="flex flex-col gap-1.5">
+        {teams.map((t) => (
+          <li
+            key={t.rosterId}
+            className={`flex items-center gap-3 rounded-xl p-2.5 ${t.mine ? "border border-mint-400/50 bg-mint-400/5" : "bg-ink-850"}`}
+          >
+            <span className="w-6 shrink-0 text-center font-mono text-lg font-black text-ink-300">{t.rank}</span>
+            {t.avatar ? (
+              <img src={avatarUrl(t.avatar)} alt="" className="h-8 w-8 shrink-0 rounded-full" />
+            ) : (
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink-700 text-xs font-black">
+                {t.teamName.charAt(0).toUpperCase()}
+              </span>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-extrabold">
+                {t.teamName}
+                {t.mine && <span className="ml-1.5 text-xs font-black text-mint-400">YOU</span>}
+              </div>
+              {standings?.get(t.rosterId) && (
+                <div className="text-[11.5px] font-bold text-ink-400">
+                  {standings.get(t.rosterId)!.record} ·{" "}
+                  <span className={oddsColor(standings.get(t.rosterId)!.playoffPct)}>
+                    {oddsText(standings.get(t.rosterId)!.playoffPct)}
+                  </span>
+                </div>
+              )}
+              <div className="mt-1 flex flex-wrap gap-1">
+                {Object.entries(t.posRank).map(([pos, r]) => (
+                  <span key={pos} className={`rounded-md px-1.5 text-[10.5px] font-bold ${rankTone(r, n)}`}>
+                    {pos} #{r}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <span className="shrink-0 font-mono text-sm font-black">{t.strength}</span>
+          </li>
+        ))}
+      </ol>
+    </Card>
+  );
+}
+
+/** Teams deep where you're thin and thin where you're deep: who to call about a trade. */
+export function TradePartners({ a }: { a: Analysis }) {
+  const partners = powerRankings(a)
     .filter((t) => !t.mine && t.fit > 0 && t.fitWhy)
     .sort((x, y) => y.fit - x.fit)
     .slice(0, 3);
+  if (!partners.length) return null;
   return (
-    <div className="flex flex-col gap-4">
-      <Card title="Power rankings" action={<span className="text-xs text-ink-400">rest of season</span>}>
-        <p className="mb-3 text-sm text-ink-400">
-          Every team&apos;s best lineup for the rest of the season, plus bench depth, in points per week. Chips show
-          each team&apos;s league rank at that position.
-        </p>
-        <ol className="flex flex-col gap-1.5">
-          {teams.map((t) => (
-            <li
-              key={t.rosterId}
-              className={`flex items-center gap-3 rounded-xl p-2.5 ${t.mine ? "border border-mint-400/50 bg-mint-400/5" : "bg-ink-850"}`}
-            >
-              <span className="w-6 shrink-0 text-center font-mono text-lg font-black text-ink-300">{t.rank}</span>
-              {t.avatar ? (
-                <img src={avatarUrl(t.avatar)} alt="" className="h-8 w-8 shrink-0 rounded-full" />
-              ) : (
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink-700 text-xs font-black">
-                  {t.teamName.charAt(0).toUpperCase()}
-                </span>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-extrabold">
-                  {t.teamName}
-                  {t.mine && <span className="ml-1.5 text-xs font-black text-mint-400">YOU</span>}
-                </div>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {Object.entries(t.posRank).map(([pos, r]) => (
-                    <span key={pos} className={`rounded-md px-1.5 text-[10.5px] font-bold ${rankTone(r, n)}`}>
-                      {pos} #{r}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <span className="shrink-0 font-mono text-sm font-black">{t.strength}</span>
-            </li>
-          ))}
-        </ol>
-      </Card>
-      {partners.length > 0 && (
-        <Card title="Best trade partners">
-          <p className="mb-3 text-sm text-ink-400">
-            Teams deep where you&apos;re thin, and thin where you&apos;re deep.
-          </p>
-          <ul className="flex flex-col gap-2">
-            {partners.map((t) => (
-              <li key={t.rosterId} className="rounded-xl bg-ink-850 p-3 text-sm">
-                <div className="font-extrabold">{t.teamName}</div>
-                <div className="mt-0.5 text-[13px] text-ink-300">{t.fitWhy}.</div>
-              </li>
-            ))}
-          </ul>
-          <button
-            onClick={onTrades}
-            className="mt-3 rounded-full bg-mint-400 px-4 py-1.5 text-xs font-black text-ink-950"
-          >
-            See trade ideas ›
-          </button>
-        </Card>
-      )}
-    </div>
+    <Card title="Best trade partners">
+      <p className="mb-3 text-sm text-ink-400">Teams deep where you&apos;re thin, and thin where you&apos;re deep.</p>
+      <ul className="flex flex-col gap-2">
+        {partners.map((t) => (
+          <li key={t.rosterId} className="rounded-xl bg-ink-850 p-3 text-sm">
+            <div className="font-extrabold">{t.teamName}</div>
+            <div className="mt-0.5 text-[13px] text-ink-300">{t.fitWhy}.</div>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 

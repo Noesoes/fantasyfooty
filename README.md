@@ -28,10 +28,10 @@ Everything is grouped into four sections, each with a few tabs:
 
 | Section | Tabs |
 | --- | --- |
-| **Home** | Plan (your matchup, the moves to make this week, heads-up alerts) · Lineup (with the injury report) · Matchup (plus **Live** on game days) |
+| **Home** | Plan (your matchup, the moves to make this week, heads-up alerts) · Lineup · Injuries · Matchup (plus **Live** on game days) |
 | **Moves** | Waivers · Trades |
 | **Games** | Every game this week, with a game center for each |
-| **Team** | Roster (with your rules and the track record) · League (playoff odds and power rankings) · Schedule (bye weeks and week-by-week projections) |
+| **Team** | Roster (with your rules and the track record) · Season (playoff odds, power rankings with each team's record and odds, bye weeks and week-by-week projections) |
 
 **Look:** "Glass": frosted, translucent cards over colored light, big rounded numbers, and a floating tab bar (light and dark). Home opens with widgets for your win chance and projected score, then the moves to make, heads-up alerts, and Waivers and Injuries widgets. A player's sheet is tinted with his team's color and shows usage as rings.
 
@@ -43,7 +43,7 @@ Everything is grouped into four sections, each with a few tabs:
 
 **All your leagues:** the league switcher shows every league's win chance, score vs opponent and how many moves are waiting, analyzed three leagues at a time in the background.
 
-**Power rankings** (Team tab): every team's rest-of-season strength (best lineup plus bench depth), its rank at each position, and your best trade partners: teams that are deep where you're thin and thin where you're deep.
+**Power rankings** (Team → Season): every team's rest-of-season strength (best lineup plus bench depth), its rank at each position, its record and its playoff chance. Your **best trade partners** (teams deep where you're thin and thin where you're deep) are on the Trades tab, above the trade ideas.
 
 **Streaming planner** (Waivers tab): for QB, K and DEF (whichever your league starts), the best free agents over the next three weeks by opponent, next to your own, with each week colored by how easy the matchup is.
 

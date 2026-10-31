@@ -20,7 +20,7 @@ import { projectedWin, startConfidence } from "@/lib/insights";
 import { diffSnapshots, loadSeen, saveSeen, snapshotOf, type Change } from "@/lib/changes";
 import { Faceoff } from "./faceoff";
 import { MatchupAnalyzer } from "./matchupui";
-import { AskBox, PowerRankings, StreamingPlanner } from "./insightsui";
+import { AskBox, PowerRankings, StreamingPlanner, TradePartners } from "./insightsui";
 import { StashTargets, WaiverRecapCard } from "./movesparts";
 import { PlayerSheetProvider } from "./playersheet";
 import { RuleChip, RulesCard } from "./rules";
@@ -42,6 +42,7 @@ type Tab =
   | "record"
   | "power"
   | "league"
+  | "season"
   | "roster";
 
 type Section = "week" | "moves" | "games" | "team";
@@ -55,6 +56,7 @@ const SECTIONS: { id: Section; label: string; tabs: { id: Tab; label: string }[]
     tabs: [
       { id: "plan", label: "Plan" },
       { id: "lineup", label: "Lineup" },
+      { id: "injuries", label: "Injuries" },
       { id: "scout", label: "Matchup" },
     ],
   },
@@ -72,8 +74,7 @@ const SECTIONS: { id: Section; label: string; tabs: { id: Tab; label: string }[]
     label: "Team",
     tabs: [
       { id: "roster", label: "Roster" },
-      { id: "league", label: "League" },
-      { id: "planner", label: "Schedule" },
+      { id: "season", label: "Season" },
     ],
   },
 ];
@@ -81,7 +82,13 @@ const sectionOf = (tab: Tab): Section =>
   tab === "live" ? "week" : (SECTIONS.find((s) => s.tabs.some((t) => t.id === tab))?.id ?? "week");
 const ALL_TABS = new Set<string>(["live", ...SECTIONS.flatMap((s) => s.tabs.map((t) => t.id))]);
 // Tabs that were merged into others; old links and bookmarks land on the new home.
-const MERGED: Partial<Record<Tab, Tab>> = { injuries: "lineup", power: "league", playoffs: "league", record: "roster" };
+const MERGED: Partial<Record<Tab, Tab>> = {
+  power: "season",
+  playoffs: "season",
+  league: "season",
+  planner: "season",
+  record: "roster",
+};
 const tabFromHash = (h: string): Tab | null => {
   const t = (MERGED[h as Tab] ?? h) as Tab;
   return ALL_TABS.has(t) ? t : null;
@@ -178,9 +185,14 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
   }, [initial]);
   const [lastTab, setLastTab] = useState<Partial<Record<Section, Tab>>>({});
   const top = useRef<HTMLDivElement>(null);
+  // Jump to the Live tab the first time we see games underway — unless the
+  // URL already says where you were (e.g. after a refresh).
+  const [autoSwitched, setAutoSwitched] = useState(initial !== null && initial !== "live");
   const setTab = (to: Tab) => {
     const next = MERGED[to] ?? to;
     setTabState(next);
+    // You picked a tab: don't yank you to Live when live scores arrive.
+    setAutoSwitched(true);
     setLastTab((prev) => ({ ...prev, [sectionOf(next)]: next }));
     try {
       history.replaceState(null, "", `#${next}`);
@@ -203,9 +215,6 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
   const live = useLive(a);
   const isLive = Boolean(live?.started && !live.allDone);
   const showLive = Boolean(live?.started);
-  // Jump to the Live tab the first time we see games underway — unless the
-  // URL already says where you were (e.g. after a refresh).
-  const [autoSwitched, setAutoSwitched] = useState(initial !== null && initial !== "live");
   useEffect(() => {
     if (isLive && !autoSwitched) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time switch when games start
@@ -218,7 +227,7 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
   const atRisk = a.currentLineup.filter(
     (s) => s.player && s.player.injury && s.player.injury !== "Questionable",
   ).length;
-  const counts: Partial<Record<Tab, number>> = { waivers: a.waivers.length, lineup: atRisk };
+  const counts: Partial<Record<Tab, number>> = { waivers: a.waivers.length, injuries: atRisk };
   const sectionCount = (id: Section) =>
     SECTIONS.find((x) => x.id === id)!.tabs.reduce((n, t) => n + (counts[t.id] ?? 0), 0);
   const subTabs = SECTIONS.find((x) => x.id === section)!.tabs;
@@ -283,8 +292,8 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
         {tab === "waivers" && <Waivers a={a} onRefresh={onRefresh} refreshing={refreshing} />}
         {tab === "trades" && <Trades a={a} />}
         {tab === "scout" && <Scout a={a} />}
-        {tab === "planner" && <Planner a={a} />}
-        {tab === "league" && <League a={a} onTrades={() => setTab("trades")} />}
+        {tab === "injuries" && <Injuries a={a} />}
+        {tab === "season" && <Season a={a} />}
         {tab === "roster" && <Roster a={a} />}
 
         {/* Phone: sections in a thumb-reach bar under the scrolling area. */}
@@ -807,7 +816,7 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
               : "Nothing worth a claim"}
           </span>
         </Widget>
-        <Widget label="Injuries" onClick={() => goTo("lineup")}>
+        <Widget label="Injuries" onClick={() => goTo("injuries")}>
           <span
             className={`mt-2 font-mono text-4xl leading-none font-black ${hurt.length ? "text-amber-300" : "text-mint-400"}`}
           >
@@ -1059,22 +1068,8 @@ function Lineup({ a }: { a: Analysis }) {
   const benched = new Set(a.moves.filter((m) => m.action === "bench").map((m) => m.player.id));
   const bench = a.roster.filter((p) => !optimalIds.has(p.id));
   const max = Math.max(1, ...a.roster.map((p) => p.weekScore));
-  const atRisk = a.currentLineup.filter(
-    (s) => s.player && s.player.injury && s.player.injury !== "Questionable",
-  ).length;
   return (
     <div className="flex flex-col gap-5">
-      {atRisk > 0 && (
-        <button
-          onClick={() => document.getElementById("injury-report")?.scrollIntoView({ behavior: "smooth" })}
-          className="flex items-center justify-between gap-3 rounded-2xl border border-rose-400/40 bg-rose-500/10 px-4 py-3 text-left text-sm font-bold"
-        >
-          <span>
-            {atRisk} starter{atRisk > 1 ? "s" : ""} hurt or out
-          </span>
-          <span className="shrink-0 text-rose-400">Injury report ↓</span>
-        </button>
-      )}
       <StartOrSit a={a} />
       <Card
         title="Recommended starters"
@@ -1144,9 +1139,6 @@ function Lineup({ a }: { a: Analysis }) {
           </ul>
         )}
       </Card>
-      <div id="injury-report" className="scroll-mt-28">
-        <Injuries a={a} />
-      </div>
     </div>
   );
 }
@@ -1627,7 +1619,7 @@ function TradeEvaluator({ a }: { a: Analysis }) {
             setTeamId(Number(e.target.value));
             setGet([]);
           }}
-          className="border border-ink-700 bg-ink-900 px-3 py-1.5 text-ink-100"
+          className="rounded-lg border border-ink-700 bg-ink-900 px-3 py-1.5 text-ink-100"
         >
           {a.otherTeams.map((t) => (
             <option key={t.rosterId} value={t.rosterId}>
@@ -1734,6 +1726,8 @@ function Trades({ a }: { a: Analysis }) {
           league average.
         </p>
       </Card>
+
+      <TradePartners a={a} />
 
       <Card title="Trade ideas">
         {report.ideas.length === 0 ? (
@@ -2243,27 +2237,35 @@ function oddsTone(p: number) {
 
 const record = (t: PlayoffTeam) => `${t.wins}-${t.losses}${t.ties ? `-${t.ties}` : ""}`;
 
-/** League-wide view: playoff odds, then power rankings. */
-function League({ a, onTrades }: { a: Analysis; onTrades: () => void }) {
+/**
+ * The rest of your season on one page: playoff odds and the games that swing
+ * them, the league's power rankings (with each team's record and odds), then
+ * your week-by-week outlook and bye-week holes.
+ */
+function Season({ a }: { a: Analysis }) {
+  const { data: odds, error } = useAsync<PlayoffOdds>(() => buildPlayoffOdds(a), [a]);
+  const standings = odds
+    ? new Map(odds.teams.map((t) => [t.rosterId, { record: record(t), playoffPct: t.playoffPct }]))
+    : undefined;
   return (
     <div className="flex flex-col gap-6">
-      <Playoffs a={a} />
-      <PowerRankings a={a} onTrades={onTrades} />
+      {error ? (
+        <Empty>Couldn&apos;t simulate the season: {error}</Empty>
+      ) : odds ? (
+        <Playoffs odds={odds} />
+      ) : (
+        <div className="flex flex-col gap-3" aria-busy="true">
+          <div className="skeleton h-40 rounded-2xl" />
+          <div className="skeleton h-40 rounded-2xl" />
+        </div>
+      )}
+      <PowerRankings a={a} standings={standings} />
+      <Planner a={a} />
     </div>
   );
 }
 
-function Playoffs({ a }: { a: Analysis }) {
-  const { data: odds, error } = useAsync<PlayoffOdds>(() => buildPlayoffOdds(a), [a]);
-  if (error) return <Empty>Couldn&apos;t simulate the season: {error}</Empty>;
-  if (!odds) {
-    return (
-      <div className="flex flex-col gap-3" aria-busy="true">
-        <div className="skeleton h-40 rounded-2xl" />
-        <div className="skeleton h-80 rounded-2xl" />
-      </div>
-    );
-  }
+function Playoffs({ odds }: { odds: PlayoffOdds }) {
   const me = odds.me;
   const likelySeed = me.seedPct.indexOf(Math.max(...me.seedPct)) + 1;
   const leverage = [...odds.mustWin].sort((x, y) => y.ifWin - y.ifLose - (x.ifWin - x.ifLose));
@@ -2379,79 +2381,6 @@ function Playoffs({ a }: { a: Analysis }) {
           </p>
         </Card>
       )}
-
-      <Card title="League outlook">
-        <div className="-mx-4 overflow-x-auto sm:-mx-5">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-[10px] tracking-wider text-ink-400 uppercase">
-                <th className="py-2 pr-2 pl-4 text-left font-semibold sm:pl-5">Team</th>
-                <th className="px-2 py-2 text-right font-semibold">Rec</th>
-                <th className="hidden px-2 py-2 text-right font-semibold sm:table-cell">PF</th>
-                <th className="hidden px-2 py-2 text-right font-semibold sm:table-cell">Pts/wk</th>
-                <th className="px-2 py-2 text-right font-semibold">Proj W</th>
-                {odds.byes > 0 && <th className="px-2 py-2 text-right font-semibold">Bye</th>}
-                <th className="py-2 pr-4 pl-2 text-right font-semibold sm:pr-5">Playoffs</th>
-              </tr>
-            </thead>
-            <tbody>
-              {odds.teams.map((t, i) => (
-                <tr
-                  key={t.rosterId}
-                  className={`border-t ${i === odds.playoffTeams ? "border-t-2 border-dashed border-t-hot/60" : "border-ink-700/60"} ${
-                    t.rosterId === me.rosterId ? "bg-mint-400/10" : ""
-                  }`}
-                >
-                  <td className="py-2 pr-2 pl-4 sm:pl-5">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <TeamMark t={t} size={24} />
-                      <span className={`truncate ${t.rosterId === me.rosterId ? "font-bold text-mint-400" : ""}`}>
-                        {t.teamName}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-2 py-2 text-right font-mono tabular-nums">{record(t)}</td>
-                  <td className="hidden px-2 py-2 text-right font-mono text-ink-300 tabular-nums sm:table-cell">
-                    {t.pointsFor.toFixed(0)}
-                  </td>
-                  <td className="hidden px-2 py-2 text-right font-mono text-ink-300 tabular-nums sm:table-cell">
-                    {t.strength.toFixed(0)}
-                  </td>
-                  <td className="px-2 py-2 text-right font-mono tabular-nums">{t.projectedWins.toFixed(1)}</td>
-                  {odds.byes > 0 && (
-                    <td className="px-2 py-2 text-right font-mono text-ink-300 tabular-nums">{t.byePct.toFixed(0)}%</td>
-                  )}
-                  <td className="py-2 pr-4 pl-2 sm:pr-5">
-                    <div className="flex items-center justify-end gap-2">
-                      <div className="hidden h-1.5 w-16 overflow-hidden bg-ink-700 sm:block">
-                        <div
-                          className={
-                            t.playoffPct >= 75
-                              ? "h-full bg-mint-400"
-                              : t.playoffPct >= 40
-                                ? "h-full bg-amber-300"
-                                : "h-full bg-rose-400/70"
-                          }
-                          style={{ width: `${t.playoffPct}%` }}
-                        />
-                      </div>
-                      <span className={`w-12 text-right font-mono font-bold tabular-nums ${oddsTone(t.playoffPct)}`}>
-                        {t.playoffPct >= 99.95
-                          ? "100"
-                          : t.playoffPct.toFixed(t.playoffPct < 10 && t.playoffPct > 0 ? 1 : 0)}
-                        %
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="mt-3 text-xs text-ink-400">
-          Dashed line = playoff cut. Pts/wk is each team&apos;s projected weekly score for the rest of the season.
-        </p>
-      </Card>
     </div>
   );
 }
@@ -2670,7 +2599,7 @@ function Injuries({ a }: { a: Analysis }) {
           sub={atRisk ? "under 60% to play — have a backup ready" : "nobody in your lineup is in real doubt"}
           tone={atRisk ? "bad" : "good"}
         />
-        <div className="flex flex-col justify-between gap-2 border border-ink-700/70 bg-ink-900 p-4">
+        <div className="flex flex-col justify-between gap-2 rounded-2xl border border-ink-700 bg-ink-900 p-4">
           <div className="display text-[11px] font-bold tracking-wider text-ink-400">Sources</div>
           <div className="text-xs text-ink-300">
             Sleeper news feed
