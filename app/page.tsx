@@ -287,7 +287,7 @@ function Landing({
 }) {
   return (
     <div className="flex flex-col items-center pt-10 text-center sm:pt-16">
-      <span className="display mb-6 rounded-lg bg-hot px-4 py-1 text-sm font-extrabold text-white">
+      <span className="display mb-6 rounded-lg bg-hot px-4 py-1 text-sm font-extrabold text-ink-950">
         <span className="block ">Free · No login · Any Sleeper league</span>
       </span>
       <h1 className="display max-w-3xl text-6xl leading-[0.9] font-black text-balance sm:text-8xl">

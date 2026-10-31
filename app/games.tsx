@@ -284,7 +284,7 @@ function GameTile({
         >
           <StatusChip g={g} />
           <span className="flex items-center gap-2 text-[11px] text-ink-400">
-            {s?.redZone && <span className="display bg-hot px-1.5 font-black text-white">RED ZONE</span>}
+            {s?.redZone && <span className="display bg-hot px-1.5 font-black text-ink-950">RED ZONE</span>}
             {line}
             <span className="display font-bold whitespace-nowrap text-mint-400 transition group-hover:translate-x-0.5">
               Game center ›
@@ -413,7 +413,7 @@ export function GamesTab({ a }: { a: Analysis }) {
               className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition disabled:opacity-40 ${
                 state === id
                   ? id === "in"
-                    ? "bg-hot text-white"
+                    ? "bg-hot text-ink-950"
                     : "bg-ink-100 text-ink-950"
                   : "bg-ink-800 text-ink-300 hover:text-ink-100"
               }`}

@@ -41,6 +41,7 @@ type Tab =
   | "playoffs"
   | "record"
   | "power"
+  | "league"
   | "roster";
 
 type Section = "week" | "moves" | "games" | "team";
@@ -54,7 +55,6 @@ const SECTIONS: { id: Section; label: string; tabs: { id: Tab; label: string }[]
     tabs: [
       { id: "plan", label: "Plan" },
       { id: "lineup", label: "Lineup" },
-      { id: "injuries", label: "Injuries" },
       { id: "scout", label: "Matchup" },
     ],
   },
@@ -72,16 +72,20 @@ const SECTIONS: { id: Section; label: string; tabs: { id: Tab; label: string }[]
     label: "Team",
     tabs: [
       { id: "roster", label: "Roster" },
-      { id: "power", label: "Rankings" },
-      { id: "playoffs", label: "Playoffs" },
+      { id: "league", label: "League" },
       { id: "planner", label: "Schedule" },
-      { id: "record", label: "Track record" },
     ],
   },
 ];
 const sectionOf = (tab: Tab): Section =>
   tab === "live" ? "week" : (SECTIONS.find((s) => s.tabs.some((t) => t.id === tab))?.id ?? "week");
 const ALL_TABS = new Set<string>(["live", ...SECTIONS.flatMap((s) => s.tabs.map((t) => t.id))]);
+// Tabs that were merged into others; old links and bookmarks land on the new home.
+const MERGED: Partial<Record<Tab, Tab>> = { injuries: "lineup", power: "league", playoffs: "league", record: "roster" };
+const tabFromHash = (h: string): Tab | null => {
+  const t = (MERGED[h as Tab] ?? h) as Tab;
+  return ALL_TABS.has(t) ? t : null;
+};
 
 function SectionIcon({ id, className = "h-5 w-5" }: { id: Section; className?: string }) {
   const paths: Record<Section, React.ReactNode> = {
@@ -121,7 +125,7 @@ function Badge({ n, active }: { n: number; active?: boolean }) {
   return (
     <span
       className={`ml-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 font-mono text-[11px] leading-[1.1rem] font-bold ${
-        active ? "bg-ink-950/20 text-ink-950" : "bg-hot text-white"
+        active ? "bg-ink-950/20 text-ink-950" : "bg-hot text-ink-950"
       }`}
     >
       {n}
@@ -159,12 +163,23 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
   // The open sub-tab lives in the URL hash, so refresh and the back button keep your place.
   const [initial] = useState<Tab | null>(() => {
     const h = typeof window !== "undefined" ? window.location.hash.slice(1) : "";
-    return ALL_TABS.has(h) ? (h as Tab) : null;
+    return tabFromHash(h);
   });
   const [tab, setTabState] = useState<Tab>(initial && initial !== "live" ? initial : "plan");
+  useEffect(() => {
+    // An old link to a merged tab (#injuries, #playoffs…): point the URL at its new home.
+    if (initial && location.hash.slice(1) !== initial) {
+      try {
+        history.replaceState(null, "", `#${initial}`);
+      } catch {
+        // not fatal
+      }
+    }
+  }, [initial]);
   const [lastTab, setLastTab] = useState<Partial<Record<Section, Tab>>>({});
   const top = useRef<HTMLDivElement>(null);
-  const setTab = (next: Tab) => {
+  const setTab = (to: Tab) => {
+    const next = MERGED[to] ?? to;
     setTabState(next);
     setLastTab((prev) => ({ ...prev, [sectionOf(next)]: next }));
     try {
@@ -203,7 +218,7 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
   const atRisk = a.currentLineup.filter(
     (s) => s.player && s.player.injury && s.player.injury !== "Questionable",
   ).length;
-  const counts: Partial<Record<Tab, number>> = { waivers: a.waivers.length, injuries: atRisk };
+  const counts: Partial<Record<Tab, number>> = { waivers: a.waivers.length, lineup: atRisk };
   const sectionCount = (id: Section) =>
     SECTIONS.find((x) => x.id === id)!.tabs.reduce((n, t) => n + (counts[t.id] ?? 0), 0);
   const subTabs = SECTIONS.find((x) => x.id === section)!.tabs;
@@ -265,15 +280,12 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
         {tab === "plan" && <GamePlan a={a} goTo={setTab} />}
         {tab === "games" && <GamesTab a={a} />}
         {tab === "lineup" && <Lineup a={a} />}
-        {tab === "injuries" && <Injuries a={a} />}
         {tab === "waivers" && <Waivers a={a} onRefresh={onRefresh} refreshing={refreshing} />}
         {tab === "trades" && <Trades a={a} />}
         {tab === "scout" && <Scout a={a} />}
         {tab === "planner" && <Planner a={a} />}
-        {tab === "playoffs" && <Playoffs a={a} />}
-        {tab === "record" && <Record a={a} />}
+        {tab === "league" && <League a={a} onTrades={() => setTab("trades")} />}
         {tab === "roster" && <Roster a={a} />}
-        {tab === "power" && <PowerRankings a={a} onTrades={() => setTab("trades")} />}
 
         {/* Phone: sections in a thumb-reach bar under the scrolling area. */}
         {navSlot &&
@@ -295,7 +307,7 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
                         <span className="absolute -top-0.5 -right-1 h-2.5 w-2.5 animate-pulse rounded-full bg-hot ring-2 ring-ink-900" />
                       ) : (
                         sectionCount(x.id) > 0 && (
-                          <span className="absolute -top-1.5 -right-2.5 min-w-[1.1rem] rounded-full bg-hot px-1 text-center font-mono text-[10px] leading-[1.1rem] font-bold text-white">
+                          <span className="absolute -top-1.5 -right-2.5 min-w-[1.1rem] rounded-full bg-hot px-1 text-center font-mono text-[10px] leading-[1.1rem] font-bold text-ink-950">
                             {sectionCount(x.id)}
                           </span>
                         )
@@ -444,10 +456,12 @@ function LiveTab({ live }: { live: LiveState }) {
           {live.lateSwaps.map((s) => (
             <div
               key={s.out.id + s.in.id}
-              className="flex flex-wrap items-center gap-3 bg-gradient-to-r from-hot to-[#b5179e] px-4 py-3 text-sm font-semibold text-white"
+              className="flex flex-col gap-1.5 rounded-2xl border border-hot/40 bg-hot/10 px-4 py-3 text-sm"
             >
-              <span className="display shrink-0 bg-ink-950 px-2 py-0.5 text-base font-black text-white">Late swap</span>
-              <span>
+              <span className="self-start rounded-full bg-hot px-2.5 py-0.5 text-[11px] font-extrabold tracking-wide text-ink-950 uppercase">
+                Late swap
+              </span>
+              <span className="leading-snug">
                 {s.freeAgent ? "Add free agent " : "Start "}
                 <b>{s.in.name}</b> ({s.in.position}, {s.in.team}) {s.freeAgent ? "and start them " : ""}over{" "}
                 <b>{s.out.name}</b> at {s.slot} — +{s.gain} projected. {s.reason}.
@@ -793,7 +807,7 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
               : "Nothing worth a claim"}
           </span>
         </Widget>
-        <Widget label="Injuries" onClick={() => goTo("injuries")}>
+        <Widget label="Injuries" onClick={() => goTo("lineup")}>
           <span
             className={`mt-2 font-mono text-4xl leading-none font-black ${hurt.length ? "text-amber-300" : "text-mint-400"}`}
           >
@@ -1045,8 +1059,22 @@ function Lineup({ a }: { a: Analysis }) {
   const benched = new Set(a.moves.filter((m) => m.action === "bench").map((m) => m.player.id));
   const bench = a.roster.filter((p) => !optimalIds.has(p.id));
   const max = Math.max(1, ...a.roster.map((p) => p.weekScore));
+  const atRisk = a.currentLineup.filter(
+    (s) => s.player && s.player.injury && s.player.injury !== "Questionable",
+  ).length;
   return (
     <div className="flex flex-col gap-5">
+      {atRisk > 0 && (
+        <button
+          onClick={() => document.getElementById("injury-report")?.scrollIntoView({ behavior: "smooth" })}
+          className="flex items-center justify-between gap-3 rounded-2xl border border-rose-400/40 bg-rose-500/10 px-4 py-3 text-left text-sm font-bold"
+        >
+          <span>
+            {atRisk} starter{atRisk > 1 ? "s" : ""} hurt or out
+          </span>
+          <span className="shrink-0 text-rose-400">Injury report ↓</span>
+        </button>
+      )}
       <StartOrSit a={a} />
       <Card
         title="Recommended starters"
@@ -1116,6 +1144,9 @@ function Lineup({ a }: { a: Analysis }) {
           </ul>
         )}
       </Card>
+      <div id="injury-report" className="scroll-mt-28">
+        <Injuries a={a} />
+      </div>
     </div>
   );
 }
@@ -1552,7 +1583,7 @@ function PickList({
               <PlayerLine p={p} size={28} />
               <span
                 className={`display shrink-0 px-1.5 text-xs font-bold ${
-                  on ? (tone === "give" ? "bg-hot text-white" : "bg-mint-400 text-ink-950") : "text-ink-400"
+                  on ? (tone === "give" ? "bg-hot text-ink-950" : "bg-mint-400 text-ink-950") : "text-ink-400"
                 }`}
               >
                 {on ? (tone === "give" ? "Giving" : "Getting") : p.rosValue.toFixed(1)}
@@ -1826,7 +1857,7 @@ function Scout({ a }: { a: Analysis }) {
           <ul className="mt-4 flex flex-col gap-2">
             {s.talk.map((line) => (
               <li key={line} className="flex items-start gap-3 bg-hot/10 px-3 py-2 text-sm">
-                <span className="display shrink-0 rounded-lg bg-hot px-2 py-0.5 text-xs font-black text-white">
+                <span className="display shrink-0 rounded-lg bg-hot px-2 py-0.5 text-xs font-black text-ink-950">
                   <span className="inline-block ">INTEL</span>
                 </span>
                 <span>{line}</span>
@@ -2211,6 +2242,16 @@ function oddsTone(p: number) {
 }
 
 const record = (t: PlayoffTeam) => `${t.wins}-${t.losses}${t.ties ? `-${t.ties}` : ""}`;
+
+/** League-wide view: playoff odds, then power rankings. */
+function League({ a, onTrades }: { a: Analysis; onTrades: () => void }) {
+  return (
+    <div className="flex flex-col gap-6">
+      <Playoffs a={a} />
+      <PowerRankings a={a} onTrades={onTrades} />
+    </div>
+  );
+}
 
 function Playoffs({ a }: { a: Analysis }) {
   const { data: odds, error } = useAsync<PlayoffOdds>(() => buildPlayoffOdds(a), [a]);
@@ -2828,6 +2869,7 @@ function Roster({ a }: { a: Analysis }) {
         </section>
       ))}
       <RulesCard a={a} />
+      <TrackRecordSection a={a} />
     </div>
   );
 }
@@ -2963,4 +3005,30 @@ function Th({
 function RoleTag({ role }: { role: NonNullable<PlayerAnalysis["role"]> }) {
   const label = { starter: "Starter", "fill-in": "Fill-in starter", sidelined: "Not starting", backup: "Backup" }[role];
   return <span className="rounded bg-ink-700 px-1 text-[10px] font-semibold text-ink-300">{label}</span>;
+}
+
+/** Track record, folded away at the bottom of Roster. It loads past weeks, so only when opened. */
+function TrackRecordSection({ a }: { a: Analysis }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <details
+      onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
+      className="group rounded-2xl border border-ink-700 bg-ink-900"
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5">
+        <span>
+          <span className="block text-[15px] font-bold">Track record</span>
+          <span className="block text-xs text-ink-400">
+            How Prime Time&apos;s lineups would have done in past weeks
+          </span>
+        </span>
+        <span className="text-ink-400 transition group-open:rotate-180">⌄</span>
+      </summary>
+      {open && (
+        <div className="px-3 pb-3 sm:px-4">
+          <Record a={a} />
+        </div>
+      )}
+    </details>
+  );
 }

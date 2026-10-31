@@ -163,7 +163,7 @@ function SheetHeader({ g, d, onClose, nav }: { g: Game; d: GameDetail | null; on
       </div>
       {g.state === "in" && g.situation?.text && (
         <div className="mt-3 flex items-center justify-center gap-2 text-xs">
-          {g.situation.redZone && <span className="display bg-hot px-1.5 font-black text-white">RED ZONE</span>}
+          {g.situation.redZone && <span className="display bg-hot px-1.5 font-black text-ink-950">RED ZONE</span>}
           <span className="font-semibold text-ink-100">{g.situation.text}</span>
         </div>
       )}

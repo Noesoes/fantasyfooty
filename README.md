@@ -28,10 +28,10 @@ Everything is grouped into four sections, each with a few tabs:
 
 | Section | Tabs |
 | --- | --- |
-| **Home** | Plan (your matchup, the moves to make this week, heads-up alerts) · Lineup · Injuries · Matchup (plus **Live** on game days) |
+| **Home** | Plan (your matchup, the moves to make this week, heads-up alerts) · Lineup (with the injury report) · Matchup (plus **Live** on game days) |
 | **Moves** | Waivers · Trades |
 | **Games** | Every game this week, with a game center for each |
-| **Team** | Roster · Playoffs · Schedule (bye weeks and week-by-week projections) · Track record |
+| **Team** | Roster (with your rules and the track record) · League (playoff odds and power rankings) · Schedule (bye weeks and week-by-week projections) |
 
 **Look:** "Glass": frosted, translucent cards over colored light, big rounded numbers, and a floating tab bar (light and dark). Home opens with widgets for your win chance and projected score, then the moves to make, heads-up alerts, and Waivers and Injuries widgets. A player's sheet is tinted with his team's color and shows usage as rings.
 
