@@ -210,7 +210,8 @@ export function PlayerLine({ p, size = 40, sub }: { p: PlayerAnalysis; size?: nu
           <span className="truncate font-semibold text-ink-100">{p.name}</span>
           <InjuryTag status={p.injury} />
         </div>
-        <div className="flex items-center gap-1.5 text-xs whitespace-nowrap text-ink-400">
+        {/* Wraps the matchup onto its own line on narrow screens instead of running under the points. */}
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs whitespace-nowrap text-ink-400">
           <PosBadge pos={p.position} />
           <span>{p.team ?? "FA"}</span>
           {sub}

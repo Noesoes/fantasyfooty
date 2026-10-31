@@ -55,7 +55,6 @@ const SECTIONS: { id: Section; label: string; tabs: { id: Tab; label: string }[]
     label: "Home",
     tabs: [
       { id: "plan", label: "Plan" },
-      { id: "lineup", label: "Lineup" },
       { id: "injuries", label: "Injuries" },
       { id: "scout", label: "Matchup" },
     ],
@@ -73,7 +72,7 @@ const SECTIONS: { id: Section; label: string; tabs: { id: Tab; label: string }[]
     id: "team",
     label: "Team",
     tabs: [
-      { id: "roster", label: "Roster" },
+      { id: "lineup", label: "Lineup" },
       { id: "season", label: "Season" },
     ],
   },
@@ -87,7 +86,8 @@ const MERGED: Partial<Record<Tab, Tab>> = {
   playoffs: "season",
   league: "season",
   planner: "season",
-  record: "roster",
+  record: "lineup",
+  roster: "lineup",
 };
 const tabFromHash = (h: string): Tab | null => {
   const t = (MERGED[h as Tab] ?? h) as Tab;
@@ -294,7 +294,6 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
         {tab === "scout" && <Scout a={a} />}
         {tab === "injuries" && <Injuries a={a} />}
         {tab === "season" && <Season a={a} />}
-        {tab === "roster" && <Roster a={a} />}
 
         {/* Phone: sections in a thumb-reach bar under the scrolling area. */}
         {navSlot &&
@@ -1066,8 +1065,10 @@ function Lineup({ a }: { a: Analysis }) {
   const optimalIds = new Set(a.optimalLineup.map((s) => s.player?.id));
   const currentIds = new Set(a.currentLineup.map((s) => s.player?.id).filter(Boolean));
   const benched = new Set(a.moves.filter((m) => m.action === "bench").map((m) => m.player.id));
-  const bench = a.roster.filter((p) => !optimalIds.has(p.id));
+  const bench = a.activeRoster.filter((p) => !optimalIds.has(p.id));
   const max = Math.max(1, ...a.roster.map((p) => p.weekScore));
+  // IR, taxi and other reserve spots: not in the lineup either way.
+  const reserve = a.roster.filter((p) => !a.activeRoster.includes(p));
   return (
     <div className="flex flex-col gap-5">
       <StartOrSit a={a} />
@@ -1139,6 +1140,19 @@ function Lineup({ a }: { a: Analysis }) {
           </ul>
         )}
       </Card>
+      {reserve.length > 0 && (
+        <Card title="IR / reserve">
+          <ul className="flex flex-col divide-y divide-ink-700/60">
+            {reserve.map((p) => (
+              <li key={p.id} className="py-2.5">
+                <PlayerLine p={p} size={36} sub={<MatchupChip p={p} compact />} />
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      <RulesCard a={a} />
+      <TrackRecordSection a={a} />
     </div>
   );
 }
@@ -2762,46 +2776,6 @@ function InjurySection({
 // --- Roster ----------------------------------------------------------------
 
 type SortKey = "weekScore" | "seasonAvg" | "recentAvg" | "snapShare";
-
-function Roster({ a }: { a: Analysis }) {
-  const reserved = new Set(a.roster.filter((p) => !a.activeRoster.includes(p)).map((p) => p.id));
-  const starterIds = new Set(a.currentLineup.map((s) => s.player?.id).filter(Boolean));
-  const groups = [
-    { title: "Starters", players: a.currentLineup.map((s) => s.player).filter((p): p is PlayerAnalysis => !!p) },
-    { title: "Bench", players: a.activeRoster.filter((p) => !starterIds.has(p.id)) },
-    { title: "IR / reserve", players: a.roster.filter((p) => reserved.has(p.id)) },
-  ].filter((g) => g.players.length);
-  return (
-    <div className="flex flex-col gap-4">
-      <p className="px-1 text-sm text-ink-400">
-        Tap a player for this week&apos;s call, the defense he faces and his workload.
-      </p>
-      {groups.map((g) => (
-        <section key={g.title} className="rounded-2xl border border-ink-700 bg-ink-900 p-2">
-          <h2 className="px-3 pt-2 pb-1 text-[15px] font-bold">{g.title}</h2>
-          <ul className="flex flex-col">
-            {g.players.map((p) => (
-              <li key={p.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-ink-850">
-                <div className="min-w-0 flex-1">
-                  <PlayerLine p={p} size={40} sub={<MatchupChip p={p} compact />} />
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="font-mono text-lg leading-none font-bold">
-                    {p.onBye ? "BYE" : p.weekScore.toFixed(1)}
-                  </div>
-                  <div className="mt-1 text-[11px] text-ink-400">proj</div>
-                </div>
-                <span className="text-lg text-ink-500">›</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
-      <RulesCard a={a} />
-      <TrackRecordSection a={a} />
-    </div>
-  );
-}
 
 function PlayerTable({
   players,
