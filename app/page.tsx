@@ -63,6 +63,8 @@ export default function Home() {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const requestId = useRef(0);
   const [refreshKey, setRefreshKey] = useState(0);
+  // A refresh you didn't ask for (coming back to the app): no dimming, and a failure keeps what's on screen.
+  const quietRefresh = useRef(false);
   // Your rules for this league (don't trade / don't drop / backup for); a change re-runs the analysis.
   const [prefs, setPrefs] = useState<Prefs>({});
   const [rulesKey, setRulesKey] = useState(0);
@@ -109,8 +111,10 @@ export default function Home() {
   useEffect(() => {
     if (!user || !state || !leagueId) return;
     const id = ++requestId.current;
+    const quiet = quietRefresh.current;
+    quietRefresh.current = false;
+    if (!quiet) setLoadingAnalysis(true);
     // eslint-disable-next-line react-hooks/set-state-in-effect -- kicking off a fetch for the new selection
-    setLoadingAnalysis(true);
     setError(null);
     save({ username: user.username ?? username, leagueId });
     const rules = loadPrefs(leagueId);
@@ -126,16 +130,34 @@ export default function Home() {
         if (id === requestId.current) setAnalysis(result);
       })
       .catch((err) => {
-        if (id === requestId.current) {
+        if (id === requestId.current && !quiet) {
           setError((err as Error).message);
           setAnalysis(null);
         }
       })
       .finally(() => {
-        if (id === requestId.current) setLoadingAnalysis(false);
+        if (id === requestId.current && !quiet) setLoadingAnalysis(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- username is only used for saving
   }, [user, state, leagueId, week, refreshKey, rulesKey]);
+
+  // Coming back to the app (e.g. after setting your lineup in Sleeper): reload if the data is
+  // more than a minute old, so the plan reflects your current lineup.
+  const fetchedAt = analysis?.fetchedAt ?? null;
+  useEffect(() => {
+    const onReturn = () => {
+      if (document.visibilityState !== "visible" || fetchedAt === null) return;
+      if (Date.now() - fetchedAt < 60_000) return;
+      quietRefresh.current = true;
+      setRefreshKey((k) => k + 1);
+    };
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("pageshow", onReturn);
+    return () => {
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("pageshow", onReturn);
+    };
+  }, [fetchedAt]);
 
   const rulesApi = useMemo(
     () => ({
