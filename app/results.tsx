@@ -28,6 +28,7 @@ import { RuleChip, RulesCard } from "./rules";
 import { useOpenPlayer } from "./playerctx";
 import { Card, Empty, Headshot, MatchupChip, PlayerLine, Points, PosBadge, Ring, SlotBadge } from "./ui";
 import { lastName } from "@/lib/names";
+import { findHoles } from "@/lib/holes";
 
 type Tab =
   | "live"
@@ -572,7 +573,7 @@ function LiveRoster({ title, side, accent }: { title: string; side: LiveSide; ac
 
 interface Task {
   id: string;
-  kind: "start" | "bench" | "add";
+  kind: "start" | "bench" | "add" | "fix";
   title: React.ReactNode;
   /** One line under the title. */
   short: React.ReactNode;
@@ -606,8 +607,45 @@ function useChecked(key: string) {
 }
 
 function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
+  const holes = useMemo(() => findHoles(a), [a]);
   const tasks: Task[] = useMemo(() => {
     const list: Task[] = [];
+    // First: starting spots nobody on your roster can fill, each with the pickup that fills it.
+    for (const h of holes) {
+      const out = h.out ? lastName(h.out.name) : null;
+      list.push({
+        id: `fix-${h.slot}-${h.fill.id}`,
+        kind: "fix",
+        title: h.out ? (
+          <>
+            Replace {h.out.name} at {h.slotLabel}
+          </>
+        ) : (
+          <>Fill your empty {h.slotLabel} spot</>
+        ),
+        short: (
+          <>
+            {h.out ? `${h.why} · ` : ""}claim {h.fill.name} <span className="text-mint-400">+{h.gain} pts</span>
+          </>
+        ),
+        detail: [
+          h.out
+            ? `${h.out.name} is ${h.why.toLowerCase().replace(/^ruled /, "ruled ")} and nobody on your bench can play ${h.slotLabel} this week.`
+            : `Nobody on your roster can fill ${h.slotLabel} this week.`,
+          `Claim ${h.fill.name} (${h.fill.position}, ${h.fill.team}: ${h.fill.weekScore} projected) and start him${out ? ` in ${out}'s spot` : ""}.`,
+          h.drop ? `To make room, drop ${h.drop.name}.` : "",
+          h.likelyClaimedBy
+            ? `${h.likelyClaimedBy} is ahead of you on waivers and may take him${h.backup ? `; if so, ${h.backup.name} (${h.backup.weekScore} projected) is your next best option` : ""}.`
+            : h.backup
+              ? `Next best: ${h.backup.name} (${h.backup.weekScore} projected).`
+              : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+        players: [h.fill, ...(h.drop ? [h.drop] : []), ...(h.backup ? [h.backup] : [])],
+      });
+    }
+    const filled = new Set(holes.map((h) => h.fill.id));
     // A start paired with the player it replaces reads as one call; the bench is implied.
     const covered = new Set(a.moves.filter((m) => m.action === "start" && m.vs).map((m) => m.vs!.id));
     for (const m of a.moves) {
@@ -641,7 +679,7 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
         why: pair,
       });
     }
-    for (const w of a.waivers.slice(0, 3)) {
+    for (const w of a.waivers.filter((w) => !filled.has(w.player.id)).slice(0, Math.max(0, 3 - holes.length))) {
       list.push({
         id: `add-${w.player.id}`,
         kind: "add",
@@ -670,8 +708,14 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
       });
     }
     return list;
-  }, [a]);
+  }, [a, holes]);
   const [checked, toggle] = useChecked(`plan:${a.league.league_id}:${a.week}`);
+  // Warnings a task above already handles ("Lamar Jackson is in your QB slot: Ruled IR") would just repeat it.
+  const handled = [
+    ...holes.flatMap((h) => (h.out ? [h.out.name] : [])),
+    ...a.moves.flatMap((m) => [m.player.name, ...(m.vs ? [m.vs.name] : [])]),
+  ];
+  const warnings = a.warnings.filter((w) => !handled.some((name) => w.startsWith(name)));
   const [open, setOpen] = useState<string | null>(null);
   const done = tasks.filter((t) => checked[t.id]).length;
   const stashes = a.activeRoster.filter((p) => p.stash);
@@ -772,11 +816,11 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
         </ol>
       )}
 
-      {(a.warnings.length > 0 || stashes.length > 0) && (
+      {(warnings.length > 0 || stashes.length > 0) && (
         <>
           <h2 className="mt-4 px-1 text-xl font-bold tracking-tight">Heads up</h2>
           <ul className="flex flex-col gap-2">
-            {a.warnings.map((w) => (
+            {warnings.map((w) => (
               <li key={w} className="flex gap-3 rounded-2xl bg-rose-500/10 p-3.5 text-sm text-ink-100">
                 <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-400 text-xs font-black text-ink-950">
                   !
@@ -1070,14 +1114,23 @@ function Lineup({ a }: { a: Analysis }) {
   const max = Math.max(1, ...a.roster.map((p) => p.weekScore));
   // IR, taxi and other reserve spots: not in the lineup either way.
   const reserve = a.roster.filter((p) => !a.activeRoster.includes(p));
+  const openPlayer = useOpenPlayer();
+  // Spots your roster can't fill, with the pickup that fills each.
+  const holes = findHoles(a);
+  const holeFor = (slot: string, id: string | undefined) =>
+    holes.find((h) => h.slot === slot && (h.out?.id ?? undefined) === id);
+  const withPickups = Math.round((a.optimalTotal + holes.reduce((n, h) => n + h.gain, 0)) * 10) / 10;
   return (
     <div className="flex flex-col gap-5">
       <StartOrSit a={a} />
       <Card
         title="Recommended starters"
         action={
-          <span className="font-mono text-sm font-semibold text-mint-300 tabular-nums">
+          <span className="text-right font-mono text-sm font-semibold text-mint-300 tabular-nums">
             {a.optimalTotal.toFixed(1)} pts
+            {holes.length > 0 && (
+              <span className="block text-[11px] font-bold text-ink-400">{withPickups} with pickups</span>
+            )}
           </span>
         }
       >
@@ -1086,6 +1139,15 @@ function Lineup({ a }: { a: Analysis }) {
             // Highlight only players who aren't in your lineup now; reshuffles
             // between same-position slots don't need any action.
             const changed = Boolean(s.player && !currentIds.has(s.player.id));
+            const hole = holeFor(s.slot, s.player?.id);
+            const fix = hole && (
+              <button
+                onClick={() => openPlayer?.(hole.fill)}
+                className="mt-1.5 ml-[52px] flex items-center gap-1.5 rounded-full bg-mint-400/15 px-2.5 py-1 text-left text-[11.5px] font-bold text-mint-400"
+              >
+                {hole.why} · claim {hole.fill.name} ({hole.fill.weekScore}) ›
+              </button>
+            );
             return (
               <li key={i} className={`flex items-center gap-3 py-3 ${changed ? "relative" : ""}`}>
                 {changed && <span className="absolute top-2 bottom-2 -left-4 w-1 rounded-r bg-mint-400 sm:-left-5" />}
@@ -1106,11 +1168,15 @@ function Lineup({ a }: { a: Analysis }) {
                           ~{Math.round(s.player.playChance * 100)}% to play · projection scaled for injury risk
                         </div>
                       )}
+                      {fix}
                     </div>
                     <ScoreBar value={s.player.weekScore} max={max} />
                   </div>
                 ) : (
-                  <span className="text-sm text-ink-400 italic">Empty — pick someone up on waivers</span>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-sm text-ink-400 italic">Empty</span>
+                    {fix}
+                  </div>
                 )}
               </li>
             );

@@ -21,6 +21,7 @@ import { InstallButton } from "./install";
 import { ThemeToggle } from "./theme";
 import { installErrorLogging } from "@/lib/errorlog";
 import { CompactBar } from "./topbar";
+import { Ring } from "./ui";
 
 const STORAGE_KEY = "sleeper-advisor";
 
@@ -294,6 +295,84 @@ function TopBar({ user, onSignOut }: { user: SleeperUser | null; onSignOut: () =
   );
 }
 
+const FEATURES = [
+  {
+    icon: "🎯",
+    title: "Lineup fixes",
+    text: "Your best lineup every week, from projections, matchups, Vegas and injury odds. If a starter is out and your bench can't cover, it names the pickup.",
+  },
+  {
+    icon: "📋",
+    title: "Waivers & stashes",
+    text: "Who to claim, who to drop, what to bid, and which rival will beat you to him. Plus the backups worth stashing before the starter gets hurt or traded.",
+  },
+  {
+    icon: "⚔️",
+    title: "Matchup analyzer",
+    text: "Your win chance, floor and upside, where you win and lose the week slot by slot, and how the points land across each kickoff window.",
+  },
+  {
+    icon: "🤝",
+    title: "Trades",
+    text: "Grade any offer for both sides, see your positional ranks before and after, and find the teams that fit you as trade partners.",
+  },
+  {
+    icon: "📺",
+    title: "Live game center",
+    text: "Live win probability on game day, every game's box score and your players' plays, plus late-swap alerts before kickoff.",
+  },
+  {
+    icon: "📰",
+    title: "News that matters",
+    text: "Injury odds from practice reports, and trade rumors weighed against denials. Ask \u201cis Taylor getting traded?\u201d and get a straight answer.",
+  },
+];
+
+/** A static preview of the Plan screen, so the landing page shows what you get. */
+function PlanPreview() {
+  const rows = [
+    { title: "Replace your QB on IR", sub: "Claim the QB who projects 25.4", tone: "text-mint-400" },
+    { title: "Start your WR3 at Flex", sub: "+12.1 pts · 95% sure", tone: "text-mint-400" },
+    { title: "Stash the backup RB", sub: "Starter in trade rumors · 60%", tone: "text-violet" },
+  ];
+  return (
+    <div
+      className="glass w-full max-w-md rounded-3xl border border-ink-700 bg-ink-900 p-4 text-left shadow-2xl"
+      aria-hidden
+    >
+      <div className="flex items-center gap-4">
+        <Ring value={0.64} size={76}>
+          <span className="text-lg leading-none font-black">64%</span>
+          <span className="mt-0.5 text-[8.5px] font-extrabold tracking-wide text-ink-300 uppercase">to win</span>
+        </Ring>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between text-[15px] font-extrabold">
+            <span>You</span>
+            <span className="font-mono">118.4</span>
+          </div>
+          <div className="flex items-baseline justify-between text-[15px] font-extrabold opacity-70">
+            <span>Opponent</span>
+            <span className="font-mono">109.9</span>
+          </div>
+          <div className="mt-0.5 text-[11.5px] font-bold text-mint-400">+9.6 with your moves</div>
+        </div>
+      </div>
+      <div className="mt-3 text-[13px] font-extrabold">Do these 3 things</div>
+      <ul className="mt-2 flex flex-col gap-1.5">
+        {rows.map((r) => (
+          <li key={r.title} className="flex items-center gap-3 rounded-2xl bg-ink-850 px-3 py-2.5">
+            <span className="h-5 w-5 shrink-0 rounded-full border-2 border-ink-600" />
+            <span className="min-w-0">
+              <span className="block truncate text-[13.5px] font-bold">{r.title}</span>
+              <span className={`block truncate text-[12px] font-semibold ${r.tone}`}>{r.sub}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function Landing({
   username,
   setUsername,
@@ -308,77 +387,81 @@ function Landing({
   error: string | null;
 }) {
   return (
-    <div className="flex flex-col items-center pt-10 text-center sm:pt-16">
-      <span className="display mb-6 rounded-lg bg-hot px-4 py-1 text-sm font-extrabold text-ink-950">
-        <span className="block ">Free · No login · Any Sleeper league</span>
+    <div className="flex flex-col items-center pt-8 text-center sm:pt-14">
+      <span className="mb-5 rounded-full bg-mint-400/15 px-3.5 py-1 text-xs font-extrabold tracking-wide text-mint-400">
+        Free · No login · Any Sleeper league
       </span>
-      <h1 className="display max-w-3xl text-6xl leading-[0.9] font-black text-balance sm:text-8xl">
-        Set the lineup.{" "}
+      <h1 className="max-w-3xl text-[44px] leading-[0.95] font-black tracking-tight text-balance sm:text-7xl">
+        Your Sleeper team,{" "}
         <span className="bg-gradient-to-r from-mint-400 via-violet to-hot bg-clip-text text-transparent">
-          Win the week.
+          coached every week.
         </span>
       </h1>
-      <p className="mt-4 max-w-xl text-base text-ink-300 sm:text-lg">
-        Start/sit calls, waiver pickups and drop candidates for your Sleeper team, built from this week&apos;s
-        projections, matchups, injuries, depth charts and recent form.
+      <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-ink-300 sm:text-lg">
+        Who to start, who to claim, who to stash and whether to take the trade, built from projections, matchups, Vegas
+        lines, injury reports and the news.
       </p>
 
-      <form onSubmit={onSubmit} className="mt-8 flex w-full max-w-md flex-col gap-2 sm:flex-row">
+      <form
+        onSubmit={onSubmit}
+        className="glass mt-7 flex w-full max-w-md flex-col gap-2 rounded-3xl border border-ink-700 bg-ink-900 p-3 text-left"
+      >
+        <label htmlFor="username" className="px-1 text-xs font-extrabold tracking-wide text-ink-400 uppercase">
+          Sleeper username
+        </label>
         <input
+          id="username"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder="Your Sleeper username"
+          placeholder="e.g. adamlevitan"
           autoCapitalize="none"
           autoCorrect="off"
+          autoComplete="username"
           spellCheck={false}
-          className="h-12 flex-1 border border-ink-700 bg-ink-900 px-4 text-base outline-none placeholder:text-ink-400 focus:border-mint-400 focus:shadow-[0_0_0_4px_rgb(25_227_255/0.15)]"
+          enterKeyHint="go"
+          className="h-12 rounded-2xl border border-ink-700 bg-ink-850 px-4 text-base outline-none placeholder:text-ink-500 focus:border-mint-400"
         />
         <button
           type="submit"
           disabled={loading || !username.trim()}
-          className="prime-gradient display h-12 rounded-lg px-7 text-lg font-extrabold text-ink-950 shadow-[0_0_28px_rgb(25_227_255/0.35)] transition hover:brightness-110 disabled:opacity-40 disabled:shadow-none"
+          className="h-12 rounded-2xl bg-mint-400 text-base font-black text-ink-950 transition hover:brightness-105 disabled:opacity-40"
         >
-          <span className="block ">{loading ? "Loading…" : "Analyze my team"}</span>
+          {loading ? "Finding your leagues…" : "See my game plan"}
         </button>
+        <p className="px-1 text-[11.5px] text-ink-400">
+          Your @handle in Sleeper (Account → Username), not your display name. Nothing to install or sign into.
+        </p>
       </form>
       {error && (
-        <div className="mt-4 w-full max-w-md">
+        <div className="w-full max-w-md">
           <ErrorBox message={error} />
         </div>
       )}
 
-      <div className="mt-14 grid w-full gap-3 text-left sm:grid-cols-3">
-        {[
-          {
-            icon: "🎯",
-            title: "Start / sit",
-            text: "Builds your best lineup from projections, matchups, byes and injury status — and flags QBs who aren't starting.",
-          },
-          {
-            icon: "📈",
-            title: "Waiver wire",
-            text: "Ranks free agents by value over replacement, tells you who to drop, and highlights who the rest of Sleeper is adding.",
-          },
-          {
-            icon: "📬",
-            title: "Weekly report",
-            text: "A GitHub Action can post your game plan every Tuesday, before waivers run.",
-          },
-        ].map((f) => (
-          <div key={f.title} className="border border-ink-700/80 border-t-4 border-t-mint-400 bg-ink-900/80 p-5">
-            <div className="text-2xl">{f.icon}</div>
-            <div className="display mt-3 text-xl font-bold">{f.title}</div>
-            <p className="mt-1 text-sm text-ink-400">{f.text}</p>
+      <div className="mt-10 flex w-full justify-center">
+        <PlanPreview />
+      </div>
+
+      <div className="mt-10 grid w-full gap-3 text-left sm:grid-cols-2 lg:grid-cols-3">
+        {FEATURES.map((f) => (
+          <div key={f.title} className="rounded-3xl border border-ink-700 bg-ink-900 p-5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-ink-850 text-xl">{f.icon}</div>
+            <div className="mt-3 text-lg font-extrabold tracking-tight">{f.title}</div>
+            <p className="mt-1 text-[13.5px] leading-relaxed text-ink-300">{f.text}</p>
           </div>
         ))}
       </div>
+      <p className="mt-8 max-w-md text-xs text-ink-400">
+        Reads only public league data from Sleeper and ESPN, straight from your phone. Your username and settings stay
+        on this device.
+      </p>
     </div>
   );
 }
 
 function ErrorBox({ message }: { message: string }) {
   return (
-    <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-left text-sm text-rose-200">
+    <div className="mt-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-left text-sm font-semibold text-ink-100">
       {message}
     </div>
   );
