@@ -29,6 +29,7 @@ import { useOpenPlayer } from "./playerctx";
 import { Card, Empty, Headshot, MatchupChip, PlayerLine, Points, PosBadge, Ring, SlotBadge } from "./ui";
 import { lastName } from "@/lib/names";
 import { findHoles } from "@/lib/holes";
+import { KickoffCard } from "./kickoff";
 
 type Tab =
   | "live"
@@ -732,6 +733,15 @@ function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
       )}
 
       <AskBox a={a} />
+      {!a.bestBall && (
+        <KickoffCard
+          a={a}
+          movePlayers={[
+            ...a.moves.flatMap((m) => [m.player, ...(m.vs ? [m.vs] : [])]),
+            ...holes.flatMap((h) => [h.fill, ...(h.out ? [h.out] : [])]),
+          ]}
+        />
+      )}
       <WhatChanged a={a} />
 
       <div className="mt-2 flex items-baseline justify-between px-1">

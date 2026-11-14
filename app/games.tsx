@@ -13,6 +13,7 @@ import { StakeStrip } from "./gameparts";
 import { GameSheet, type SheetTab } from "./gamesheet";
 import { Card, Empty, Headshot } from "./ui";
 import { lastName } from "@/lib/names";
+import { teamLogoUrl } from "@/lib/sleeper";
 
 /** Live scoreboard + your players' stats, every 30s while games are on (5 min otherwise). */
 function useGameCenter(a: Analysis) {
@@ -142,6 +143,24 @@ function GameField({ g }: { g: Game }) {
   );
 }
 
+/** Team logo on a soft tint of its color; falls back to the color alone if the logo doesn't load. */
+function TeamLogo({ abbr, hex }: { abbr: string; hex: string | null }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <span
+      className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full"
+      style={{ backgroundColor: hex ? `#${hex}26` : "var(--color-ink-800)" }}
+    >
+      {failed ? (
+        <span className="h-3 w-3 rounded-full" style={{ backgroundColor: color(hex) }} />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element -- remote Sleeper CDN logo in a static export
+        <img src={teamLogoUrl(abbr)} alt="" className="h-6 w-6 object-contain" onError={() => setFailed(true)} />
+      )}
+    </span>
+  );
+}
+
 function TeamRow({ g, side }: { g: Game; side: "away" | "home" }) {
   const abbr = side === "home" ? g.home : g.away;
   const score = side === "home" ? g.homeScore : g.awayScore;
@@ -150,11 +169,8 @@ function TeamRow({ g, side }: { g: Game; side: "away" | "home" }) {
   const hasBall = g.state === "in" && g.situation?.possession === abbr;
   return (
     <div className="flex items-center gap-2.5">
-      <span
-        className="h-6 w-1.5 shrink-0"
-        style={{ backgroundColor: color(side === "home" ? g.homeColor : g.awayColor) }}
-      />
-      <span className={`display text-xl font-black ${leading || g.state === "pre" ? "text-ink-100" : "text-ink-300"}`}>
+      <TeamLogo abbr={abbr} hex={side === "home" ? g.homeColor : g.awayColor} />
+      <span className={`text-xl font-black ${leading || g.state === "pre" ? "text-ink-100" : "text-ink-300"}`}>
         {abbr}
       </span>
       {hasBall && <Ball />}
@@ -208,10 +224,10 @@ function PlayerRow({
           <div className="flex items-center gap-1.5">
             <span className="truncate text-sm font-semibold">{p.player.name}</span>
             {p.role === "bench" && (
-              <span className="display bg-ink-700 px-1 text-[10px] font-bold text-ink-300">BN</span>
+              <span className="display rounded bg-ink-700 px-1 text-[10px] font-bold text-ink-300">BN</span>
             )}
             {p.role === "opponent" && (
-              <span className="display bg-rose-500/15 px-1 text-[10px] font-bold text-rose-300">OPP</span>
+              <span className="display rounded bg-rose-500/15 px-1 text-[10px] font-bold text-rose-300">OPP</span>
             )}
             {gain !== undefined && gain !== 0 && (
               <span
@@ -284,7 +300,7 @@ function GameTile({
         >
           <StatusChip g={g} />
           <span className="flex items-center gap-2 text-[11px] text-ink-400">
-            {s?.redZone && <span className="display bg-hot px-1.5 font-black text-ink-950">RED ZONE</span>}
+            {s?.redZone && <span className="display rounded bg-hot px-1.5 font-black text-ink-950">RED ZONE</span>}
             {line}
             <span className="display font-bold whitespace-nowrap text-mint-400 transition group-hover:translate-x-0.5">
               Game center ›

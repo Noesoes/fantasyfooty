@@ -163,7 +163,9 @@ function SheetHeader({ g, d, onClose, nav }: { g: Game; d: GameDetail | null; on
       </div>
       {g.state === "in" && g.situation?.text && (
         <div className="mt-3 flex items-center justify-center gap-2 text-xs">
-          {g.situation.redZone && <span className="display bg-hot px-1.5 font-black text-ink-950">RED ZONE</span>}
+          {g.situation.redZone && (
+            <span className="display rounded bg-hot px-1.5 font-black text-ink-950">RED ZONE</span>
+          )}
           <span className="font-semibold text-ink-100">{g.situation.text}</span>
         </div>
       )}
@@ -603,10 +605,10 @@ function PlayerDetail({
           <div className="flex items-center gap-1.5">
             <span className="truncate text-sm font-semibold">{p.player.name}</span>
             {p.role === "bench" && (
-              <span className="display bg-ink-700 px-1 text-[10px] font-bold text-ink-300">BN</span>
+              <span className="display rounded bg-ink-700 px-1 text-[10px] font-bold text-ink-300">BN</span>
             )}
             {p.role === "opponent" && (
-              <span className="display bg-rose-500/15 px-1 text-[10px] font-bold text-rose-300">OPP</span>
+              <span className="display rounded bg-rose-500/15 px-1 text-[10px] font-bold text-rose-300">OPP</span>
             )}
           </div>
           <div className="truncate text-[11px] text-ink-400">

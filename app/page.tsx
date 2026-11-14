@@ -22,6 +22,7 @@ import { ThemeToggle } from "./theme";
 import { installErrorLogging } from "@/lib/errorlog";
 import { CompactBar } from "./topbar";
 import { Ring } from "./ui";
+import { PullToRefresh } from "./pull";
 
 const STORAGE_KEY = "sleeper-advisor";
 
@@ -66,6 +67,8 @@ export default function Home() {
   const [refreshKey, setRefreshKey] = useState(0);
   // A refresh you didn't ask for (coming back to the app): no dimming, and a failure keeps what's on screen.
   const quietRefresh = useRef(false);
+  // A pull-to-refresh or background reload in progress (shown as a small spinner, not a dimmed page).
+  const [quietLoading, setQuietLoading] = useState(false);
   // Your rules for this league (don't trade / don't drop / backup for); a change re-runs the analysis.
   const [prefs, setPrefs] = useState<Prefs>({});
   const [rulesKey, setRulesKey] = useState(0);
@@ -99,13 +102,16 @@ export default function Home() {
     }
   }, []);
 
+  // Until we know whether this device has a saved username, show neither the landing page nor
+  // the app: returning users would otherwise see the landing page flash before their team loads.
+  const [restoring, setRestoring] = useState(true);
   useEffect(() => {
     const saved = loadSaved();
     if (saved.username) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring from localStorage after hydration
       setUsername(saved.username);
-      void findLeagues(saved.username, saved.leagueId);
-    }
+      void findLeagues(saved.username, saved.leagueId).finally(() => setRestoring(false));
+    } else setRestoring(false);
   }, [findLeagues]);
 
   // Re-run the analysis whenever the league or week changes.
@@ -115,7 +121,7 @@ export default function Home() {
     const quiet = quietRefresh.current;
     quietRefresh.current = false;
     if (!quiet) setLoadingAnalysis(true);
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- kicking off a fetch for the new selection
+    setQuietLoading(quiet);
     setError(null);
     save({ username: user.username ?? username, leagueId });
     const rules = loadPrefs(leagueId);
@@ -137,7 +143,9 @@ export default function Home() {
         }
       })
       .finally(() => {
-        if (id === requestId.current && !quiet) setLoadingAnalysis(false);
+        if (id !== requestId.current) return;
+        if (quiet) setQuietLoading(false);
+        else setLoadingAnalysis(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- username is only used for saving
   }, [user, state, leagueId, week, refreshKey, rulesKey]);
@@ -199,6 +207,15 @@ export default function Home() {
         id="scroller"
         className="flex flex-1 flex-col max-sm:min-h-0 max-sm:overflow-y-auto max-sm:overscroll-contain"
       >
+        {user && analysis && (
+          <PullToRefresh
+            busy={quietLoading}
+            onRefresh={() => {
+              quietRefresh.current = true;
+              setRefreshKey((k) => k + 1);
+            }}
+          />
+        )}
         {user && leagues.length > 0 ? (
           <CompactBar
             user={user}
@@ -216,7 +233,9 @@ export default function Home() {
           <TopBar user={user} onSignOut={signOut} />
         )}
         <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-16">
-          {!user ? (
+          {!user && restoring ? (
+            <Skeleton />
+          ) : !user ? (
             <Landing
               username={username}
               setUsername={setUsername}
