@@ -245,6 +245,7 @@ lib/pickup.ts              should-I-pick-him-up verdicts and best-available-by-p
 app/playercheck.tsx        Player check search and verdict card
 lib/playoffs.ts            playoff odds simulation
 lib/claude.ts              Ask answered by Claude Haiku 5.5 with the app's models as tools (your own key, stored on-device)
+lib/holes.ts               lineup holes: starting spots your roster can't fill, with the pickup that fills each
 lib/asknews.ts             news questions for Ask (trade rumors, injuries, latest)
 lib/tradetalk.ts           sorts trade headlines into rumors vs. "he's staying" (used by Ask and stash odds)
 lib/matchup.ts             weekly matchup analyzer (outcome, positions, time windows, stacks)
@@ -253,7 +254,19 @@ scripts/fetch-snapshots.mjs ESPN injury + scoreboard snapshots used by the deplo
 scripts/weekly-report.ts   CLI entry point used by the weekly GitHub Action
 scripts/gameday-alert.ts   CLI entry point used by the gameday GitHub Action
 app/page.tsx               landing page, league/week controls
-app/results.tsx            sections and tabs: This Week (live, game plan, games, lineup, injuries, opponent), Moves (waivers, trades), Season (playoffs, schedule), My Team (roster, track record)
+app/results.tsx            app shell: sections (Home, Moves, Games, Team), sub-tabs, scoreboard, bottom bar
+app/tabs/plan.tsx          Home → Plan: to-do list (lineup fixes, start/sit, claims), what changed, heads up
+app/tabs/injuries.tsx      Home → Injuries
+app/tabs/scout.tsx         Home → Matchup: matchup analyzer and scouting report
+app/tabs/live.tsx          Home → Live: live scores, win probability, late swaps
+app/tabs/scoreboard.tsx    pre-game matchup card
+app/tabs/waivers.tsx       Moves → Waivers
+app/tabs/trades.tsx        Moves → Trades
+app/tabs/lineup.tsx        Team → Lineup (with rules and track record)
+app/tabs/season.tsx        Team → Season: playoff odds, power rankings, schedule planner
+app/tabs/shared.tsx        pieces several screens share
+app/kickoff.tsx            next-kickoff card on Plan
+app/pull.tsx               pull to refresh on phones
 app/ui.tsx                 shared UI pieces
 app/install.tsx            "Get app" install button / iPhone instructions
 app/manifest.ts            web app manifest (name, icons, colors)
