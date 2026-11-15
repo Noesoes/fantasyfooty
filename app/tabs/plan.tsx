@@ -13,6 +13,7 @@ import { Headshot } from "../ui";
 import { lastName } from "@/lib/names";
 import { findHoles } from "@/lib/holes";
 import { KickoffCard } from "../kickoff";
+import { WeekRecap } from "../weekrecap";
 import { type Tab, Widget } from "./shared";
 import { bidSummary } from "./waivers";
 
@@ -177,6 +178,7 @@ export function GamePlan({ a, goTo }: { a: Analysis; goTo: (t: Tab) => void }) {
       )}
 
       <AskBox a={a} />
+      <WeekRecap a={a} onSeeRecord={() => goTo("lineup")} />
       {!a.bestBall && (
         <KickoffCard
           a={a}

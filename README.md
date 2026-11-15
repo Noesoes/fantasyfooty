@@ -266,6 +266,7 @@ app/tabs/lineup.tsx        Team → Lineup (with rules and track record)
 app/tabs/season.tsx        Team → Season: playoff odds, power rankings, schedule planner
 app/tabs/shared.tsx        pieces several screens share
 app/kickoff.tsx            next-kickoff card on Plan
+app/weekrecap.tsx          last week's recap card on Plan
 app/pull.tsx               pull to refresh on phones
 app/ui.tsx                 shared UI pieces
 app/install.tsx            "Get app" install button / iPhone instructions

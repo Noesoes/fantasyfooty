@@ -35,6 +35,13 @@ export interface WeekResult {
   /** Would the advisor's lineup have won? */
   advisorWon: boolean | null;
   calls: Call[];
+  /** Your official score (can include slots the replay doesn't model). */
+  official: number;
+  opponentName: string | null;
+  /** Your starters with what they scored and what Sleeper projected. */
+  starters: (LitePlayer & { points: number; projected: number })[];
+  /** Bench players who should have started, each with the starter they'd have replaced. */
+  misses: { benched: LitePlayer & { points: number }; started: LitePlayer & { points: number } }[];
 }
 
 export interface TrackRecord {
@@ -64,10 +71,14 @@ function pick(slots: string[], ids: string[], pos: Map<string, string[]>, score:
   return used;
 }
 
-export async function buildTrackRecord(a: Analysis): Promise<TrackRecord> {
-  const bestBall = a.bestBall;
-  const startWeek = Number((a.league.settings as Record<string, unknown>).start_week ?? 1);
-  const weeks = Array.from({ length: Math.max(0, a.week - startWeek) }, (_, i) => startWeek + i);
+interface ReplayContext {
+  slots: string[];
+  starterSlots: string[];
+  myRosterId: number;
+  known: Map<string, LitePlayer & { eligible: string[] }>;
+}
+
+function replayContext(a: Analysis): ReplayContext {
   const slots = lineupSlots(a.league.roster_positions);
   const starterSlots = a.league.roster_positions.filter((s) => s !== "BN" && s !== "IR" && s !== "TAXI");
   const myRosterId = a.myRosterId;
@@ -78,88 +89,108 @@ export async function buildTrackRecord(a: Analysis): Promise<TrackRecord> {
     known.set(p.id, { id: p.id, name: p.name, position: p.position, team: p.team, eligible: p.eligible });
   }
 
-  const results = await Promise.all(
-    weeks.map(async (week): Promise<WeekResult | null> => {
-      const [matchups, projections] = await Promise.all([
-        getMatchups(a.league.league_id, week),
-        getWeekProjections(a.season, week).catch(() => [] as StatRow[]),
-      ]);
-      const mine = matchups.find((m) => m.roster_id === myRosterId);
-      if (!mine?.players?.length || !mine.players_points) return null;
-      const actual = (id: string) => mine.players_points?.[id] ?? 0;
-      // Skip weeks that haven't been played/scored.
-      if (!Object.values(mine.players_points).some((v) => v !== 0)) return null;
+  return { slots, starterSlots, myRosterId, known };
+}
 
-      const projById = new Map(projections.map((r) => [r.player_id, r]));
-      const info = (id: string): LitePlayer & { eligible: string[] } => {
-        const row = projById.get(id);
-        const k = known.get(id);
-        const position = row?.player?.position ?? k?.position ?? (/^[A-Z]{2,3}$/.test(id) ? "DEF" : "?");
-        const eligible = row?.player?.fantasy_positions?.length
-          ? row.player.fantasy_positions
-          : (k?.eligible ?? [position]);
-        const name =
-          position === "DEF"
-            ? `${id} D/ST`
-            : [row?.player?.first_name, row?.player?.last_name].filter(Boolean).join(" ") || k?.name || id;
-        return { id, name, position, team: row?.team ?? k?.team ?? null, eligible };
-      };
-      const projected = (id: string) => {
-        const row = projById.get(id);
-        return row ? points(row.stats, a.league.scoring_settings, info(id).position) : 0;
-      };
+/** Replay one completed week: your lineup, the advisor's, the best possible, and what happened. */
+export async function replayWeek(a: Analysis, week: number, ctx = replayContext(a)): Promise<WeekResult | null> {
+  const { slots, starterSlots, myRosterId, known } = ctx;
+  const [matchups, projections] = await Promise.all([
+    getMatchups(a.league.league_id, week),
+    getWeekProjections(a.season, week).catch(() => [] as StatRow[]),
+  ]);
+  const mine = matchups.find((m) => m.roster_id === myRosterId);
+  if (!mine?.players?.length || !mine.players_points) return null;
+  const actual = (id: string) => mine.players_points?.[id] ?? 0;
+  // Skip weeks that haven't been played/scored.
+  if (!Object.values(mine.players_points).some((v) => v !== 0)) return null;
 
-      const players = mine.players;
-      const pos = new Map(players.map((id) => [id, info(id).eligible]));
-      // Your actual lineup, restricted to slot types we model (no IDP).
-      const yourIds = new Set(
-        (mine.starters ?? []).filter(
-          (id, i) => id && id !== "0" && starterSlots[i] && starterSlots[i] in SLOT_ELIGIBILITY,
-        ),
-      );
-      const advisorIds = pick(slots, players, pos, projected);
-      const bestIds = pick(slots, players, pos, actual);
-      const sum = (ids: Set<string>) => round1([...ids].reduce((s, id) => s + actual(id), 0));
+  const projById = new Map(projections.map((r) => [r.player_id, r]));
+  const info = (id: string): LitePlayer & { eligible: string[] } => {
+    const row = projById.get(id);
+    const k = known.get(id);
+    const position = row?.player?.position ?? k?.position ?? (/^[A-Z]{2,3}$/.test(id) ? "DEF" : "?");
+    const eligible = row?.player?.fantasy_positions?.length
+      ? row.player.fantasy_positions
+      : (k?.eligible ?? [position]);
+    const name =
+      position === "DEF"
+        ? `${id} D/ST`
+        : [row?.player?.first_name, row?.player?.last_name].filter(Boolean).join(" ") || k?.name || id;
+    return { id, name, position, team: row?.team ?? k?.team ?? null, eligible };
+  };
+  const projected = (id: string) => {
+    const row = projById.get(id);
+    return row ? points(row.stats, a.league.scoring_settings, info(id).position) : 0;
+  };
 
-      // Start/sit calls: where the advisor disagreed with you, pair its extra
-      // starters with your extra starters (best-projected first) and see who
-      // actually scored more.
-      const advisorOnly = [...advisorIds].filter((id) => !yourIds.has(id)).sort((x, y) => projected(y) - projected(x));
-      const yoursOnly = [...yourIds].filter((id) => !advisorIds.has(id)).sort((x, y) => projected(y) - projected(x));
-      const calls: Call[] = advisorOnly.slice(0, yoursOnly.length).map((id, i) => {
-        const other = yoursOnly[i];
-        const lite = (x: string) => {
-          const { id: pid, name, position, team } = info(x);
-          return { id: pid, name, position, team, points: round1(actual(x)) };
-        };
-        return {
-          advisor: lite(id),
-          yours: lite(other),
-          hit: actual(id) > actual(other),
-        };
-      });
-
-      const opp = mine.matchup_id
-        ? matchups.find((m) => m.matchup_id === mine.matchup_id && m.roster_id !== myRosterId)
-        : undefined;
-      const yours = sum(yourIds);
-      const advisor = sum(advisorIds);
-      // Your real total can include slots we don't model (IDP), so compare
-      // results on Sleeper's official score, adjusted by the advisor's diff.
-      const official = round1(mine.points ?? yours);
-      const opponent = opp ? round1(opp.points) : null;
-      return {
-        week,
-        yours,
-        advisor,
-        best: sum(bestIds),
-        opponent,
-        won: opponent === null ? null : official > opponent,
-        advisorWon: opponent === null ? null : official - yours + advisor > opponent,
-        calls,
-      };
-    }),
+  const players = mine.players;
+  const pos = new Map(players.map((id) => [id, info(id).eligible]));
+  // Your actual lineup, restricted to slot types we model (no IDP).
+  const yourIds = new Set(
+    (mine.starters ?? []).filter((id, i) => id && id !== "0" && starterSlots[i] && starterSlots[i] in SLOT_ELIGIBILITY),
   );
+  const advisorIds = pick(slots, players, pos, projected);
+  const bestIds = pick(slots, players, pos, actual);
+  const sum = (ids: Set<string>) => round1([...ids].reduce((s, id) => s + actual(id), 0));
+
+  // Start/sit calls: where the advisor disagreed with you, pair its extra
+  // starters with your extra starters (best-projected first) and see who
+  // actually scored more.
+  const advisorOnly = [...advisorIds].filter((id) => !yourIds.has(id)).sort((x, y) => projected(y) - projected(x));
+  const yoursOnly = [...yourIds].filter((id) => !advisorIds.has(id)).sort((x, y) => projected(y) - projected(x));
+  const lite = (x: string) => {
+    const { id: pid, name, position, team } = info(x);
+    return { id: pid, name, position, team, points: round1(actual(x)) };
+  };
+  const calls: Call[] = advisorOnly.slice(0, yoursOnly.length).map((id, i) => {
+    const other = yoursOnly[i];
+    return {
+      advisor: lite(id),
+      yours: lite(other),
+      hit: actual(id) > actual(other),
+    };
+  });
+
+  const opp = mine.matchup_id
+    ? matchups.find((m) => m.matchup_id === mine.matchup_id && m.roster_id !== myRosterId)
+    : undefined;
+  const yours = sum(yourIds);
+  const advisor = sum(advisorIds);
+  // Your real total can include slots we don't model (IDP), so compare
+  // results on Sleeper's official score, adjusted by the advisor's diff.
+  const official = round1(mine.points ?? yours);
+  const opponent = opp ? round1(opp.points) : null;
+  return {
+    week,
+    yours,
+    advisor,
+    best: sum(bestIds),
+    opponent,
+    won: opponent === null ? null : official > opponent,
+    advisorWon: opponent === null ? null : official - yours + advisor > opponent,
+    calls,
+    official,
+    opponentName: opp ? (a.otherTeams.find((t) => t.rosterId === opp.roster_id)?.teamName ?? null) : null,
+    starters: [...yourIds].map((id) => ({ ...lite(id), projected: round1(projected(id)) })),
+    // Who sat but belonged in the best lineup, paired with the starter they'd have replaced (biggest gap first).
+    misses: (() => {
+      const benched = [...bestIds].filter((id) => !yourIds.has(id)).sort((x, y) => actual(y) - actual(x));
+      const started = [...yourIds].filter((id) => !bestIds.has(id)).sort((x, y) => actual(x) - actual(y));
+      return benched
+        .slice(0, started.length)
+        .map((id, i) => ({ benched: lite(id), started: lite(started[i]) }))
+        .filter((m) => m.benched.points > m.started.points);
+    })(),
+  };
+}
+
+export async function buildTrackRecord(a: Analysis): Promise<TrackRecord> {
+  const bestBall = a.bestBall;
+  const startWeek = Number((a.league.settings as Record<string, unknown>).start_week ?? 1);
+  const weeks = Array.from({ length: Math.max(0, a.week - startWeek) }, (_, i) => startWeek + i);
+  const ctx = replayContext(a);
+  const results = await Promise.all(weeks.map((week) => replayWeek(a, week, ctx)));
 
   const done = results.filter((r): r is WeekResult => r !== null);
   const allCalls = done.flatMap((w) => w.calls);
