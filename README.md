@@ -101,7 +101,9 @@ It also names the drop and, in FAAB leagues, a suggested bid. Search covers ever
 
 **FAAB bids:** in FAAB leagues every other team is modeled too. A player's worth is a share of your remaining budget based on how much they'd add over your lineup (≈5 pts/game ≈ a quarter of your budget, capped at 35%). Each interested team's likely bid is estimated the same way from their own need and budget. The suggestion bids just over the likeliest competitor without going past 1.6× the player's worth to you, and bids low when nobody else needs the player.
 
-**Trade finder (Trades tab):** values every team by its best rest-of-season lineup (plus a little bench depth), tries every 1-for-1, 2-for-1 and 1-for-2 between your top players and each team's, and keeps trades that improve *both* lineups and are roughly even on value over replacement (so QBs are worth more in superflex). It also ranks your starters at each position against the league, to show what you can trade from and what you need.
+**Trade finder (Trades tab):** values every team by its best rest-of-season lineup (plus a little bench depth), tries every 1-for-1, 2-for-1 and 1-for-2 between your top players and each team's, and keeps trades that improve *both* lineups and are roughly even on value over replacement (so QBs are worth more in superflex). It also ranks your starters at each position against the league, to show what you can trade from and what you need. Each idea shows how likely they are to say yes (Likely / Maybe / Long shot, from how much it helps their lineup and whether they get fair value back), how often that manager has traded this season, and a **Copy offer message** button with a ready-to-send note for Sleeper's chat.
+
+**Get a player (Trades tab):** pick anyone on another team and see the cheapest fair offers from your roster (one or two players) that their team would take, with the same odds and message. If nothing on your roster adds up to his value, it says so.
 
 **Trade evaluator (Trades tab):** got an offer? Pick the other team and the players on each side, and the app grades it **Accept**, **Lean accept**, **Counter** or **Decline**. The grade combines how much your best rest-of-season lineup changes, how fair the deal is on value over replacement, and how your positional ranks move. When a deal is close, it suggests a counter: the cheapest extra player from their roster that makes the deal worth it for you without gutting their lineup.
 
@@ -245,6 +247,7 @@ lib/pickup.ts              should-I-pick-him-up verdicts and best-available-by-p
 app/playercheck.tsx        Player check search and verdict card
 lib/playoffs.ts            playoff odds simulation
 lib/claude.ts              Ask answered by Claude Haiku 5.5 with the app's models as tools (your own key, stored on-device)
+lib/tradeactivity.ts       how often each team has traded this season
 lib/holes.ts               lineup holes: starting spots your roster can't fill, with the pickup that fills each
 lib/asknews.ts             news questions for Ask (trade rumors, injuries, latest)
 lib/tradetalk.ts           sorts trade headlines into rumors vs. "he's staying" (used by Ask and stash odds)
@@ -267,6 +270,7 @@ app/tabs/season.tsx        Team → Season: playoff odds, power rankings, schedu
 app/tabs/shared.tsx        pieces several screens share
 app/kickoff.tsx            next-kickoff card on Plan
 app/weekrecap.tsx          last week's recap card on Plan
+app/tradefinder.tsx        trade cards (odds, trade history, offer message) and Get a player
 app/pull.tsx               pull to refresh on phones
 app/ui.tsx                 shared UI pieces
 app/install.tsx            "Get app" install button / iPhone instructions

@@ -2,14 +2,12 @@
 
 // Moves -> Trades: the trade evaluator, team strength and trade ideas.
 
-/* eslint-disable @next/next/no-img-element -- remote Sleeper CDN images in a static export */
-
 import { useMemo, useState } from "react";
 import type { Analysis, PlayerAnalysis } from "@/lib/advisor";
-import { avatarUrl } from "@/lib/sleeper";
 import { evaluateTrade, findTrades, type TradeVerdict } from "@/lib/trades";
 import { TradePartners } from "../insightsui";
-import { RuleChip, RulesCard } from "../rules";
+import { GetAPlayer, TradeIdeaCard, useTradeActivity } from "../tradefinder";
+import { RulesCard } from "../rules";
 import { Card, Empty, PlayerLine, PosBadge } from "../ui";
 import { Stat } from "./shared";
 
@@ -152,6 +150,7 @@ function TradeEvaluator({ a }: { a: Analysis }) {
 
 export function Trades({ a }: { a: Analysis }) {
   const report = useMemo(() => findTrades(a), [a]);
+  const activity = useTradeActivity(a);
   const max = Math.max(1, ...report.strengths.map((s) => Math.max(s.value, s.leagueAverage)));
   return (
     <div className="flex flex-col gap-5">
@@ -200,6 +199,8 @@ export function Trades({ a }: { a: Analysis }) {
 
       <TradePartners a={a} />
 
+      <GetAPlayer a={a} activity={activity} />
+
       <Card title="Trade ideas">
         {report.ideas.length === 0 ? (
           <Empty>
@@ -208,52 +209,15 @@ export function Trades({ a }: { a: Analysis }) {
         ) : (
           <div className="flex flex-col gap-3">
             {report.ideas.map((t, i) => (
-              <article key={i} className="rounded-xl bg-ink-850 p-4">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <span className="flex items-center gap-2 text-sm font-semibold">
-                    {t.avatar ? (
-                      <img src={avatarUrl(t.avatar)} alt="" className="h-6 w-6 rounded-full" />
-                    ) : (
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-ink-700 text-[11px] font-bold">
-                        {t.teamName.charAt(0).toUpperCase()}
-                      </span>
-                    )}
-                    with {t.teamName}
-                  </span>
-                  <span className="flex gap-1.5 text-[11px] font-semibold">
-                    <span className="rounded-full bg-mint-400/15 px-2 py-0.5 text-mint-300">You +{t.yourGain}/wk</span>
-                    <span className="rounded-full bg-ink-700 px-2 py-0.5 text-ink-300">Them +{t.theirGain}/wk</span>
-                  </span>
-                </div>
-                <div className="grid items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
-                  <div className="flex flex-col gap-2">
-                    <span className="text-[10px] font-bold tracking-wider text-rose-300 uppercase">You give</span>
-                    {t.give.map((p) => (
-                      <PlayerLine key={p.id} p={p} size={34} />
-                    ))}
-                  </div>
-                  <span className="hidden text-xl text-ink-400 sm:block">⇄</span>
-                  <div className="flex flex-col gap-2">
-                    <span className="text-[10px] font-bold tracking-wider text-mint-400 uppercase">You get</span>
-                    {t.get.map((p) => (
-                      <PlayerLine key={p.id} p={p} size={34} />
-                    ))}
-                  </div>
-                </div>
-                <p className="mt-3 text-xs leading-relaxed text-ink-400">{t.reason}</p>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {t.give.map((p) => (
-                    <RuleChip key={p.id} p={p} kind="noTrade" />
-                  ))}
-                </div>
-              </article>
+              <TradeIdeaCard key={i} a={a} t={t} activity={activity} />
             ))}
           </div>
         )}
         <p className="mt-4 text-xs text-ink-400">
-          Every idea improves both teams&apos; best lineups for the rest of the season (pts/week) and is roughly even on
-          value over replacement, so it&apos;s worth proposing. Gains assume both teams start their best players. Tap
-          &ldquo;Not trading&rdquo; on a player and he won&apos;t be suggested again.
+          Every idea improves both teams&apos; best lineups for the rest of the season (pts/week). The badge is how
+          likely they are to say yes: it weighs how much the deal helps them and whether they get fair value back. Gains
+          assume both teams start their best players. Tap &ldquo;Not trading&rdquo; on a player and he won&apos;t be
+          suggested again.
         </p>
       </Card>
       <RulesCard a={a} />

@@ -24,6 +24,22 @@ export interface TradeIdea {
   yourGain: number;
   theirGain: number;
   reason: string;
+  /** How likely they are to say yes. */
+  odds: TradeOdds;
+}
+
+export type TradeOdds = "Likely" | "Maybe" | "Long shot";
+
+/**
+ * Will they say yes? Managers judge a deal by what it does for their lineup and
+ * by whether they're getting fair value back (names, not just fit).
+ * `theirGain`: their lineup change (pts/week); `received` / `sent`: market value they get / give up.
+ */
+export function tradeOdds(theirGain: number, received: number, sent: number): TradeOdds {
+  const fairToThem = received >= sent * 0.9 || (received < 0.5 && sent < 0.5);
+  if (theirGain >= 1.5 && fairToThem) return "Likely";
+  if (theirGain >= 0.3 && received >= sent * 0.75) return "Maybe";
+  return "Long shot";
 }
 
 export interface PositionStrength {
@@ -312,6 +328,7 @@ export function findTrades(a: Analysis): TradeReport {
         yourGain: round1(yourGain),
         theirGain: round1(theirGain),
         reason: "",
+        odds: tradeOdds(theirGain, market(give), market(get)),
       });
     }
     // Balanced deals first: a trade that barely helps them won't get accepted.
@@ -347,4 +364,75 @@ export function findTrades(a: Analysis): TradeReport {
   const overall = (t: TradeIdea) => Math.min(t.yourGain, t.theirGain * 2) + t.yourGain * 0.25;
   ideas.sort((x, y) => overall(y) - overall(x));
   return { ideas: ideas.slice(0, 8), strengths };
+}
+
+/**
+ * "What would it take to get him?" The cheapest fair packages from your roster
+ * (one or two players) for a player on another team, best for you first.
+ * Only offers that don't hurt their lineup much and give them fair value back.
+ */
+export function offersFor(a: Analysis, target: PlayerAnalysis, limit = 3): TradeIdea[] {
+  const team = a.otherTeams.find((t) => t.players.some((p) => p.id === target.id));
+  if (!team) return [];
+  const slots = lineupSlots(a.league.roster_positions);
+  const mine = [...a.activeRoster].sort(byValue);
+  const theirs = [...team.players].sort(byValue);
+  const myBase = teamValue(slots, mine);
+  const theirBase = teamValue(slots, theirs);
+  const pool = mine
+    .filter((p) => p.position !== "K" && p.position !== "DEF" && p.rosValue > 1 && !isNoTrade(a.prefs, p.id))
+    .slice(0, POOL_SIZE);
+  const everyone = [...mine, ...a.otherTeams.flatMap((t) => t.players)];
+  const market = buildMarket(a, everyone, a.otherTeams.length + 1);
+  const want = market([target]);
+  const packages: PlayerAnalysis[][] = [...pool.map((p) => [p]), ...combos(pool.slice(0, PAIR_POOL + 3))];
+  const offers: TradeIdea[] = [];
+  for (const give of packages) {
+    const value = market(give);
+    // Fair to them: at least ~85% of his value back, and not a big overpay by you.
+    if (value < want * 0.85 || value > want * 1.6 + 1) continue;
+    const theirGain = teamValue(slots, swap(theirs, [target], give)) - theirBase;
+    if (theirGain < -0.5) continue;
+    const yourGain = teamValue(slots, swap(mine, give, [target])) - myBase;
+    offers.push({
+      rosterId: team.rosterId,
+      teamName: team.teamName,
+      avatar: team.avatar,
+      give,
+      get: [target],
+      yourGain: round1(yourGain),
+      theirGain: round1(theirGain),
+      reason: "",
+      odds: tradeOdds(theirGain, value, want),
+    });
+  }
+  // Best for you first, among deals they'd plausibly take; then the cheapest.
+  const rank: Record<TradeOdds, number> = { Likely: 0, Maybe: 1, "Long shot": 2 };
+  offers.sort((x, y) => rank[x.odds] - rank[y.odds] || y.yourGain - x.yourGain || market(x.give) - market(y.give));
+  const out: TradeIdea[] = [];
+  for (const o of offers) {
+    // Don't show the same main piece twice.
+    if (out.some((x) => x.give[0].id === o.give[0].id)) continue;
+    out.push(o);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+const names = (ps: PlayerAnalysis[]) =>
+  ps.length === 1
+    ? ps[0].name
+    : `${ps
+        .slice(0, -1)
+        .map((p) => p.name)
+        .join(", ")} and ${ps.at(-1)!.name}`;
+
+/** A friendly message to paste into Sleeper's chat with the other manager. */
+export function offerMessage(t: TradeIdea): string {
+  const positions = [...new Set(t.give.map((p) => p.position))].join("/");
+  const pitch =
+    t.theirGain >= 0.5
+      ? `By my numbers it makes your starting lineup about ${t.theirGain} pts/week better, and gives you some ${positions} help.`
+      : `It gives you some ${positions} help.`;
+  return `Hey ${t.teamName}, trade idea: my ${names(t.give)} for your ${names(t.get)}? ${pitch} Open to tweaking it if you want to counter.`;
 }
