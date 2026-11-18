@@ -973,8 +973,16 @@ export async function analyzeLeague(opts: {
   }
 
   const starterSlots = league.roster_positions.filter((s) => s !== "BN" && s !== "IR" && s !== "TAXI");
+  // Who's starting this week. Sleeper keeps the lineup in two places: the week's matchup (what
+  // it scores and shows on the Match screen) and the roster, which can lag behind a lineup
+  // change. Trust the matchup when it has a full lineup for the week; else fall back.
+  const startersFor = (r: Roster) => {
+    const weekly = matchups.find((m) => m.roster_id === r.roster_id)?.starters;
+    return weekly && weekly.length === starterSlots.length ? weekly : (r.starters ?? []);
+  };
+  const myStarters = startersFor(mine);
   const currentLineup: LineupSlot[] = starterSlots.map((slot, i) => {
-    const id = mine.starters?.[i];
+    const id = myStarters[i];
     return { slot, player: id && id !== "0" ? (myPlayers.get(id) ?? null) : null };
   });
   const optimalLineup = optimizeLineup(league.roster_positions, active, currentLineup);
@@ -1224,8 +1232,9 @@ export async function analyzeLeague(opts: {
       const reserveIds = (r.players ?? []).filter((id) => id !== "0" && out.has(id));
       const reserve = [...analyzePlayers(reserveIds, inputs, new Map()).values()];
       const byId = new Map(players.map((p) => [p.id, p]));
+      const theirStarters = startersFor(r);
       const theirCurrent = starterSlots.map((slot, i) => {
-        const id = r.starters?.[i];
+        const id = theirStarters[i];
         return { slot, player: id && id !== "0" ? (byId.get(id) ?? null) : null };
       });
       const lineup = optimizeLineup(league.roster_positions, players, theirCurrent);
