@@ -183,6 +183,8 @@ export interface OtherTeam {
   avatar: string | null;
   /** Active players (IR/taxi excluded). */
   players: PlayerAnalysis[];
+  /** Players in IR / taxi spots: not in their lineup, but they can still be traded. */
+  reserve: PlayerAnalysis[];
 }
 
 interface TeamModel {
@@ -190,6 +192,7 @@ interface TeamModel {
   teamName: string;
   avatar: string | null;
   players: PlayerAnalysis[];
+  reserve: PlayerAnalysis[];
   lineup: LineupSlot[];
   /** Free agents who'd improve this team's lineup, with the gain. */
   interest: Map<string, Interest>;
@@ -1218,6 +1221,8 @@ export async function analyzeLeague(opts: {
       const out = new Set([...(r.reserve ?? []), ...(r.taxi ?? [])]);
       const theirIds = (r.players ?? []).filter((id) => id !== "0" && !out.has(id));
       const players = [...analyzePlayers(theirIds, inputs, new Map()).values()];
+      const reserveIds = (r.players ?? []).filter((id) => id !== "0" && out.has(id));
+      const reserve = [...analyzePlayers(reserveIds, inputs, new Map()).values()];
       const byId = new Map(players.map((p) => [p.id, p]));
       const theirCurrent = starterSlots.map((slot, i) => {
         const id = r.starters?.[i];
@@ -1230,6 +1235,7 @@ export async function analyzeLeague(opts: {
         teamName: teamNameOf(r.owner_id),
         avatar: users.find((u) => u.user_id === r.owner_id)?.avatar ?? null,
         players,
+        reserve,
         lineup,
         interest,
       };
@@ -1391,6 +1397,7 @@ export async function analyzeLeague(opts: {
       teamName: t.teamName,
       avatar: t.avatar,
       players: t.players,
+      reserve: t.reserve,
     })),
     drops,
     waivers,

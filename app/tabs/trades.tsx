@@ -30,7 +30,7 @@ function PickList({
   tone: "give" | "get";
 }) {
   return (
-    <ul className="no-scrollbar flex max-h-72 flex-col overflow-y-auto border border-ink-700">
+    <ul className="no-scrollbar flex max-h-72 flex-col overflow-y-auto rounded-2xl border border-ink-700">
       {players.map((p) => {
         const on = selected.includes(p.id);
         return (
@@ -41,9 +41,9 @@ function PickList({
                 on ? (tone === "give" ? "bg-hot/15" : "bg-mint-400/15") : "hover:bg-ink-800"
               }`}
             >
-              <PlayerLine p={p} size={28} />
+              <PlayerLine p={p} size={28} opensSheet={false} />
               <span
-                className={`display shrink-0 px-1.5 text-xs font-bold ${
+                className={`display shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${
                   on ? (tone === "give" ? "bg-hot text-ink-950" : "bg-mint-400 text-ink-950") : "text-ink-400"
                 }`}
               >
@@ -65,8 +65,9 @@ function TradeEvaluator({ a }: { a: Analysis }) {
   const team = a.otherTeams.find((t) => t.rosterId === teamId);
   const sortByValue = (ps: PlayerAnalysis[]) =>
     [...ps].filter((p) => p.position !== "DEF").sort((x, y) => y.rosValue - x.rosValue);
-  const mine = sortByValue(a.activeRoster);
-  const theirs = sortByValue(team?.players ?? []);
+  // Everyone on each roster, IR / taxi included: injured players get traded too.
+  const mine = sortByValue(a.roster);
+  const theirs = sortByValue([...(team?.players ?? []), ...(team?.reserve ?? [])]);
   const result = useMemo(() => {
     if (!team || !give.length || !get.length) return null;
     const pick = (ids: string[], pool: PlayerAnalysis[]) => pool.filter((p) => ids.includes(p.id));

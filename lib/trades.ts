@@ -181,8 +181,14 @@ export function evaluateTrade(
   const slots = lineupSlots(a.league.roster_positions);
   const team = a.otherTeams.find((t) => t.rosterId === rosterId);
   if (!team) throw new Error("Unknown team");
-  const mine = [...a.activeRoster].sort(byValue);
-  const theirs = [...team.players].sort(byValue);
+  // Players in IR / taxi spots aren't in anyone's lineup, but they can be traded: when one is
+  // part of the deal, count him on his team's roster (at his injury-discounted value).
+  const withTraded = (roster: PlayerAnalysis[], traded: PlayerAnalysis[]) => [
+    ...roster,
+    ...traded.filter((p) => !roster.some((x) => x.id === p.id)),
+  ];
+  const mine = withTraded(a.activeRoster, give).sort(byValue);
+  const theirs = withTraded(team.players, get).sort(byValue);
   const allPlayers = [...mine, ...a.otherTeams.flatMap((t) => t.players)];
   const market = buildMarket(a, allPlayers, a.otherTeams.length + 1);
 

@@ -180,8 +180,20 @@ export function GameChip({ p }: { p: PlayerAnalysis }) {
   );
 }
 
-export function PlayerLine({ p, size = 40, sub }: { p: PlayerAnalysis; size?: number; sub?: React.ReactNode }) {
-  const open = useOpenPlayer();
+export function PlayerLine({
+  p,
+  size = 40,
+  sub,
+  opensSheet = true,
+}: {
+  p: PlayerAnalysis;
+  size?: number;
+  sub?: React.ReactNode;
+  /** False inside rows whose own tap does something else (e.g. picking players for a trade). */
+  opensSheet?: boolean;
+}) {
+  const sheet = useOpenPlayer();
+  const open = opensSheet ? sheet : null;
   // Tappable wherever the player sheet is available. A span with a button role, since
   // player lines often sit inside other clickable rows.
   const tap = open
