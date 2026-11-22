@@ -30,7 +30,7 @@ Everything is grouped into four sections, each with a few tabs:
 | --- | --- |
 | **Home** | Plan (your matchup, the moves to make this week, heads-up alerts) · Injuries · Matchup (plus **Live** on game days) |
 | **Moves** | Waivers · Trades |
-| **Games** | Every game this week, with a game center for each |
+| **Games** | Scores (every game this week, with a game center for each) · Hate Watch (everyone else's bench blunders) |
 | **Team** | Lineup (start X or Y, recommended starters, bench, IR, your rules and the track record) · Season (playoff odds, power rankings with each team's record and odds, bye weeks and week-by-week projections) |
 
 **Look:** "Glass": frosted, translucent cards over colored light, big rounded numbers, and a floating tab bar (light and dark). Home opens with widgets for your win chance and projected score, then the moves to make, heads-up alerts, and Waivers and Injuries widgets. A player's sheet is tinted with his team's color and shows usage as rings.
@@ -102,6 +102,8 @@ It also names the drop and, in FAAB leagues, a suggested bid. Search covers ever
 **FAAB bids:** in FAAB leagues every other team is modeled too. A player's worth is a share of your remaining budget based on how much they'd add over your lineup (≈5 pts/game ≈ a quarter of your budget, capped at 35%). Each interested team's likely bid is estimated the same way from their own need and budget. The suggestion bids just over the likeliest competitor without going past 1.6× the player's worth to you, and bids low when nobody else needs the player.
 
 **Trade finder (Trades tab):** values every team by its best rest-of-season lineup (plus a little bench depth), tries every 1-for-1, 2-for-1 and 1-for-2 between your top players and each team's, and keeps trades that improve *both* lineups and are roughly even on value over replacement (so QBs are worth more in superflex). It also ranks your starters at each position against the league, to show what you can trade from and what you need. Each idea shows how likely they are to say yes (Likely / Maybe / Long shot, from how much it helps their lineup and whether they get fair value back), how often that manager has traded this season, and a **Copy offer message** button with a ready-to-send note for Sleeper's chat.
+
+**Hate Watch (Games tab):** your leaguemates' lineup mistakes, live from Sleeper's scoring. Bench blunders: bench players who outscored a starter they could have replaced (once that starter's game is over). Sweating it out: their bench is already ahead and the starter hasn't played yet. Bench monsters: 15+ point games wasted on a bench. Hall of shame: points each team left on its bench. Switch between this week and last week; your opponent is flagged, and your own team is left out. Updates every two minutes while the week is being played.
 
 **Get a player (Trades tab):** pick anyone on another team and see the cheapest fair offers from your roster (one or two players) that their team would take, with the same odds and message. If nothing on your roster adds up to his value, it says so.
 
@@ -248,6 +250,7 @@ app/playercheck.tsx        Player check search and verdict card
 lib/playoffs.ts            playoff odds simulation
 lib/claude.ts              Ask answered by Claude Haiku 5.5 with the app's models as tools (your own key, stored on-device)
 lib/tradeactivity.ts       how often each team has traded this season
+lib/hatewatch.ts           other teams' bench blunders, bench monsters and points left on the bench
 lib/holes.ts               lineup holes: starting spots your roster can't fill, with the pickup that fills each
 lib/asknews.ts             news questions for Ask (trade rumors, injuries, latest)
 lib/tradetalk.ts           sorts trade headlines into rumors vs. "he's staying" (used by Ask and stash odds)
@@ -267,6 +270,7 @@ app/tabs/waivers.tsx       Moves → Waivers
 app/tabs/trades.tsx        Moves → Trades
 app/tabs/lineup.tsx        Team → Lineup (with rules and track record)
 app/tabs/season.tsx        Team → Season: playoff odds, power rankings, schedule planner
+app/tabs/hatewatch.tsx     Games → Hate Watch
 app/tabs/shared.tsx        pieces several screens share
 app/kickoff.tsx            next-kickoff card on Plan
 app/weekrecap.tsx          last week's recap card on Plan

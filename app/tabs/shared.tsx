@@ -15,6 +15,7 @@ export type Tab =
   | "plan"
   | "lineup"
   | "games"
+  | "hatewatch"
   | "scout"
   | "injuries"
   | "waivers"
