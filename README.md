@@ -103,6 +103,8 @@ It also names the drop and, in FAAB leagues, a suggested bid. Search covers ever
 
 **Trade finder (Trades tab):** values every team by its best rest-of-season lineup (plus a little bench depth), tries every 1-for-1, 2-for-1 and 1-for-2 between your top players and each team's, and keeps trades that improve *both* lineups and are roughly even on value over replacement (so QBs are worth more in superflex). It also ranks your starters at each position against the league, to show what you can trade from and what you need. Each idea shows how likely they are to say yes (Likely / Maybe / Long shot, from how much it helps their lineup and whether they get fair value back), how often that manager has traded this season, and a **Copy offer message** button with a ready-to-send note for Sleeper's chat.
 
+**Next 4 games (player sheet):** tap any player to see his next four games: opponent and home/away, how that defense has done against his position this season (Great to Brutal, with the points it allows vs. the league average), his bye if it falls in the window, and Sleeper's projection for each week in your league's scoring. Summed up as a Favorable / Neutral / Tough stretch.
+
 **Hate Watch (Games tab):** your leaguemates' lineup mistakes, live from Sleeper's scoring. Bench blunders: bench players who outscored a starter they could have replaced (once that starter's game is over). Sweating it out: their bench is already ahead and the starter hasn't played yet. Bench monsters: 15+ point games wasted on a bench. Hall of shame: points each team left on its bench. Switch between this week and last week; your opponent is flagged, and your own team is left out. Updates every two minutes while the week is being played.
 
 **Get a player (Trades tab):** pick anyone on another team and see the cheapest fair offers from your roster (one or two players) that their team would take, with the same odds and message. If nothing on your roster adds up to his value, it says so.
@@ -251,6 +253,7 @@ lib/playoffs.ts            playoff odds simulation
 lib/claude.ts              Ask answered by Claude Haiku 5.5 with the app's models as tools (your own key, stored on-device)
 lib/tradeactivity.ts       how often each team has traded this season
 lib/hatewatch.ts           other teams' bench blunders, bench monsters and points left on the bench
+lib/outlook.ts             a player's next few games: opponent, matchup grade, weekly projection
 lib/holes.ts               lineup holes: starting spots your roster can't fill, with the pickup that fills each
 lib/asknews.ts             news questions for Ask (trade rumors, injuries, latest)
 lib/tradetalk.ts           sorts trade headlines into rumors vs. "he's staying" (used by Ask and stash odds)
@@ -272,6 +275,7 @@ app/tabs/lineup.tsx        Team → Lineup (with rules and track record)
 app/tabs/season.tsx        Team → Season: playoff odds, power rankings, schedule planner
 app/tabs/hatewatch.tsx     Games → Hate Watch
 app/tabs/shared.tsx        pieces several screens share
+app/outlookui.tsx          Next 4 games section on the player sheet
 app/kickoff.tsx            next-kickoff card on Plan
 app/weekrecap.tsx          last week's recap card on Plan
 app/tradefinder.tsx        trade cards (odds, trade history, offer message) and Get a player

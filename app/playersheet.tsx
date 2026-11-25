@@ -4,6 +4,7 @@
 // bench or out) and why, the defense he faces, the game environment, his
 // workload (snaps, touches, carry and target share), and your rules for him.
 
+import { NextGames } from "./outlookui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Analysis, PlayerAnalysis } from "@/lib/advisor";
@@ -290,6 +291,9 @@ function SheetBody({ a, p }: { a: Analysis; p: PlayerAnalysis }) {
           </div>
         </Section>
       )}
+
+      {/* Schedule ahead */}
+      <NextGames a={a} p={p} />
 
       {/* Workload */}
       {(u || p.snapShare !== null) && p.position !== "K" && p.position !== "DEF" && (
