@@ -1,6 +1,7 @@
 // Rest-of-season planner: your roster's projection for every remaining week,
 // bye-week holes, and who carries you through the fantasy playoffs.
 
+import { fantasySeason } from "./outlook";
 import { points, SLOT_ELIGIBILITY, slotName, type Analysis, type PlayerAnalysis } from "./advisor";
 import { getPlayerWeeklyProjections, getSchedule } from "./sleeper";
 
@@ -52,11 +53,7 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
 
 export async function buildPlan(a: Analysis): Promise<Plan> {
   const season = a.season;
-  const settings = a.league.settings as Record<string, unknown>;
-  const playoffStart = typeof settings.playoff_week_start === "number" ? settings.playoff_week_start : null;
-  const playoffTeams = Number(settings.playoff_teams ?? 6);
-  const rounds = Math.max(1, Math.ceil(Math.log2(Math.max(2, playoffTeams))));
-  const lastWeek = Math.min(18, playoffStart ? playoffStart + rounds - 1 : 17);
+  const { playoffStart, lastWeek } = fantasySeason(a);
   const weeks = Array.from({ length: Math.max(0, lastWeek - a.week + 1) }, (_, i) => a.week + i);
   const playoffWeeks = playoffStart ? weeks.filter((w) => w >= playoffStart) : [];
 

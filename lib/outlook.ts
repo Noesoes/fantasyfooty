@@ -30,6 +30,10 @@ export interface Outlook {
   verdict: "Favorable" | "Neutral" | "Tough";
   /** Average of defense strength vs. the league (above 1 = softer than average). */
   softness: number;
+  /** First fantasy playoff week, when the league has playoffs. */
+  playoffStart: number | null;
+  /** The same read for just your fantasy playoff weeks (null if none are left in the window). */
+  playoffVerdict: "Favorable" | "Neutral" | "Tough" | null;
 }
 
 const schedules = new Map<string, Promise<ScheduledGame[]>>();
@@ -42,9 +46,22 @@ const scheduleFor = (season: string) => {
   return schedules.get(season)!;
 };
 
-const LAST_REGULAR_WEEK = 18;
+/**
+ * The fantasy season's weeks for this league: playoffs start at `playoff_week_start`
+ * and run one round per week until the championship (log2 of the playoff teams).
+ */
+export function fantasySeason(a: Analysis): { playoffStart: number | null; lastWeek: number } {
+  const settings = a.league.settings as Record<string, unknown>;
+  const playoffStart = typeof settings.playoff_week_start === "number" ? settings.playoff_week_start : null;
+  const playoffTeams = Number(settings.playoff_teams ?? 6);
+  const rounds = Math.max(1, Math.ceil(Math.log2(Math.max(2, playoffTeams))));
+  return { playoffStart, lastWeek: Math.min(18, playoffStart ? playoffStart + rounds - 1 : 17) };
+}
 
-export async function playerOutlook(a: Analysis, p: PlayerAnalysis, span = 4): Promise<Outlook | null> {
+/** Every remaining week of the fantasy season (or `span` weeks, if given). */
+export async function playerOutlook(a: Analysis, p: PlayerAnalysis, span?: number): Promise<Outlook | null> {
+  const { playoffStart, lastWeek } = fantasySeason(a);
+  const end = span ? Math.min(lastWeek, a.week + span - 1) : lastWeek;
   if (!p.team) return null;
   const [schedule, projections] = await Promise.all([
     scheduleFor(a.season),
@@ -53,7 +70,7 @@ export async function playerOutlook(a: Analysis, p: PlayerAnalysis, span = 4): P
     ),
   ]);
   const weeks: OutlookWeek[] = [];
-  for (let w = a.week; w < a.week + span && w <= LAST_REGULAR_WEEK; w++) {
+  for (let w = a.week; w <= end; w++) {
     const g = schedule.find((x) => x.week === w && (x.home === p.team || x.away === p.team));
     const row = projections[String(w)];
     const projected = row?.stats
@@ -92,13 +109,21 @@ export async function playerOutlook(a: Analysis, p: PlayerAnalysis, span = 4): P
     });
   }
   if (!weeks.length) return null;
-  const rated = weeks
-    .map((w) => (w.allowed !== null && w.average ? w.allowed / w.average : null))
-    .filter((x): x is number => x !== null);
-  const softness = rated.length ? rated.reduce((s, x) => s + x, 0) / rated.length : 1;
+  const read = (ws: OutlookWeek[]) => {
+    const rated = ws
+      .map((w) => (w.allowed !== null && w.average ? w.allowed / w.average : null))
+      .filter((x): x is number => x !== null);
+    const softness = rated.length ? rated.reduce((s, x) => s + x, 0) / rated.length : 1;
+    const verdict: Outlook["verdict"] = softness >= 1.06 ? "Favorable" : softness <= 0.94 ? "Tough" : "Neutral";
+    return { softness: Math.round(softness * 100) / 100, verdict, rated: rated.length };
+  };
+  const all = read(weeks);
+  const po = playoffStart ? read(weeks.filter((w) => w.week >= playoffStart)) : null;
   return {
     weeks,
-    softness: Math.round(softness * 100) / 100,
-    verdict: softness >= 1.06 ? "Favorable" : softness <= 0.94 ? "Tough" : "Neutral",
+    softness: all.softness,
+    verdict: all.verdict,
+    playoffStart,
+    playoffVerdict: po && po.rated ? po.verdict : null,
   };
 }

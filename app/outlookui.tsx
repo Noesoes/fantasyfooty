@@ -1,9 +1,9 @@
 "use client";
 
-// "Next 4 games" on the player sheet: opponent, how that defense treats his
+// "Rest of season" on the player sheet: opponent, how that defense treats his
 // position, and Sleeper's projection for each week, with an overall verdict.
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { Analysis, MatchupGrade, PlayerAnalysis } from "@/lib/advisor";
 import { playerOutlook, type Outlook } from "@/lib/outlook";
 
@@ -39,12 +39,18 @@ export function NextGames({ a, p }: { a: Analysis; p: PlayerAnalysis }) {
   return (
     <section className="mt-5">
       <div className="mb-2 flex items-baseline justify-between gap-3">
-        <h3 className="text-[15px] font-bold">Next {o?.weeks.length ?? 4} games</h3>
-        {o && <span className={`text-xs font-extrabold ${VERDICT_STYLE[o.verdict]}`}>{o.verdict} stretch</span>}
+        <h3 className="text-[15px] font-bold">Rest of season</h3>
+        {o && <span className={`text-xs font-extrabold ${VERDICT_STYLE[o.verdict]}`}>{o.verdict} overall</span>}
       </div>
+      {o?.playoffVerdict && (
+        <div className="mb-2 flex items-center justify-between rounded-xl bg-violet/10 px-3 py-2 text-[12.5px] font-bold">
+          <span>Your fantasy playoffs (from week {o.playoffStart})</span>
+          <span className={VERDICT_STYLE[o.playoffVerdict]}>{o.playoffVerdict}</span>
+        </div>
+      )}
       {!o ? (
         <div className="flex flex-col gap-2" aria-busy="true">
-          {[0, 1, 2, 3].map((i) => (
+          {[0, 1, 2, 3, 4].map((i) => (
             <div key={i} className="skeleton h-10 rounded-xl" />
           ))}
         </div>
@@ -52,43 +58,47 @@ export function NextGames({ a, p }: { a: Analysis; p: PlayerAnalysis }) {
         <>
           <ul className="flex flex-col gap-1.5">
             {o.weeks.map((w) => (
-              <li
-                key={w.week}
-                className="grid grid-cols-[3rem_1fr_auto_3rem] items-center gap-2 rounded-xl bg-ink-850 px-3 py-2"
-              >
-                <span className="text-[11px] font-extrabold text-ink-400 uppercase">
-                  {w.week === a.week ? "This wk" : `Wk ${w.week}`}
-                </span>
-                {w.opponent ? (
-                  <span className="min-w-0">
-                    <span className="block text-[14px] font-extrabold">
-                      {w.home ? "vs" : "@"} {w.opponent}
-                    </span>
-                    {w.allowed !== null && (
-                      <span className="block truncate text-[11px] text-ink-400">
-                        Allows {w.allowed} to {posWord(p.position)} (avg {w.average})
+              <Fragment key={w.week}>
+                {o.playoffStart !== null && w.week === o.playoffStart && w.week !== a.week && (
+                  <li className="mt-1 px-1 text-[10.5px] font-extrabold tracking-wider text-violet uppercase">
+                    Fantasy playoffs
+                  </li>
+                )}
+                <li className="grid grid-cols-[3rem_1fr_auto_3rem] items-center gap-2 rounded-xl bg-ink-850 px-3 py-2">
+                  <span className="text-[11px] font-extrabold text-ink-400 uppercase">
+                    {w.week === a.week ? "This wk" : `Wk ${w.week}`}
+                  </span>
+                  {w.opponent ? (
+                    <span className="min-w-0">
+                      <span className="block text-[14px] font-extrabold">
+                        {w.home ? "vs" : "@"} {w.opponent}
                       </span>
-                    )}
+                      {w.allowed !== null && (
+                        <span className="block truncate text-[11px] text-ink-400">
+                          Allows {w.allowed} to {posWord(p.position)} (avg {w.average})
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-[14px] font-extrabold text-ink-400">Bye</span>
+                  )}
+                  {w.grade ? (
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-extrabold ${GRADE_STYLE[w.grade].cls}`}>
+                      {GRADE_STYLE[w.grade].label}
+                    </span>
+                  ) : (
+                    <span />
+                  )}
+                  <span className="text-right font-mono text-[15px] font-black">
+                    {w.opponent ? (w.projected ?? "–") : "0"}
                   </span>
-                ) : (
-                  <span className="text-[14px] font-extrabold text-ink-400">Bye</span>
-                )}
-                {w.grade ? (
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-extrabold ${GRADE_STYLE[w.grade].cls}`}>
-                    {GRADE_STYLE[w.grade].label}
-                  </span>
-                ) : (
-                  <span />
-                )}
-                <span className="text-right font-mono text-[15px] font-black">
-                  {w.opponent ? (w.projected ?? "–") : "0"}
-                </span>
-              </li>
+                </li>
+              </Fragment>
             ))}
           </ul>
           <p className="mt-2 text-[11px] text-ink-400">
-            Right column: Sleeper&apos;s projected points in your scoring. Matchup is how that defense has done against{" "}
-            {posWord(p.position)} this season.
+            Right column: Sleeper&apos;s projected points in your scoring (&ldquo;–&rdquo; until Sleeper posts one).
+            Matchup is how that defense has done against {posWord(p.position)} this season.
           </p>
         </>
       )}
