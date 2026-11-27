@@ -29,7 +29,7 @@ Everything is grouped into four sections, each with a few tabs:
 | Section | Tabs |
 | --- | --- |
 | **Home** | Plan (your matchup, the moves to make this week, heads-up alerts) · Injuries · Matchup (plus **Live** on game days) |
-| **Moves** | Waivers · Trades |
+| **Moves** | Waivers · Injury watch · Trades |
 | **Games** | Scores (every game this week, with a game center for each) · Hate Watch (everyone else's bench blunders) |
 | **Team** | Lineup (start X or Y, recommended starters, bench, IR, your rules and the track record) · Season (playoff odds, power rankings with each team's record and odds, bye weeks and week-by-week projections) |
 
@@ -104,6 +104,8 @@ It also names the drop and, in FAAB leagues, a suggested bid. Search covers ever
 **Trade finder (Trades tab):** values every team by its best rest-of-season lineup (plus a little bench depth), tries every 1-for-1, 2-for-1 and 1-for-2 between your top players and each team's, and keeps trades that improve *both* lineups and are roughly even on value over replacement (so QBs are worth more in superflex). It also ranks your starters at each position against the league, to show what you can trade from and what you need. Each idea shows how likely they are to say yes (Likely / Maybe / Long shot, from how much it helps their lineup and whether they get fair value back), how often that manager has traded this season, and a **Copy offer message** button with a ready-to-send note for Sleeper's chat.
 
 **Rest of season (player sheet):** tap any player to see every remaining week of your fantasy season, through your championship week: opponent and home/away, how that defense has done against his position this season (Great to Brutal, with the points it allows vs. the league average), his bye, and Sleeper's projection for each week in your league's scoring. Your fantasy playoff weeks are marked and get their own Favorable / Neutral / Tough verdict, next to the one for the whole stretch.
+
+**Injury watch (Moves tab):** every NFL team's starting RB and top two WRs (by points per game this season) who are Out, Doubtful, on IR/PUP or suspended, and the healthy teammates in line for their carries and targets: this week's projection, how far above his season average that is, his recent carry or target share, and where he is in your league (free agent, yours, or another team's). A "Free agents only" switch narrows it to pickups.
 
 **Hate Watch (Games tab):** your leaguemates' lineup mistakes, live from Sleeper's scoring. Bench blunders: bench players who outscored a starter they could have replaced (once that starter's game is over). Sweating it out: their bench is already ahead and the starter hasn't played yet. Bench monsters: 15+ point games wasted on a bench. Hall of shame: points each team left on its bench. Switch between this week and last week; your opponent is flagged, and your own team is left out. Updates every two minutes while the week is being played.
 
@@ -254,6 +256,7 @@ lib/claude.ts              Ask answered by Claude Haiku 5.5 with the app's model
 lib/tradeactivity.ts       how often each team has traded this season
 lib/hatewatch.ts           other teams' bench blunders, bench monsters and points left on the bench
 lib/outlook.ts             a player's remaining games: opponent, matchup grade, weekly projection; fantasy season weeks
+lib/injurywatch.ts         injured starting RBs/WRs league-wide and their next-man-up teammates
 lib/holes.ts               lineup holes: starting spots your roster can't fill, with the pickup that fills each
 lib/asknews.ts             news questions for Ask (trade rumors, injuries, latest)
 lib/tradetalk.ts           sorts trade headlines into rumors vs. "he's staying" (used by Ask and stash odds)
@@ -274,6 +277,7 @@ app/tabs/trades.tsx        Moves → Trades
 app/tabs/lineup.tsx        Team → Lineup (with rules and track record)
 app/tabs/season.tsx        Team → Season: playoff odds, power rankings, schedule planner
 app/tabs/hatewatch.tsx     Games → Hate Watch
+app/tabs/injurywatch.tsx   Moves → Injury watch
 app/tabs/shared.tsx        pieces several screens share
 app/outlookui.tsx          Rest of season section on the player sheet
 app/kickoff.tsx            next-kickoff card on Plan

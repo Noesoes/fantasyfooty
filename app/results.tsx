@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import type { Analysis } from "@/lib/advisor";
 import { GamesTab } from "./games";
 import { HateWatchTab } from "./tabs/hatewatch";
+import { InjuryWatchTab } from "./tabs/injurywatch";
 import { PlayerSheetProvider } from "./playersheet";
 import { Injuries } from "./tabs/injuries";
 import { Lineup } from "./tabs/lineup";
@@ -36,6 +37,7 @@ const SECTIONS: { id: Section; label: string; tabs: { id: Tab; label: string }[]
     label: "Moves",
     tabs: [
       { id: "waivers", label: "Waivers" },
+      { id: "injurywatch", label: "Injury watch" },
       { id: "trades", label: "Trades" },
     ],
   },
@@ -246,6 +248,7 @@ export function Results({ a, onRefresh, refreshing }: { a: Analysis; onRefresh: 
         {tab === "plan" && <GamePlan a={a} goTo={setTab} />}
         {tab === "games" && <GamesTab a={a} />}
         {tab === "hatewatch" && <HateWatchTab a={a} />}
+        {tab === "injurywatch" && <InjuryWatchTab a={a} />}
         {tab === "lineup" && <Lineup a={a} />}
         {tab === "waivers" && <Waivers a={a} onRefresh={onRefresh} refreshing={refreshing} />}
         {tab === "trades" && <Trades a={a} />}
